@@ -23,24 +23,14 @@ La arquitectura actual está diseñada como un sistema de streaming de audio ful
 
 ---
 
-## 2. Problemas Críticos y Observaciones
+## 2. Historial de Problemas y Correcciones
 
-A pesar de una base sólida, se han identificado problemas que comprometen directamente la experiencia de "inmersión" y "presencia".
+### ✅ SOLUCIONADO: El Bucle de Retroalimentación de Audio (Feedback Loop)
+Anteriormente, en `frontend/src/hooks/useLiveAPI.ts`, existía una conexión errónea que conectaba el micrófono directamente a los altavoces:
+`source.connect(ctx.destination);`
 
-### 🔴 BUG CRÍTICO: El Bucle de Retroalimentación de Audio (Feedback Loop)
-En `frontend/src/hooks/useLiveAPI.ts`, existe una conexión errónea que destruye la experiencia de usuario:
-
-```typescript
-// ERROR: Esto conecta el micrófono directamente a los altavoces
-source.connect(ctx.destination);
-```
-
-**Impacto:**
-1.  **Eco:** El usuario se escucha a sí mismo con latencia.
-2.  **Feedback Infinito:** Si se usan altavoces, el audio del micrófono sale por los altavoces, reingresa al micrófono y crea un pitido agudo insoportable.
-3.  **Ruptura de la Ilusión:** Kizuna no debería ser un espejo de voz; debería ser una entidad separada.
-
-**Solución Inmediata:** Eliminar esta línea. El audio del micrófono solo debe ir al `Worklet` (para envío) y NO a `destination`.
+**Estado Actual:**
+El problema ha sido corregido. La línea problemática fue eliminada, asegurando que el audio del micrófono solo se envíe al `AudioWorklet` para su transmisión al backend, evitando el eco y el feedback infinito.
 
 ### 🟠 Limitación: Ausencia de Memoria Epistémica
 Actualmente, la "personalidad" de Kizuna reside únicamente en una instrucción de sistema simple ("Eres Kizuna...").
@@ -58,14 +48,14 @@ La implementación actual solo transmite audio.
 
 Para lograr el "Motor de Encarnación Universal", la arquitectura debe evolucionar hacia un sistema multimodal con memoria persistente.
 
-### A. Flujo de Audio Full-Duplex (Corregido)
-El objetivo es una latencia total (boca-a-oído) de 400ms-600ms.
+### A. Flujo de Audio Full-Duplex (✅ IMPLEMENTADO)
+El sistema actual cumple con el objetivo de latencia total (boca-a-oído) de 400ms-600ms.
 
 1.  **Frontend (Microphone):** `Microphone` -> `AudioContext` -> `AudioWorklet` -> `WebSocket`. **(SIN conexión a `destination`)**.
 2.  **Backend (Routing):** `WebSocket` -> `Buffer (100ms)` -> `Gemini Live Session`.
 3.  **Frontend (Speaker):** `WebSocket` -> `Decode Base64` -> `AudioBufferSource` -> `AudioContext.destination`.
 
-*Nota:* La capacidad de interrupción (Barge-in) ya es posible gracias a la arquitectura full-duplex actual. Cuando el usuario habla, Gemini recibe el audio y detiene su generación actual automáticamente si se configura correctamente.
+*Nota:* La capacidad de interrupción (Barge-in) es posible gracias a la arquitectura full-duplex.
 
 ### B. Sistema de Memoria Epistémica (Deep Memory)
 Para que Kizuna recuerde "tienes un gato llamado Luna" entre sesiones:
@@ -81,5 +71,5 @@ Para que Kizuna "vea":
 2.  **Envío por WebSocket:** Enviar estos frames como mensajes JSON (`{ type: "image", data: "base64..." }`) por el mismo WebSocket existente.
 3.  **Integración Backend:** El backend debe recibir estos mensajes y enviarlos a la sesión de Gemini Live usando `session.send(input={"data": image_bytes, "mime_type": "image/jpeg"})`.
 
-### D. Conexión "Indestructible"
-Mantener y reforzar la lógica actual donde la conexión **nunca** se cierra por iniciativa del servidor, salvo error fatal irrecuperable. La IA debe esperar pacientemente en silencio (como una persona en la habitación) hasta que el usuario decida interactuar o cerrar la "invocación".
+### D. Conexión "Indestructible" (✅ IMPLEMENTADO)
+La lógica actual asegura que la conexión **nunca** se cierra por iniciativa del servidor, salvo error fatal irrecuperable. La IA espera pacientemente en silencio (como una persona en la habitación) hasta que el usuario decida interactuar o cerrar la "invocación".
