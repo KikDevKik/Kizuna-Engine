@@ -9,21 +9,6 @@ class PCMProcessor extends AudioWorkletProcessor {
     if (input.length > 0) {
       const float32Data = input[0];
       this.packetCount++;
-
-      // Calculate Amplitude for Telemetry
-      let maxAmplitude = 0;
-      for (let i = 0; i < float32Data.length; i++) {
-        const abs = Math.abs(float32Data[i]);
-        if (abs > maxAmplitude) maxAmplitude = abs;
-      }
-
-      if (this.packetCount % 100 === 0) {
-        console.log(`[PCMProcessor] Processed ${this.packetCount} audio packets | Max Amplitude: ${maxAmplitude.toFixed(4)}`);
-        if (maxAmplitude === 0) {
-            console.warn("⚠️ ALERTA: Silencio absoluto detectado (Amplitud 0.0). El micrófono podría estar silenciado por el navegador.");
-        }
-      }
-
       const int16Data = this.float32ToInt16(float32Data);
       this.port.postMessage(int16Data, [int16Data.buffer]);
     }
