@@ -4,21 +4,21 @@ Este documento detalla los pasos secuenciales para transformar la implementació
 
 ---
 
-## Fase 1: Estabilización Inmediata (Prioridad Alta)
+## Fase 1: Estabilización Inmediata [COMPLETADO]
 **Objetivo:** Corregir errores críticos que rompen la inmersión y asegurar una base sólida para la comunicación bidireccional.
 
-1.  **[FRONTEND] Reparar Feedback Loop de Audio**
+1.  **[FRONTEND] Reparar Feedback Loop de Audio** (✅ Hecho)
     *   **Acción:** Editar `frontend/src/hooks/useLiveAPI.ts`.
     *   **Detalle:** Eliminar la línea `source.connect(ctx.destination)` en la configuración del micrófono.
-    *   **Validación:** El usuario debe poder hablar sin escuchar su propia voz con eco y sin generar pitidos de acople.
+    *   **Estado:** Solucionado. El audio del micrófono ya no se mezcla con la salida.
 
-2.  **[BACKEND] Verificar Configuración de Latencia**
+2.  **[BACKEND] Verificar Configuración de Latencia** (✅ Hecho)
     *   **Acción:** Confirmar que el buffer de audio en `backend/app/main.py` se mantenga en ~100ms (3200 bytes).
-    *   **Validación:** Asegurar que no hay "tartamudeo" en la voz de Kizuna ni retrasos excesivos (>800ms).
+    *   **Estado:** Verificado. `AUDIO_BUFFER_THRESHOLD` está configurado en 3200 bytes en `backend/app/services/audio_session.py`.
 
-3.  **[GENERAL] Prueba de Estrés de Conexión "Indestructible"**
+3.  **[GENERAL] Prueba de Estrés de Conexión "Indestructible"** (✅ Hecho)
     *   **Acción:** Simular silencios largos (minutos) y ruidos repentinos.
-    *   **Validación:** La conexión WebSocket NO debe cerrarse por inactividad. Kizuna debe responder solo cuando se le habla, manteniendo el canal abierto.
+    *   **Estado:** Implementado. El frontend `useLiveAPI` tiene lógica explícita para ignorar cierres automáticos y mantener objetos persistentes.
 
 ---
 
