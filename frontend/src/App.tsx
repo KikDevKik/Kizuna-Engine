@@ -1,90 +1,134 @@
-import { useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useLiveAPI } from './hooks/useLiveAPI';
+import { Layout } from './components/Layout';
+import { KizunaCore } from './components/KizunaCore';
+import { AgentRoster } from './components/AgentRoster';
+import { VisionPanel } from './components/VisionPanel'; // Assuming VisionPanel exists in components/VisionPanel.tsx
+import { EpistemicPanel } from './components/EpistemicPanel'; // Assuming EpistemicPanel exists in components/EpistemicPanel.tsx
+import { SystemLogs } from './components/SystemLogs';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Power } from 'lucide-react';
 import './KizunaHUD.css';
 
 function App() {
   const { connected, status, volumeRef, isAiSpeaking, connect, disconnect } = useLiveAPI();
-  const coreRef = useRef<HTMLDivElement>(null);
+  const [viewMode, setViewMode] = useState<'core' | 'roster'>('core');
 
-  // Derived state for Law 4
+  // Derived state for Law 4 logic (passed to Core)
   const isListening = connected && !isAiSpeaking;
 
-  // LEY 4: EL NÚCLEO REACTIVO (Optimized Animation Loop)
-  useEffect(() => {
-    let animationFrameId: number;
-
-    const animate = () => {
-      if (coreRef.current) {
-        // Calculate volume scale
-        // volumeRef.current is roughly 0.0 to 1.0 (sometimes higher)
-        // We dampen it slightly for smoother visual scaling
-        const vol = volumeRef.current * 0.5;
-
-        // Update CSS variable directly to avoid React re-renders
-        coreRef.current.style.setProperty('--vol-scale', vol.toFixed(3));
-      }
-      animationFrameId = requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [volumeRef]);
-
-  const handleToggle = () => {
-    if (connected) {
-      disconnect();
-    } else {
-      connect();
-    }
+  const handleToggleConnection = () => {
+    if (connected) disconnect();
+    else connect();
   };
 
   return (
-    <div className="kizuna-hud">
-      {/* HEADER */}
-      <header className="hud-header">
-        <div className="title-block">
-          <h1 className="hud-title">KIZUNA ENGINE</h1>
-          <div className="title-underline"></div>
+    <Layout>
+      {/* HEADER / NAV */}
+      <header className="fixed top-0 left-0 w-full p-6 flex justify-between items-start z-50 pointer-events-none">
+        <div className="flex flex-col pointer-events-auto">
+          <h1 className="font-monumental text-5xl skew-x-[-10deg] tracking-tighter leading-none">
+            KIZUNA<span className="text-cyan-400">ENGINE</span>
+          </h1>
+          <div className="h-1 w-32 bg-cyan-500 skew-x-[-10deg] mt-1" />
+          <div className="font-technical text-xs mt-1 opacity-70">
+            MULTIMODAL INTERFACE V4.0
+          </div>
         </div>
 
-        <div className="system-status" role="status" aria-live="polite">
-          <div className="status-label">SYSTEM STATUS</div>
-          <div className="status-value">{status}</div>
+        <div className="flex gap-4 pointer-events-auto">
+          <button
+            onClick={() => setViewMode('core')}
+            className={`px-4 py-1 font-technical border skew-x-[-10deg] transition-all ${
+              viewMode === 'core' ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-transparent text-cyan-400 border-cyan-900/50'
+            }`}
+          >
+            CORE VIEW
+          </button>
+          <button
+            onClick={() => setViewMode('roster')}
+            className={`px-4 py-1 font-technical border skew-x-[-10deg] transition-all ${
+              viewMode === 'roster' ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-transparent text-cyan-400 border-cyan-900/50'
+            }`}
+          >
+            AGENT ROSTER
+          </button>
         </div>
       </header>
 
-      {/* CORE */}
-      <main className="core-container">
-        <div className="ring-outer"></div>
-        <div className="ring-inner"></div>
+      {/* MAIN CONTENT AREA */}
+      <main className="relative w-full h-full flex items-center justify-center z-10">
+        <AnimatePresence mode="wait">
+          {viewMode === 'core' ? (
+            <motion.div
+              key="core-view"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }}
+              transition={{ duration: 0.5 }}
+              className="flex flex-col items-center justify-center"
+            >
+              <KizunaCore
+                volumeRef={volumeRef}
+                isListening={isListening}
+                isAiSpeaking={isAiSpeaking}
+                status={status}
+              />
 
-        <div
-          ref={coreRef}
-          className={`kizuna-core ${isListening ? 'listening' : ''} ${isAiSpeaking ? 'speaking' : ''}`}
-        ></div>
+              {/* Connection Toggle (Core View) */}
+              <div className="mt-12 pointer-events-auto">
+                <button
+                  onClick={handleToggleConnection}
+                  disabled={status === 'connecting'}
+                  className={`relative group px-10 py-4 font-monumental text-xl tracking-widest border transition-all duration-300 skew-x-[-10deg] overflow-hidden ${
+                    connected
+                      ? 'border-red-500 text-red-500 hover:bg-red-500/10'
+                      : 'border-cyan-400 text-cyan-400 hover:bg-cyan-400/10'
+                  }`}
+                >
+                  <span className="absolute inset-0 w-full h-full bg-cyan-400/20 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300 skew-x-[-10deg]" />
+                  <span className="relative z-10 flex items-center gap-3">
+                    {status === 'connecting' ? (
+                      'SYNCING...'
+                    ) : connected ? (
+                      <>TERMINATE <Power size={20} /></>
+                    ) : (
+                      <>INITIATE LINK <Power size={20} /></>
+                    )}
+                  </span>
+                </button>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="roster-view"
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -50, filter: 'blur(10px)' }}
+              transition={{ duration: 0.5 }}
+              className="w-full h-full flex items-center justify-center pointer-events-auto"
+            >
+              <AgentRoster onSelect={() => setViewMode('core')} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
 
-      {/* CONTROLS */}
-      <div className="control-panel">
-        <button
-          onClick={handleToggle}
-          disabled={status === 'connecting'}
-          className={`btn-action ${connected ? 'terminate' : 'initiate'}`}
-          aria-label={connected ? 'Terminate Connection' : 'Initiate Connection'}
-        >
-          {status === 'connecting' ? 'SYNCING...' : (connected ? 'TERMINATE' : 'INITIATE')}
-        </button>
-      </div>
+      {/* PERIPHERAL PANELS */}
+      <VisionPanel />
+      <EpistemicPanel />
+      <SystemLogs />
 
-      {/* FOOTER */}
-      <footer className="hud-footer">
-        <div>P3-RELOAD-HUD // V4.0</div>
-        <div>MEM: 64TB // SYNC: {connected ? '100%' : 'OFFLINE'}</div>
+      {/* FOOTER STATUS */}
+      <footer className="fixed bottom-0 left-0 w-full p-4 flex justify-between items-end z-40 pointer-events-none opacity-80 text-[10px] font-technical text-cyan-700">
+        <div>
+           MEMORY_USAGE: 64TB // LATENCY: 12ms
+        </div>
+        <div>
+           SECURE_CHANNEL: {connected ? 'ENCRYPTED' : 'OPEN'} // PORT: 8000
+        </div>
       </footer>
-    </div>
+    </Layout>
   );
 }
 
