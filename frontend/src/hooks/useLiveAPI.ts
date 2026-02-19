@@ -168,6 +168,9 @@ export const useLiveAPI = (): UseLiveAPI => {
         audio: {
           channelCount: 1,
           sampleRate: 16000,
+          noiseSuppression: true,
+          echoCancellation: true,
+          autoGainControl: true,
         }
       });
       mediaStreamRef.current = stream;
@@ -211,16 +214,14 @@ export const useLiveAPI = (): UseLiveAPI => {
     }
   }, [disconnect]);
 
-  // AudioContext Watchdog & Telemetry
+  // AudioContext Watchdog
   useEffect(() => {
     let interval: number | undefined;
     if (connected && audioContextRef.current) {
         interval = window.setInterval(() => {
             const ctx = audioContextRef.current;
             if (!ctx) return;
-            const state = ctx.state;
-            console.log(`[UseLiveAPI] AudioContext State: ${state}`);
-            if (state === 'suspended') {
+            if (ctx.state === 'suspended') {
                 console.warn("[UseLiveAPI] AudioContext suspended. Attempting to resume...");
                 ctx.resume();
             }

@@ -51,7 +51,6 @@ async def send_to_gemini(websocket: WebSocket, session):
                 # logger.debug(f"Sending {len(audio_buffer)} bytes to Gemini")
                 await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
                 audio_buffer.clear()
-                logger.info(f"Client -> Gemini: Buffer flushed. New size: {len(audio_buffer)}")
 
     except WebSocketDisconnect:
         logger.info("Client disconnected (send_to_gemini)")

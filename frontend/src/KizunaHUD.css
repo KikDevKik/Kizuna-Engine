@@ -1,0 +1,291 @@
+:root {
+  /* LEY 2: ESTÉTICA "DARK WATER" */
+  --c-abyssal: #05080F;
+  --c-deep-blue: #0A1128;
+  --c-cyan-electric: #00D1FF;
+  --c-white-pure: #FFFFFF;
+
+  /* Utility */
+  --hud-padding: 2rem;
+  --font-mono: 'Courier New', Courier, monospace; /* Fallback if specific font not available */
+}
+
+/* LEY 3: GEOMETRÍA AGRESIVA & LAYOUT */
+.kizuna-hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--c-abyssal);
+  color: var(--c-white-pure);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--hud-padding);
+  box-sizing: border-box;
+}
+
+/* Background Texture */
+.kizuna-hud::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    linear-gradient(rgba(5, 8, 15, 0.9), rgba(5, 8, 15, 0.9)),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 1px,
+      rgba(0, 209, 255, 0.03) 1px,
+      rgba(0, 209, 255, 0.03) 2px
+    );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* HEADER */
+.hud-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  z-index: 10;
+}
+
+.title-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.hud-title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.2em;
+  color: var(--c-cyan-electric);
+  text-shadow: 0 0 10px rgba(0, 209, 255, 0.6);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.title-underline {
+  height: 4px;
+  width: 120px;
+  background-color: var(--c-cyan-electric);
+  margin-top: 0.5rem;
+  clip-path: polygon(0 0, 100% 0, 85% 100%, 0% 100%); /* Diagonal cut */
+}
+
+.system-status {
+  text-align: right;
+  border-right: 4px solid var(--c-cyan-electric);
+  padding-right: 1rem;
+}
+
+.status-label {
+  font-size: 0.7rem;
+  color: var(--c-cyan-electric);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.status-value {
+  font-size: 1.2rem;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+/* LEY 4: EL NÚCLEO REACTIVO */
+.core-container {
+  position: relative;
+  width: 300px;
+  height: 300px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+
+/* Static Rings */
+.ring-outer {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+}
+
+.ring-inner {
+  position: absolute;
+  width: 70%;
+  height: 70%;
+  border: 1px solid rgba(0, 209, 255, 0.2);
+  border-radius: 50%;
+}
+
+/* The Core itself */
+.kizuna-core {
+  width: 120px;
+  height: 120px;
+  background-color: var(--c-deep-blue);
+  border-radius: 50%;
+  border: 2px solid var(--c-cyan-electric);
+  box-shadow: 0 0 20px rgba(0, 209, 255, 0.3);
+
+  /* VOLUME REACTIVITY */
+  /* --vol-scale is updated via JS (0.0 to ~1.0 range usually) */
+  /* Default value 0 if variable not present */
+  transform: scale(calc(1 + var(--vol-scale, 0)));
+  transition: transform 0.05s linear; /* Smooth but fast for audio */
+
+  position: relative;
+  z-index: 20;
+}
+
+/* STATE: LISTENING (AbyssalBreath) */
+.kizuna-core.listening {
+  border-color: var(--c-cyan-electric);
+  background-color: var(--c-deep-blue);
+  animation: AbyssalBreath 4s infinite ease-in-out;
+}
+
+/* STATE: SPEAKING (ChaoticRipple) */
+.kizuna-core.speaking {
+  background-color: var(--c-white-pure);
+  border-color: white;
+  box-shadow: 0 0 40px rgba(0, 209, 255, 0.8);
+  animation: GlitchShake 0.2s infinite; /* Slight vibration */
+}
+
+/* Ripple Effects for Speaking */
+.kizuna-core.speaking::before,
+.kizuna-core.speaking::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid var(--c-cyan-electric);
+  opacity: 0;
+  z-index: -1;
+}
+
+.kizuna-core.speaking::before {
+  animation: ChaoticRipple 1.5s infinite ease-out;
+}
+
+.kizuna-core.speaking::after {
+  animation: ChaoticRipple 1.5s infinite ease-out 0.5s;
+}
+
+
+/* CONTROLS (Aggressive Geometry) */
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  z-index: 10;
+  margin-bottom: 2rem;
+}
+
+.btn-action {
+  position: relative;
+  background-color: var(--c-white-pure);
+  color: var(--c-abyssal);
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  padding: 1.5rem 4rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+
+  /* LEY 3: CLIP-PATH */
+  clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%);
+}
+
+.btn-action:hover {
+  background-color: var(--c-cyan-electric);
+  color: var(--c-white-pure);
+  text-shadow: 0 0 5px rgba(0,0,0,0.5);
+  transform: scale(1.05);
+}
+
+.btn-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #555;
+}
+
+.btn-action.terminate {
+  background-color: var(--c-deep-blue);
+  color: var(--c-cyan-electric);
+  border: 1px solid var(--c-cyan-electric);
+}
+.btn-action.terminate:hover {
+  background-color: #ff3333;
+  color: white;
+  border-color: #ff3333;
+}
+
+
+/* FOOTER */
+.hud-footer {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  z-index: 10;
+}
+
+/* ANIMATIONS */
+
+@keyframes AbyssalBreath {
+  0%, 100% {
+    opacity: 0.8;
+    box-shadow: 0 0 20px rgba(0, 209, 255, 0.3);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 35px rgba(0, 209, 255, 0.5);
+  }
+}
+
+@keyframes ChaoticRipple {
+  0% {
+    width: 100%;
+    height: 100%;
+    opacity: 0.8;
+    border-width: 4px;
+  }
+  100% {
+    width: 250%;
+    height: 250%;
+    opacity: 0;
+    border-width: 0px;
+  }
+}
+
+@keyframes GlitchShake {
+  0% { transform: translate(0, 0) scale(calc(1 + var(--vol-scale, 0))); }
+  25% { transform: translate(-1px, 1px) scale(calc(1 + var(--vol-scale, 0))); }
+  50% { transform: translate(1px, -1px) scale(calc(1 + var(--vol-scale, 0))); }
+  75% { transform: translate(-1px, -1px) scale(calc(1 + var(--vol-scale, 0))); }
+  100% { transform: translate(0, 0) scale(calc(1 + var(--vol-scale, 0))); }
+}
