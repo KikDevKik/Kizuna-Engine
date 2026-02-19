@@ -41,7 +41,7 @@ function App() {
       </div>
 
       <div className="absolute top-8 right-8 z-10 flex items-center space-x-4">
-        <div className="text-right">
+        <div className="text-right" role="status" aria-live="polite">
           <div className="text-xs text-cyan-persona uppercase tracking-widest">System Status</div>
           <div className="text-xl font-bold uppercase">{status}</div>
         </div>
@@ -73,22 +73,33 @@ function App() {
       {/* Controls */}
       <button
         onClick={handleToggle}
+        disabled={status === 'connecting'}
+        aria-busy={status === 'connecting'}
+        aria-label={connected ? 'Terminate connection' : 'Initiate connection'}
         className={`
             relative z-10 w-72 h-16
             clip-diagonal
             flex items-center justify-center
             text-xl font-black tracking-[0.2em] uppercase
             transition-all duration-300
-            cursor-pointer select-none
+            select-none
             group
             ${connected
             ? 'bg-pure-white text-midnight hover:bg-red-500 hover:text-white'
             : 'bg-pure-white text-midnight hover:bg-cyan-persona hover:text-white'
           }
+            ${status === 'connecting' ? 'opacity-70 cursor-wait' : 'cursor-pointer'}
         `}
       >
-        <span className="relative z-10 group-hover:scale-105 transition-transform">
-          {connected ? 'TERMINATE' : 'INITIATE'}
+        <span className="relative z-10 group-hover:scale-105 transition-transform flex items-center gap-2">
+          {status === 'connecting' ? (
+            <>
+              <span className="animate-spin h-5 w-5 border-2 border-current border-t-transparent rounded-full" />
+              CONNECTING
+            </>
+          ) : (
+            connected ? 'TERMINATE' : 'INITIATE'
+          )}
         </span>
       </button>
 
