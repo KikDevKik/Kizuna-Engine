@@ -7,6 +7,7 @@ export interface UseLiveAPI {
   connected: boolean;
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
   volume: number;
+  isAiSpeaking: boolean;
   connect: () => Promise<void>;
   disconnect: () => void;
 }
@@ -15,6 +16,7 @@ export const useLiveAPI = (): UseLiveAPI => {
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [volume, setVolume] = useState(0);
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
 
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -42,6 +44,7 @@ export const useLiveAPI = (): UseLiveAPI => {
     setConnected(false);
     setStatus('disconnected');
     setVolume(0);
+    setIsAiSpeaking(false);
     nextStartTimeRef.current = 0;
   }, []);
 
@@ -88,6 +91,7 @@ export const useLiveAPI = (): UseLiveAPI => {
         try {
           const message = JSON.parse(event.data);
           if (message.type === 'audio') {
+            setIsAiSpeaking(true);
             // Decode Base64 audio chunk
             const binaryString = atob(message.data);
             const len = binaryString.length;
@@ -124,6 +128,8 @@ export const useLiveAPI = (): UseLiveAPI => {
 
             // Update next start time
             nextStartTimeRef.current = startTime + buffer.duration;
+          } else if (message.type === 'turn_complete') {
+            setIsAiSpeaking(false);
           }
         } catch (e) {
           console.error("Error processing message", e);
@@ -179,5 +185,5 @@ export const useLiveAPI = (): UseLiveAPI => {
     };
   }, [disconnect]);
 
-  return { connected, status, volume, connect, disconnect };
+  return { connected, status, volume, isAiSpeaking, connect, disconnect };
 };
