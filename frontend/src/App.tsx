@@ -80,14 +80,9 @@ function App() {
                 <button
                   onClick={handleToggleConnection}
                   disabled={status === 'connecting'}
-                  className={`relative group px-10 py-4 font-monumental text-xl tracking-widest border transition-all duration-300 skew-x-[-10deg] overflow-hidden ${
-                    connected
-                      ? 'border-red-500 text-red-500 hover:bg-red-500/10'
-                      : 'border-cyan-400 text-cyan-400 hover:bg-cyan-400/10'
-                  }`}
+                  className="kizuna-shard-btn-wrapper"
                 >
-                  <span className="absolute inset-0 w-full h-full bg-cyan-400/20 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300 skew-x-[-10deg]" />
-                  <span className="relative z-10 flex items-center gap-3">
+                  <span className="kizuna-shard-btn-inner">
                     {status === 'connecting' ? (
                       'SYNCING...'
                     ) : connected ? (

@@ -7,58 +7,81 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  // Motion Values for cursor tracking
   const rawMouseX = useMotionValue(typeof window !== "undefined" ? window.innerWidth / 2 : 0);
   const rawMouseY = useMotionValue(typeof window !== "undefined" ? window.innerHeight / 2 : 0);
 
-  // Spring Physics for "Dark Water" resistance
-  const springConfig = { damping: 50, stiffness: 40, mass: 1.2 };
-  const smoothMouseX = useSpring(rawMouseX, springConfig);
-  const smoothMouseY = useSpring(rawMouseY, springConfig);
+  // FÍSICA DARK WATER: Mayor masa y damping para resistencia de fluido denso [3.2]
+  const springPhysics = { damping: 40, stiffness: 60, mass: 1.5 };
+  const smoothMouseX = useSpring(rawMouseX, springPhysics);
+  const smoothMouseY = useSpring(rawMouseY, springPhysics);
 
-  // Parallax Transforms
-  // Background moves slightly with cursor (distance)
-  const bgX = useTransform(smoothMouseX, [0, window.innerWidth], [15, -15]);
-  const bgY = useTransform(smoothMouseY, [0, window.innerHeight], [15, -15]);
+  // INTERPOLACIÓN DE VECTORES (Parallax 3-Capas)
+  // Capa Fondo (-10): Se mueve CON el cursor (lejanía)
+  const backgroundX = useTransform(smoothMouseX, [0, window.innerWidth], [-15, 15]);
+  const backgroundY = useTransform(smoothMouseY, [0, window.innerHeight], [-15, 15]);
 
-  // Foreground moves opposite to cursor (proximity)
-  const fgX = useTransform(smoothMouseX, [0, window.innerWidth], [-20, 20]);
-  const fgY = useTransform(smoothMouseY, [0, window.innerHeight], [-20, 20]);
+  // Capa Midground (10): HUD Táctico, movimiento sutil opuesto
+  const midgroundX = useTransform(smoothMouseX, [0, window.innerWidth], [10, -10]);
+  const midgroundY = useTransform(smoothMouseY, [0, window.innerHeight], [10, -10]);
+
+  // Capa Primer Plano (50): Core Interactivo, movimiento rápido opuesto
+  const foregroundX = useTransform(smoothMouseX, [0, window.innerWidth], [30, -30]);
+  const foregroundY = useTransform(smoothMouseY, [0, window.innerHeight], [30, -30]);
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      rawMouseX.set(e.clientX);
-      rawMouseY.set(e.clientY);
+    const handleMouseMove = (event: MouseEvent) => {
+      rawMouseX.set(event.clientX);
+      rawMouseY.set(event.clientY);
     };
-
-    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mousemove", handleMouseMove, { passive: true });
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, [rawMouseX, rawMouseY]);
 
   return (
     <div className="kizuna-engine-viewport">
-      {/* LAYER -10: ABYSSAL BACKGROUND */}
+      {/* ESTRATO -10: FONDO ABISAL */}
       <motion.div
         className="layer-abyssal-background"
-        style={{ x: bgX, y: bgY }}
+        style={{ x: backgroundX, y: backgroundY }}
       >
         <div className="water-caustics-shader" />
       </motion.div>
 
-      {/* LAYER 0: CONTENT CONTAINER */}
+      {/* ESTRATO 10: HUD TÁCTICO (NUEVO) */}
+      <motion.div
+        className="layer-tactical-hud"
+        style={{
+            x: midgroundX,
+            y: midgroundY,
+            position: 'absolute',
+            inset: 0,
+            zIndex: 10,
+            pointerEvents: 'none'
+        }}
+      >
+        {/* Elementos decorativos flotantes independientes del Core */}
+        <svg className="absolute top-10 right-10 w-24 h-24 opacity-40 animate-spin-slow">
+            <circle cx="50" cy="50" r="40" stroke="#00D1FF" strokeWidth="1" fill="none" strokeDasharray="5,5" />
+        </svg>
+        <div className="absolute bottom-20 left-10 font-technical text-xs text-cyan-700">
+            COORD: {smoothMouseX.get().toFixed(0)} : {smoothMouseY.get().toFixed(0)}
+        </div>
+      </motion.div>
+
+      {/* ESTRATO 50: CORE INTERACTIVO */}
       <motion.div
         className="layer-interactive-foreground"
-        style={{ x: fgX, y: fgY, width: '100%', height: '100%', position: 'relative', zIndex: 10 }}
+        style={{
+            x: foregroundX,
+            y: foregroundY,
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            zIndex: 50
+        }}
       >
         {children}
       </motion.div>
-
-      {/* DECORATIVE HUD ELEMENTS (Static or minimal movement) */}
-      <div style={{ position: 'absolute', top: '20px', left: '20px', pointerEvents: 'none', zIndex: 20 }}>
-        <div className="font-technical" style={{ fontSize: '0.8rem', opacity: 0.7 }}>
-          SYS.V4.0 // ABYSSAL_DIVE
-        </div>
-      </div>
     </div>
   );
 };

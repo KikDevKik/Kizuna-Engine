@@ -21,6 +21,55 @@ interface AgentRosterProps {
   onSelect?: (agent: Agent) => void;
 }
 
+// ------------------------------------------------------------------
+// SHATTER TRANSITION VARIANTS (Proposal 2)
+// ------------------------------------------------------------------
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.06, // Fast cascade
+      delayChildren: 0.1
+    }
+  },
+  exit: {
+    opacity: 0,
+    transition: { staggerChildren: 0.03, staggerDirection: -1 }
+  }
+};
+
+const shardVariants = {
+  hidden: {
+    y: 100,
+    opacity: 0,
+    scale: 0.6,
+    rotateX: -45,
+    rotateZ: 10, // Chaotic entry
+    filter: "blur(10px)"
+  },
+  visible: {
+    y: 0,
+    opacity: 1,
+    scale: 1,
+    rotateX: 0,
+    rotateZ: 0,
+    filter: "blur(0px)",
+    transition: {
+      type: "spring" as const,
+      stiffness: 200, // Snap effect
+      damping: 20,
+      mass: 0.8
+    }
+  },
+  exit: {
+    y: -50,
+    opacity: 0,
+    filter: "blur(10px)",
+    transition: { duration: 0.2 }
+  }
+};
+
 export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -45,7 +94,13 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-[500px]">
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      className="flex flex-col items-center justify-center w-full h-[500px]"
+    >
 
       {/* 3D SCENE */}
       <div className="perspective-scene" style={{ perspective: "1500px" }}>
@@ -62,24 +117,31 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
             return (
               <motion.div
                 key={agent.id}
+                variants={shardVariants} // Apply Shatter Effect
                 className="agent-card-container"
                 style={{
                   transform: `rotateY(${angle}deg) translateZ(${radius}px)`,
-                  // Tilt slightly when not focused
+                  // Tilt slightly when not focused (Base offset)
+                  // Note: variants animate rotateZ/X during entry, but style overrides it after?
+                  // Framer motion merges style and animate. To allow variants to control entry,
+                  // we should move the static tilts to 'animate' or conditional classes if possible.
+                  // However, for simplicity in 3D carousel, we keep the structural transforms here.
+                  // The variant's rotateZ will compound or override during transition.
                   rotateZ: isFocused ? "-2deg" : "-15deg",
                   opacity: isFocused ? 1 : 0.4,
                   // Scale down distant items
                   scale: isFocused ? 1.05 : 0.9,
                 }}
-                animate={{
-                   filter: isFocused
-                     ? "drop-shadow(0 0 20px #00D1FF) saturate(150%)"
-                     : "drop-shadow(0 0 0px #141413) saturate(0%)",
-                }}
                 transition={{ duration: 0.4 }}
               >
-                <div
+                <motion.div
                   className={`agent-card-glass ${isFocused ? 'border-cyan-400' : 'border-slate-700'}`}
+                  // Move focus animation to inner element to avoid conflict with entrance filter blur
+                  animate={{
+                     filter: isFocused
+                       ? "drop-shadow(0 0 20px #00D1FF) saturate(150%)"
+                       : "drop-shadow(0 0 0px #141413) saturate(0%)",
+                  }}
                   onClick={() => {
                      setActiveIndex(index);
                      handleSelect();
@@ -101,7 +163,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                        </span>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               </motion.div>
             );
           })}
@@ -109,26 +171,32 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
       </div>
 
       {/* CONTROLS (Optional) */}
-      <div className="mt-8 flex gap-8 z-50">
+      <motion.div variants={shardVariants} className="mt-8 flex gap-8 z-50">
         <button
           onClick={() => rotateCarousel(-1)}
-          className="px-6 py-2 bg-slate-900 border border-cyan-500/30 text-cyan-400 font-technical hover:bg-cyan-900/40 transition-colors skew-x-[-15deg]"
+          className="kizuna-shard-btn-wrapper"
+          style={{ padding: '2px', clipPath: 'polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%)' }}
         >
-          <span className="block skew-x-[15deg]">&lt; PREV</span>
+          <div className="kizuna-shard-btn-inner" style={{ padding: '8px 24px' }}>
+             &lt; PREV
+          </div>
         </button>
         <button
           onClick={handleSelect}
-          className="px-8 py-2 bg-cyan-600 border border-cyan-400 text-black font-monumental hover:bg-cyan-400 transition-colors shadow-[0_0_15px_rgba(0,209,255,0.4)] skew-x-[-15deg]"
+          className="kizuna-shard-btn-wrapper"
         >
-           <span className="block skew-x-[15deg]">INITIATE LINK</span>
+           <span className="kizuna-shard-btn-inner">INITIATE LINK</span>
         </button>
         <button
           onClick={() => rotateCarousel(1)}
-          className="px-6 py-2 bg-slate-900 border border-cyan-500/30 text-cyan-400 font-technical hover:bg-cyan-900/40 transition-colors skew-x-[-15deg]"
+          className="kizuna-shard-btn-wrapper"
+          style={{ padding: '2px', clipPath: 'polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%)' }}
         >
-          <span className="block skew-x-[15deg]">NEXT &gt;</span>
+          <div className="kizuna-shard-btn-inner" style={{ padding: '8px 24px' }}>
+            NEXT &gt;
+          </div>
         </button>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
