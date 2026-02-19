@@ -5,6 +5,7 @@ import asyncio
 import logging
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.services.gemini_live import gemini_service
 from app.services.audio_session import send_to_gemini, receive_from_gemini
@@ -16,6 +17,14 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.get("/health")
 async def health_check():
     return {"status": "Kizuna Engine Online"}
@@ -23,8 +32,15 @@ async def health_check():
 
 @app.websocket("/ws/live")
 async def websocket_endpoint(websocket: WebSocket):
+    # Security: Verify Origin
+    origin = websocket.headers.get("origin")
+    if origin and origin not in settings.CORS_ORIGINS:
+        logger.warning(f"Rejected connection from unauthorized origin: {origin}")
+        await websocket.close(code=1008) # Policy Violation
+        return
+
     await websocket.accept()
-    logger.info("WebSocket connection established.")
+    logger.info(f"WebSocket connection established from origin: {origin}")
 
     try:
         async with gemini_service.connect() as session:
