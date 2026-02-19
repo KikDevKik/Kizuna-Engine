@@ -287,3 +287,53 @@ body {
   80% { transform: translate(2px, -2px) }
   100% { transform: translate(0) }
 }
+
+/* -------------------------------------------------------------------------- */
+/* 8. GEOMETRIC AGGRESSION BUTTONS (SHARD)                                    */
+/* -------------------------------------------------------------------------- */
+
+/* Wrapper para el borde brillante */
+.kizuna-shard-btn-wrapper {
+  position: relative;
+  display: inline-block;
+  padding: 2px; /* Grosor del borde */
+  background: var(--color-electric-blue); /* Color del borde */
+  clip-path: polygon(0% 20%, 10% 0%, 100% 0%, 100% 80%, 90% 100%, 0% 100%);
+  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+  filter: drop-shadow(0 0 5px rgba(0, 209, 255, 0.4));
+  border: none;
+  cursor: pointer;
+}
+
+.kizuna-shard-btn-wrapper:hover {
+  filter: drop-shadow(0 0 15px rgba(0, 209, 255, 0.8));
+  transform: scale(1.05);
+}
+
+.kizuna-shard-btn-wrapper:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
+}
+
+/* Interior oscuro del botón */
+.kizuna-shard-btn-inner {
+  background: rgba(5, 8, 15, 0.95); /* Negro Abisal */
+  color: var(--color-electric-blue);
+  font-family: 'Roboto Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 12px 32px;
+  clip-path: polygon(0% 20%, 10% 0%, 100% 0%, 100% 80%, 90% 100%, 0% 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: 100%;
+}
+
+.kizuna-shard-btn-wrapper:active .kizuna-shard-btn-inner {
+  background: var(--color-electric-blue);
+  color: #000;
+}
