@@ -1,13 +1,7 @@
-
-import logging
-import os
 from dotenv import load_dotenv
 load_dotenv()
 
-from google import genai
-
-client = genai.Client()
-
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -18,9 +12,8 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Initialize the client with the API key from settings
-# The client is thread-safe and can be reused.
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
+# Initialize the client. The SDK will automatically use the GEMINI_API_KEY environment variable.
+client = genai.Client()
 
 class GeminiLiveService:
     """

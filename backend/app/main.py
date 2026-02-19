@@ -1,4 +1,3 @@
-
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -10,7 +9,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from google.genai import types
 
 from app.services.gemini_live import gemini_service
-from app.core.config import settings
+from core.config import settings
 
 
 # Configure logging
