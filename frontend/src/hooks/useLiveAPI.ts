@@ -74,7 +74,11 @@ export const useLiveAPI = (): UseLiveAPI => {
       packetCountRef.current = 0;
 
       // 1. Initialize AudioContext
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
       const ctx = new AudioContext({ sampleRate: 16000 });
+      if (ctx.sampleRate !== 16000) {
+        console.error("🚨 ALERTA CRÍTICA: El navegador forzó una frecuencia de " + ctx.sampleRate + "Hz en lugar de 16000Hz. El audio se enviará corrupto.");
+      }
       audioContextRef.current = ctx;
       await ctx.resume();
 

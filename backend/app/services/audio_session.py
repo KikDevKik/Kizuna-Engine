@@ -18,6 +18,7 @@ async def send_to_gemini(websocket: WebSocket, session):
     try:
         packet_count = 0
         audio_buffer = bytearray()
+        carry_over = bytearray()  # Buffer for odd bytes
 
         while True:
             # Client sends raw PCM audio bytes
@@ -26,6 +27,18 @@ async def send_to_gemini(websocket: WebSocket, session):
             if not data:
                 logger.warning("Received empty data from client.")
                 continue
+
+            # Prepend carry_over from previous iteration
+            if carry_over:
+                data = carry_over + data
+                carry_over.clear()
+
+            # Handle odd number of bytes (alignment check)
+            if len(data) % 2 != 0:
+                # Save the last byte for next time
+                carry_over.extend(data[-1:])
+                # Process the rest
+                data = data[:-1]
 
             packet_count += 1
             if packet_count % 100 == 0:
