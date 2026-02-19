@@ -26,6 +26,9 @@ export const useLiveAPI = (): UseLiveAPI => {
   const nextStartTimeRef = useRef<number>(0);
   const isConnectingRef = useRef<boolean>(false);
 
+  // Telemetry ref
+  const packetCountRef = useRef<number>(0);
+
   const disconnect = useCallback(() => {
     console.log("Disconnecting by user command...");
     console.trace("Disconnect called from:");
@@ -54,6 +57,7 @@ export const useLiveAPI = (): UseLiveAPI => {
     setIsAiSpeaking(false);
     nextStartTimeRef.current = 0;
     isConnectingRef.current = false;
+    packetCountRef.current = 0;
   }, []);
 
   const connect = useCallback(async () => {
@@ -67,6 +71,7 @@ export const useLiveAPI = (): UseLiveAPI => {
       isConnectingRef.current = true;
       setStatus('connecting');
       console.log("Initiating connection...");
+      packetCountRef.current = 0;
 
       // 1. Initialize AudioContext
       const ctx = new AudioContext({ sampleRate: 16000 });
@@ -75,7 +80,8 @@ export const useLiveAPI = (): UseLiveAPI => {
 
       // 2. Load AudioWorklet
       try {
-        await ctx.audioWorklet.addModule('/pcm-processor.js');
+        // Cache Busting: Add timestamp to force reload
+        await ctx.audioWorklet.addModule(`/pcm-processor.js?v=${Date.now()}`);
       } catch (e) {
         console.error("Failed to load audio worklet", e);
         throw e;
@@ -110,7 +116,7 @@ export const useLiveAPI = (): UseLiveAPI => {
       };
 
       ws.onmessage = async (event) => {
-        console.log('WebSocket message received:', event.data.substring(0, 50) + "..."); // log simplified
+        // console.log('WebSocket message received:', event.data.substring(0, 50) + "..."); // Reduce noise
         try {
           const message = JSON.parse(event.data);
           if (message.type === 'audio') {
@@ -180,6 +186,12 @@ export const useLiveAPI = (): UseLiveAPI => {
         // Send to WebSocket if open
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(int16Data);
+
+          // Telemetry
+          packetCountRef.current++;
+          if (packetCountRef.current % 50 === 0) {
+              console.log(`[UseLiveAPI] Sent ${packetCountRef.current} audio packets via WebSocket`);
+          }
         }
       };
 
@@ -194,6 +206,22 @@ export const useLiveAPI = (): UseLiveAPI => {
       isConnectingRef.current = false;
     }
   }, [disconnect]);
+
+  // AudioContext Watchdog
+  useEffect(() => {
+    let interval: number | undefined;
+    if (connected && audioContextRef.current) {
+        interval = window.setInterval(() => {
+            if (audioContextRef.current?.state === 'suspended') {
+                console.warn("[UseLiveAPI] AudioContext suspended. Attempting to resume...");
+                audioContextRef.current.resume();
+            }
+        }, 2000);
+    }
+    return () => {
+        if (interval) clearInterval(interval);
+    };
+  }, [connected]);
 
   // Cleanup ONLY on unmount - DISABLED per request for "immovable constant"
   // The user explicitly requested to REMOVE any automatic close triggers.
