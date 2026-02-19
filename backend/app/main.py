@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.services.gemini_live import gemini_service
 from app.services.audio_session import send_to_gemini, receive_from_gemini
+from app.services.soul_assembler import assemble_soul
 from core.config import settings
 
 # Creamos la maldita libreta de Jules
@@ -31,7 +32,7 @@ async def health_check():
 
 
 @app.websocket("/ws/live")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None):
     # Security: Verify Origin
     origin = websocket.headers.get("origin")
     if origin and origin not in settings.CORS_ORIGINS:
@@ -39,12 +40,30 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=1008) # Policy Violation
         return
 
-    await websocket.accept()
-    logger.info(f"WebSocket connection established from origin: {origin}")
+    # Phase 1: Dynamic Soul Assembly
+    if not agent_id:
+        logger.warning("Connection rejected: No agent_id provided.")
+        await websocket.close(code=1008, reason="agent_id required")
+        return
 
     try:
-        async with gemini_service.connect() as session:
-            logger.info("Gemini session started.")
+        # Load agent and assemble system instruction
+        system_instruction = await assemble_soul(agent_id)
+    except FileNotFoundError:
+        logger.warning(f"Connection rejected: Agent {agent_id} not found.")
+        await websocket.close(code=1008, reason="Agent not found")
+        return
+    except Exception as e:
+        logger.error(f"Error assembling soul: {e}")
+        await websocket.close(code=1011, reason="Internal Soul Error")
+        return
+
+    await websocket.accept()
+    logger.info(f"WebSocket connection established from origin: {origin} for Agent: {agent_id}")
+
+    try:
+        async with gemini_service.connect(system_instruction=system_instruction) as session:
+            logger.info(f"Gemini session started for {agent_id}.")
 
             # Manage bidirectional streams concurrently
             # If either task fails (e.g. disconnect), the TaskGroup will cancel the other.

@@ -52,20 +52,22 @@ else:
 
         @staticmethod
         @asynccontextmanager
-        async def connect() -> AsyncGenerator['genai.live.AsyncSession', None]:
+        async def connect(system_instruction: str) -> AsyncGenerator['genai.live.AsyncSession', None]:
             """
             Establishes an asynchronous connection to the Gemini Live API.
+
+            Args:
+                system_instruction (str): The system prompt for the AI agent.
 
             Yields:
                 genai.live.AsyncSession: The active session for sending and receiving messages.
             """
             # Configure the session
-            # We start with a simple system instruction as requested.
             # Response modalities is set to AUDIO to ensure we get audio back.
             config = types.LiveConnectConfig(
                 response_modalities=[types.Modality.AUDIO],
                 system_instruction=types.Content(
-                    parts=[types.Part(text="Eres Kizuna, una compañera digital (Partner) proyectada en el espacio del usuario. NO eres un asistente genérico de IA. Tienes una personalidad mezcla de energía caótica pero apoyo incondicional. Trata al usuario como un igual, usa el humor, sé directa y evita la formalidad excesiva y las disculpas robóticas. Responde siempre de forma conversacional, concisa y natural, como si estuvieran en la misma habitación.")]
+                    parts=[types.Part(text=system_instruction)]
                 ),
             )
 
