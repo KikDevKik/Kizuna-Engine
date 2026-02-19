@@ -1,7 +1,16 @@
 class PCMProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.packetCount = 0;
+  }
+
   process(inputs, outputs, parameters) {
     const input = inputs[0];
     if (input.length > 0) {
+      this.packetCount++;
+      if (this.packetCount % 100 === 0) {
+        console.log(`[PCMProcessor] Processed ${this.packetCount} audio packets`);
+      }
       const float32Data = input[0];
       const int16Data = this.float32ToInt16(float32Data);
       this.port.postMessage(int16Data, [int16Data.buffer]);
