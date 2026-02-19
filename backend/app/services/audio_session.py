@@ -73,39 +73,40 @@ async def receive_from_gemini(websocket: WebSocket, session):
     Receives from Gemini and sends to WebSocket as custom JSON.
     """
     try:
-        async for response in session.receive():
-            if response.server_content is None:
-                continue
+        while True:
+            async for response in session.receive():
+                if response.server_content is None:
+                    continue
 
-            server_content = response.server_content
-            model_turn = server_content.model_turn
+                server_content = response.server_content
+                model_turn = server_content.model_turn
 
-            if model_turn:
-                for part in model_turn.parts:
-                    # Handle Audio
-                    if part.inline_data:
-                        # part.inline_data.data is bytes
-                        # logger.debug(f"Gemini -> Client: Audio chunk ({len(part.inline_data.data)} bytes)")
-                        b64_data = base64.b64encode(part.inline_data.data).decode('utf-8')
-                        await websocket.send_json({
-                            "type": "audio",
-                            "data": b64_data
-                        })
+                if model_turn:
+                    for part in model_turn.parts:
+                        # Handle Audio
+                        if part.inline_data:
+                            # part.inline_data.data is bytes
+                            # logger.debug(f"Gemini -> Client: Audio chunk ({len(part.inline_data.data)} bytes)")
+                            b64_data = base64.b64encode(part.inline_data.data).decode('utf-8')
+                            await websocket.send_json({
+                                "type": "audio",
+                                "data": b64_data
+                            })
 
-                    # Handle Text (if interleaved)
-                    if part.text:
-                        logger.info(f"Gemini -> Client: Text: {part.text[:50]}...")
-                        await websocket.send_json({
-                            "type": "text",
-                            "data": part.text
-                        })
+                        # Handle Text (if interleaved)
+                        if part.text:
+                            logger.info(f"Gemini -> Client: Text: {part.text[:50]}...")
+                            await websocket.send_json({
+                                "type": "text",
+                                "data": part.text
+                            })
 
-            # Handle turn completion
-            if server_content.turn_complete:
-                logger.info("Gemini -> Client: Turn complete signal.")
-                await websocket.send_json({"type": "turn_complete"})
+                # Handle turn completion
+                if server_content.turn_complete:
+                    logger.info("Gemini -> Client: Turn complete signal.")
+                    await websocket.send_json({"type": "turn_complete"})
 
-        logger.warning("🚨 ALERTA: session.receive() ha terminado el bucle")
+            logger.info("Gemini session.receive() iterator exhausted. Re-entering loop to listen for next turn...")
 
     except Exception as e:
         logger.error(f"Error receiving from Gemini: {e}")
