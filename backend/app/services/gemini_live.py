@@ -1,19 +1,28 @@
-from dotenv import load_dotenv
-load_dotenv()
-
+import os
+import json
+import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
-
+from pathlib import Path
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from core.config import settings
-
 logger = logging.getLogger(__name__)
 
-# Initialize the client. The SDK will automatically use the GEMINI_API_KEY environment variable.
-client = genai.Client()
+# 1. Buscamos el archivo .env a la fuerza
+env_path = Path(__file__).resolve().parent.parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
+
+# 2. Extraemos la llave de forma manual
+api_key = os.getenv("GEMINI_API_KEY")
+
+# 3. Si no la encuentra, explota
+if not api_key:
+    raise ValueError(f"🚨 ERROR CRÍTICO: No se encontró la llave GEMINI_API_KEY en {env_path} 🚨")
+
+# 4. Inicializamos el cliente
+client = genai.Client(api_key=api_key)
 
 class GeminiLiveService:
     """
@@ -39,11 +48,11 @@ class GeminiLiveService:
             ),
         )
 
-        logger.info(f"Connecting to Gemini Live API with model: {settings.LIVE_MODEL_ID}")
+        logger.info(f"Connecting to Gemini Live API with model: {"gemini-2.5-flash-native-audio-preview-12-2025"}")
 
         try:
             async with client.aio.live.connect(
-                model=settings.LIVE_MODEL_ID,
+                model="gemini-2.5-flash-native-audio-preview-12-2025",
                 config=config
             ) as session:
                 logger.info("Connected to Gemini Live API session.")

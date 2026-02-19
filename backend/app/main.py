@@ -11,8 +11,7 @@ from google.genai import types
 from app.services.gemini_live import gemini_service
 from core.config import settings
 
-
-# Configure logging
+# Creamos la maldita libreta de Jules
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
