@@ -211,14 +211,18 @@ export const useLiveAPI = (): UseLiveAPI => {
     }
   }, [disconnect]);
 
-  // AudioContext Watchdog
+  // AudioContext Watchdog & Telemetry
   useEffect(() => {
     let interval: number | undefined;
     if (connected && audioContextRef.current) {
         interval = window.setInterval(() => {
-            if (audioContextRef.current?.state === 'suspended') {
+            const ctx = audioContextRef.current;
+            if (!ctx) return;
+            const state = ctx.state;
+            console.log(`[UseLiveAPI] AudioContext State: ${state}`);
+            if (state === 'suspended') {
                 console.warn("[UseLiveAPI] AudioContext suspended. Attempting to resume...");
-                audioContextRef.current.resume();
+                ctx.resume();
             }
         }, 2000);
     }

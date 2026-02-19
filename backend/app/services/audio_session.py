@@ -51,6 +51,7 @@ async def send_to_gemini(websocket: WebSocket, session):
                 # logger.debug(f"Sending {len(audio_buffer)} bytes to Gemini")
                 await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
                 audio_buffer.clear()
+                logger.info(f"Client -> Gemini: Buffer flushed. New size: {len(audio_buffer)}")
 
     except WebSocketDisconnect:
         logger.info("Client disconnected (send_to_gemini)")
@@ -103,6 +104,8 @@ async def receive_from_gemini(websocket: WebSocket, session):
             if server_content.turn_complete:
                 logger.info("Gemini -> Client: Turn complete signal.")
                 await websocket.send_json({"type": "turn_complete"})
+
+        logger.warning("🚨 ALERTA: session.receive() ha terminado el bucle")
 
     except Exception as e:
         logger.error(f"Error receiving from Gemini: {e}")
