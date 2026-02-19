@@ -86,8 +86,8 @@ class MockSession:
 class MockGeminiService:
     @staticmethod
     @asynccontextmanager
-    async def connect() -> AsyncGenerator[MockSession, None]:
-        logger.info("Connecting to MOCK Gemini Service.")
+    async def connect(system_instruction: str = None) -> AsyncGenerator[MockSession, None]:
+        logger.info(f"Connecting to MOCK Gemini Service with instruction len: {len(system_instruction) if system_instruction else 0}")
         session = MockSession()
         yield session
         logger.info("Mock Gemini Session closed.")
