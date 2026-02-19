@@ -24,11 +24,15 @@ export const useLiveAPI = (): UseLiveAPI => {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const nextStartTimeRef = useRef<number>(0);
+  const isConnectingRef = useRef<boolean>(false);
 
   const disconnect = useCallback(() => {
-    console.log("Disconnecting...");
+    console.log("Disconnecting by user command...");
     if (socketRef.current) {
-      socketRef.current.close();
+      // Only close if open to avoid errors
+      if (socketRef.current.readyState === WebSocket.OPEN || socketRef.current.readyState === WebSocket.CONNECTING) {
+          socketRef.current.close();
+      }
       socketRef.current = null;
     }
     if (mediaStreamRef.current) {
@@ -48,14 +52,20 @@ export const useLiveAPI = (): UseLiveAPI => {
     setVolume(0);
     setIsAiSpeaking(false);
     nextStartTimeRef.current = 0;
+    isConnectingRef.current = false;
   }, []);
 
   const connect = useCallback(async () => {
     // Prevent multiple connections
-    if (socketRef.current?.readyState === WebSocket.OPEN) return;
+    if (socketRef.current || isConnectingRef.current) {
+        console.warn("Connection attempt ignored: already connected or connecting.");
+        return;
+    }
 
     try {
+      isConnectingRef.current = true;
       setStatus('connecting');
+      console.log("Initiating connection...");
 
       // 1. Initialize AudioContext
       const ctx = new AudioContext({ sampleRate: 16000 });
@@ -71,30 +81,35 @@ export const useLiveAPI = (): UseLiveAPI => {
       }
 
       // 3. Setup WebSocket
+      console.log(`Connecting to WebSocket at ${WS_URL}...`);
       const ws = new WebSocket(WS_URL);
       socketRef.current = ws;
 
       ws.onopen = () => {
+        console.log('WebSocket connected (onopen event)');
         setConnected(true);
         setStatus('connected');
-        console.log('WebSocket connected');
+        isConnectingRef.current = false;
       };
 
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
-        // Only call disconnect if we are not already disconnected to avoid loops
-        // Check if the ref still points to this socket, or if it's already cleared
-        if (socketRef.current === ws) {
-             disconnect();
-        }
+      ws.onclose = (event) => {
+        console.log(`WebSocket disconnected (onclose event). Code: ${event.code}, Reason: "${event.reason}", WasClean: ${event.wasClean}`);
+        // DO NOT call disconnect() here automatically.
+        // Just update UI status if needed, but keep objects alive per request "Immovable constant".
+        // However, if the socket is closed, we can't really use it.
+        // We will mark it as not connected in UI but NOT cleanup the AudioContext/MediaStream.
+        setConnected(false);
+        // setStatus('disconnected'); // Maybe keep 'connected' visual to show it *was* connected? No, 'disconnected' is honest.
       };
 
       ws.onerror = (error) => {
-        console.error('WebSocket error', error);
+        console.error('WebSocket error (onerror event)', error);
         setStatus('error');
+        // DO NOT call disconnect() here.
       };
 
       ws.onmessage = async (event) => {
+        console.log('WebSocket message received:', event.data.substring(0, 50) + "..."); // log simplified
         try {
           const message = JSON.parse(event.data);
           if (message.type === 'audio') {
@@ -126,6 +141,7 @@ export const useLiveAPI = (): UseLiveAPI => {
             nextStartTimeRef.current = startTime + buffer.duration;
 
           } else if (message.type === 'turn_complete') {
+            console.log("Turn complete signal received.");
             // STRICT HANDLING: Only update UI state.
             // DO NOT stop microphone, DO NOT close socket.
             setIsAiSpeaking(false);
@@ -172,16 +188,22 @@ export const useLiveAPI = (): UseLiveAPI => {
     } catch (e) {
       console.error("Error connecting", e);
       setStatus('error');
-      disconnect();
+      // DO NOT automatically disconnect here to allow inspection
+      isConnectingRef.current = false;
     }
   }, [disconnect]);
 
-  // Cleanup ONLY on unmount.
+  // Cleanup ONLY on unmount - DISABLED per request for "immovable constant"
+  // The user explicitly requested to REMOVE any automatic close triggers.
+  // We will leave this empty or comment it out to prevent React Strict Mode from killing the connection.
+  /*
   useEffect(() => {
     return () => {
-        disconnect();
+        console.log("Component unmounting - cleanup skipped per 'immovable' requirement");
+        // disconnect();
     };
   }, [disconnect]);
+  */
 
   return { connected, status, volume, isAiSpeaking, connect, disconnect };
 };
