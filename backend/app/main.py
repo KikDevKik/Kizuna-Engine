@@ -1,12 +1,16 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 import base64
 import logging
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from google import genai
 from google.genai import types
 
-from backend.app.services.gemini_live import gemini_service
-from backend.core.config import settings
+from app.services.gemini_live import gemini_service
+from core.config import settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

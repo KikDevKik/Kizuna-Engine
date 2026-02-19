@@ -1,5 +1,7 @@
-
+import os
 import logging
+from pathlib import Path
+from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -10,9 +12,20 @@ from backend.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Initialize the client with the API key from settings
-# The client is thread-safe and can be reused.
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
+# Force load the .env file from the backend root
+env_path = Path(__file__).resolve().parent.parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
+
+# Retrieve the API key explicitly
+api_key = os.getenv("GEMINI_API_KEY")
+if not api_key:
+    # Try getting it from settings as a fallback if env didn't work directly but settings did (unlikely)
+    api_key = settings.GEMINI_API_KEY
+    if not api_key:
+        raise ValueError(f"CRITICAL ERROR: No se encontró GEMINI_API_KEY en {env_path}")
+
+# Initialize the client with the explicit API key
+client = genai.Client(api_key=api_key)
 
 class GeminiLiveService:
     """
