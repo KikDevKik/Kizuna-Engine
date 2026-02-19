@@ -1,58 +1,108 @@
-import React, { useEffect, useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { useLiveAPI } from './hooks/useLiveAPI';
 
 function App() {
-  const { connected, status, volume, connect, disconnect } = useLiveAPI();
+  const { connected, status, volume, isAiSpeaking, connect, disconnect } = useLiveAPI();
 
-  // Simple volume visualizer using refs
-  const volumeRef = useRef<HTMLDivElement>(null);
+  // Volume visualizer using scale
+  const coreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (volumeRef.current) {
-      volumeRef.current.style.width = `${volume * 100}%`;
+    if (coreRef.current && connected && !isAiSpeaking) {
+      // User is speaking (or silence)
+      // Scale base is 1.0, max is 1.3 based on volume
+      const scale = 1.0 + (volume * 0.3);
+      coreRef.current.style.transform = `scale(${scale})`;
+    } else if (coreRef.current) {
+        coreRef.current.style.transform = 'scale(1.0)';
     }
-  }, [volume]);
+  }, [volume, connected, isAiSpeaking]);
+
+  const handleToggle = () => {
+    if (connected) {
+      disconnect();
+    } else {
+      connect();
+    }
+  };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white p-4 font-mono">
-      <h1 className="text-4xl font-bold mb-8 tracking-widest uppercase">Kizuna Engine</h1>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-midnight text-pure-white p-4 font-mono relative overflow-hidden">
+        {/* Background Patterns */}
+        <div className="absolute inset-0 bg-grid-pattern pointer-events-none opacity-40"></div>
+        <div className="absolute inset-0 scanlines pointer-events-none opacity-30"></div>
 
-      <div className="w-full max-w-md bg-gray-900 rounded-lg p-6 border border-gray-700 shadow-xl">
-        <div className="flex items-center justify-between mb-6">
-          <span className={`h-3 w-3 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-          <span className="text-sm uppercase tracking-wider text-gray-400">{status}</span>
+        {/* Header */}
+        <div className="absolute top-8 left-8 z-10">
+             <h1 className="text-2xl font-black italic tracking-widest uppercase text-cyan-persona drop-shadow-[0_0_10px_rgba(0,229,255,0.8)]">
+                KIZUNA ENGINE
+             </h1>
+             <div className="h-1 w-32 bg-cyan-persona mt-1 clip-diagonal"></div>
         </div>
 
-        {/* Volume Meter */}
-        <div className="h-2 bg-gray-800 rounded-full overflow-hidden mb-8">
-           <div
-             ref={volumeRef}
-             className="h-full bg-blue-500 transition-all duration-75 ease-out"
-             style={{ width: '0%' }}
-           />
+        <div className="absolute top-8 right-8 z-10 flex items-center space-x-4">
+             <div className="text-right">
+                <div className="text-xs text-cyan-persona uppercase tracking-widest">System Status</div>
+                <div className="text-xl font-bold uppercase">{status}</div>
+             </div>
+             <div className={`w-3 h-3 rotate-45 border border-cyan-persona ${connected ? 'bg-cyan-persona animate-pulse' : 'bg-transparent'}`}></div>
         </div>
 
-        <button
-          onClick={connected ? disconnect : connect}
-          className={`w-full py-4 rounded-md font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] ${
-            connected
-              ? 'bg-red-600 hover:bg-red-700 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)]'
-              : 'bg-blue-600 hover:bg-blue-700 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]'
-          }`}
-        >
-          {connected ? 'DISCONNECT' : 'INITIATE LINK'}
-        </button>
+
+      {/* Resonance Center */}
+      <div className="relative z-10 mb-24 flex items-center justify-center">
+          {/* Outer Ring */}
+          <div className={`absolute w-80 h-80 rounded-full border border-gray-800 transition-all duration-500 ${connected ? 'scale-100 opacity-100' : 'scale-75 opacity-20'}`}></div>
+          <div className={`absolute w-[400px] h-[400px] rounded-full border border-gray-900 transition-all duration-700 ${connected ? 'scale-100 opacity-50' : 'scale-50 opacity-0'}`}></div>
+
+          {/* Core Circle */}
+          <div
+            ref={coreRef}
+            className={`w-48 h-48 rounded-full flex items-center justify-center transition-all duration-100 ease-out
+                ${connected && isAiSpeaking
+                    ? 'bg-pure-white shadow-[0_0_60px_rgba(255,255,255,0.6)] animate-pulse' /* AI Speaking: White Glow */
+                    : connected
+                        ? 'bg-tartarus border-4 border-cyan-persona shadow-[0_0_20px_rgba(0,229,255,0.4)] animate-pulse' /* Listening: Cyan Border + Pulse */
+                        : 'bg-tartarus border border-gray-700' /* Disconnected */
+                }
+            `}
+          >
+          </div>
       </div>
 
-      {/* TODO: Video Capture Implementation */}
-      {/*
-        Future implementation for video capture using navigator.mediaDevices.getUserMedia({ video: true })
-        and sending frames via WebSocket.
-      */}
+      {/* Controls */}
+      <button
+        onClick={handleToggle}
+        className={`
+            relative z-10 w-72 h-16
+            clip-diagonal
+            flex items-center justify-center
+            text-xl font-black tracking-[0.2em] uppercase
+            transition-all duration-300
+            cursor-pointer select-none
+            group
+            ${connected
+                ? 'bg-pure-white text-midnight hover:bg-red-500 hover:text-white'
+                : 'bg-pure-white text-midnight hover:bg-cyan-persona hover:text-white'
+            }
+        `}
+      >
+        <span className="relative z-10 group-hover:scale-105 transition-transform">
+            {connected ? 'TERMINATE' : 'INITIATE'}
+        </span>
+      </button>
 
-      <div className="mt-12 text-xs text-gray-600">
-        System Status: {connected ? 'ONLINE' : 'STANDBY'}
+      {/* Footer / Decorative */}
+      <div className="absolute bottom-8 w-full px-8 flex justify-between items-end text-xs text-gray-500 font-bold uppercase tracking-widest pointer-events-none">
+          <div>
+              P3-HUD-V3.5 // ART_DIR
+          </div>
+          <div className="flex flex-col items-end">
+             <span>MEM: 64TB</span>
+             <span>SYNC: {connected ? '100%' : 'OFFLINE'}</span>
+          </div>
       </div>
+
     </div>
   );
 }
