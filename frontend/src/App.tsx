@@ -2,21 +2,38 @@ import { useRef, useEffect } from 'react';
 import { useLiveAPI } from './hooks/useLiveAPI';
 
 function App() {
-  const { connected, status, volume, isAiSpeaking, connect, disconnect } = useLiveAPI();
+  const { connected, status, volumeRef, isAiSpeaking, connect, disconnect } = useLiveAPI();
 
   // Volume visualizer using scale
   const coreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (coreRef.current && connected && !isAiSpeaking) {
-      // User is speaking (or silence)
-      // Scale base is 1.0, max is 1.3 based on volume
-      const scale = 1.0 + (volume * 0.3);
-      coreRef.current.style.transform = `scale(${scale})`;
+    let animationFrameId: number;
+
+    const animate = () => {
+      if (coreRef.current) {
+        if (connected && !isAiSpeaking) {
+          // User is speaking (or silence)
+          // Scale base is 1.0, max is 1.3 based on volume
+          const scale = 1.0 + (volumeRef.current * 0.3);
+          coreRef.current.style.transform = `scale(${scale})`;
+        } else {
+          coreRef.current.style.transform = 'scale(1.0)';
+        }
+      }
+      animationFrameId = requestAnimationFrame(animate);
+    };
+
+    if (connected) {
+      animate();
     } else if (coreRef.current) {
       coreRef.current.style.transform = 'scale(1.0)';
     }
-  }, [volume, connected, isAiSpeaking]);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [connected, isAiSpeaking, volumeRef]);
 
   const handleToggle = () => {
     if (connected) {
