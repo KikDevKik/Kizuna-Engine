@@ -32,18 +32,22 @@ class MockSession:
     def __init__(self):
         self._input_queue = asyncio.Queue()
         self._output_queue = asyncio.Queue()
+        self._received_bytes = 0
 
     async def send(self, input, end_of_turn=False):
         # We just consume the input.
         if "data" in input:
-            await self._input_queue.put(input["data"])
+            data = input["data"]
+            await self._input_queue.put(data)
+            self._received_bytes += len(data)
 
-            # Simple logic: if queue has 5 items, generate response
-            # This simulates VAD triggering after some audio is received.
-            if self._input_queue.qsize() >= 5:
-                # Clear queue to simulate processing consumed audio
+            # Simulate VAD: trigger after ~1000 bytes received (Mock threshold)
+            # Previously was 5 items * 320 = 1600 bytes.
+            if self._received_bytes >= 1600:
+                # Clear queue/counter to simulate processing consumed audio
                 while not self._input_queue.empty():
                     self._input_queue.get_nowait()
+                self._received_bytes = 0
 
                 logger.info("Mock: Generating response...")
 
