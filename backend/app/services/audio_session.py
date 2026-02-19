@@ -9,6 +9,36 @@ logger = logging.getLogger(__name__)
 # 3200 bytes = 100ms
 AUDIO_BUFFER_THRESHOLD = 3200
 
+async def send_injections_to_gemini(session, injection_queue: asyncio.Queue):
+    """
+    Task C: Subconscious -> Gemini
+    Injects system hints (text) into the active session without ending the turn.
+    """
+    try:
+        while True:
+            # Wait for a "hint" from the subconscious
+            hint_payload = await injection_queue.get()
+
+            text = hint_payload.get("text", "")
+            turn_complete = hint_payload.get("turn_complete", False)
+
+            if not text:
+                continue
+
+            logger.info(f"🤫 Whispering to Gemini: {text}")
+
+            # Send text with end_of_turn=False to inject context silently
+            # The SDK method session.send(input=..., end_of_turn=False)
+            await session.send(input=text, end_of_turn=turn_complete)
+
+    except asyncio.CancelledError:
+        logger.info("Injection loop cancelled.")
+    except Exception as e:
+        logger.error(f"Error injecting system hint: {e}")
+        # Don't crash, just log and continue/retry?
+        pass
+
+
 async def send_to_gemini(websocket: WebSocket, session):
     """
     Task A: Client -> Gemini
@@ -66,10 +96,11 @@ async def send_to_gemini(websocket: WebSocket, session):
         logger.error(f"Error sending to Gemini: {e}")
         raise
 
-async def receive_from_gemini(websocket: WebSocket, session):
+async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: asyncio.Queue | None = None):
     """
-    Task B: Gemini -> Client
+    Task B: Gemini -> Client + Subconscious
     Receives from Gemini and sends to WebSocket as custom JSON.
+    Also sends text transcripts to the Subconscious Mind via transcript_queue.
     """
     try:
         while True:
@@ -92,13 +123,20 @@ async def receive_from_gemini(websocket: WebSocket, session):
                                 "data": b64_data
                             })
 
-                        # Handle Text (if interleaved)
+                        # Handle Text (if interleaved or final transcript)
                         if part.text:
                             logger.info(f"Gemini -> Client: Text: {part.text[:50]}...")
                             await websocket.send_json({
                                 "type": "text",
                                 "data": part.text
                             })
+
+                            # Feed the Subconscious Mind
+                            if transcript_queue:
+                                try:
+                                    transcript_queue.put_nowait(part.text)
+                                except Exception as e:
+                                    logger.warning(f"Failed to queue transcript: {e}")
 
                 # Handle turn completion
                 if server_content.turn_complete:

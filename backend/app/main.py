@@ -8,8 +8,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.services.gemini_live import gemini_service
-from app.services.audio_session import send_to_gemini, receive_from_gemini
+from app.services.audio_session import send_to_gemini, receive_from_gemini, send_injections_to_gemini
 from app.services.soul_assembler import assemble_soul
+from app.services.subconscious import subconscious_mind
 from core.config import settings
 
 # Creamos la maldita libreta de Jules
@@ -65,11 +66,24 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None):
         async with gemini_service.connect(system_instruction=system_instruction) as session:
             logger.info(f"Gemini session started for {agent_id}.")
 
-            # Manage bidirectional streams concurrently
-            # If either task fails (e.g. disconnect), the TaskGroup will cancel the other.
+            # Phase 2: Initialize Subconscious Channels
+            transcript_queue = asyncio.Queue()
+            injection_queue = asyncio.Queue()
+
+            # Manage bidirectional streams and subconscious concurrently
+            # If either task fails (e.g. disconnect), the TaskGroup will cancel the others.
             async with asyncio.TaskGroup() as tg:
+                # 1. Audio Upstream (Client -> Gemini)
                 tg.create_task(send_to_gemini(websocket, session))
-                tg.create_task(receive_from_gemini(websocket, session))
+
+                # 2. Audio/Text Downstream (Gemini -> Client) + Transcript Feed
+                tg.create_task(receive_from_gemini(websocket, session, transcript_queue))
+
+                # 3. Subconscious Mind (Transcripts -> Analysis -> Injection Queue)
+                tg.create_task(subconscious_mind.start(transcript_queue, injection_queue))
+
+                # 4. Injection Upstream (Injection Queue -> Gemini)
+                tg.create_task(send_injections_to_gemini(session, injection_queue))
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected by client.")
