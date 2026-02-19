@@ -28,6 +28,7 @@ export const useLiveAPI = (): UseLiveAPI => {
 
   const disconnect = useCallback(() => {
     console.log("Disconnecting by user command...");
+    console.trace("Disconnect called from:");
     if (socketRef.current) {
       // Only close if open to avoid errors
       if (socketRef.current.readyState === WebSocket.OPEN || socketRef.current.readyState === WebSocket.CONNECTING) {
@@ -145,6 +146,7 @@ export const useLiveAPI = (): UseLiveAPI => {
             // STRICT HANDLING: Only update UI state.
             // DO NOT stop microphone, DO NOT close socket.
             setIsAiSpeaking(false);
+            // Explicitly do NOT call disconnect()
           }
         } catch (e) {
           console.error("Error processing message", e);
