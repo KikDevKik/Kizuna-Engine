@@ -27,6 +27,7 @@ async def send_to_gemini(websocket: WebSocket, session):
     Reads audio bytes from WebSocket and sends to Gemini session.
     """
     try:
+        packet_count = 0
         while True:
             # Client sends raw PCM audio bytes
             data = await websocket.receive_bytes()
@@ -34,6 +35,10 @@ async def send_to_gemini(websocket: WebSocket, session):
                 # Usually receive_bytes raises disconnect or returns data
                 logger.warning("Received empty data from client.")
                 continue
+
+            packet_count += 1
+            if packet_count % 50 == 0:
+                logger.info(f"Client -> Gemini: Received {packet_count} audio packets (approx {packet_count * len(data) / 1024:.2f} KB)")
 
             # Send to Gemini with explicit mime_type as requested
             # sending raw PCM 16kHz audio chunks
@@ -65,6 +70,7 @@ async def receive_from_gemini(websocket: WebSocket, session):
                     # Handle Audio
                     if part.inline_data:
                         # part.inline_data.data is bytes
+                        # logger.debug(f"Gemini -> Client: Audio chunk ({len(part.inline_data.data)} bytes)")
                         b64_data = base64.b64encode(part.inline_data.data).decode('utf-8')
                         await websocket.send_json({
                             "type": "audio",
@@ -73,6 +79,7 @@ async def receive_from_gemini(websocket: WebSocket, session):
 
                     # Handle Text (if interleaved)
                     if part.text:
+                        logger.info(f"Gemini -> Client: Text: {part.text[:50]}...")
                         await websocket.send_json({
                             "type": "text",
                             "data": part.text
@@ -80,6 +87,7 @@ async def receive_from_gemini(websocket: WebSocket, session):
 
             # Handle turn completion
             if server_content.turn_complete:
+                logger.info("Gemini -> Client: Turn complete signal.")
                 await websocket.send_json({"type": "turn_complete"})
 
     except Exception as e:
