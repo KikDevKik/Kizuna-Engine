@@ -1,4 +1,5 @@
 import os
+import json
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -12,5 +13,6 @@ class Settings:
     VERSION: str = "1.0.0"
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     LIVE_MODEL_ID: str = "gemini-2.5-flash-native-audio-preview-12-2025"
+    CORS_ORIGINS: list[str] = json.loads(os.getenv("CORS_ORIGINS", '["http://localhost:5173", "http://localhost:3000"]'))
 
 settings = Settings()
