@@ -5,8 +5,16 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+
+# Use try-except for google.genai imports in case it's not installed or not needed for mock
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
+
+from typing import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -14,51 +22,65 @@ logger = logging.getLogger(__name__)
 env_path = Path(__file__).resolve().parent.parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
-# 2. Extraemos la llave de forma manual
-api_key = os.getenv("GEMINI_API_KEY")
+# Check for Mock Mode
+MOCK_MODE = os.getenv("MOCK_GEMINI", "false").lower() == "true"
 
-# 3. Si no la encuentra, explota
-if not api_key:
-    raise ValueError(f"🚨 ERROR CRÍTICO: No se encontró la llave GEMINI_API_KEY en {env_path} 🚨")
+if MOCK_MODE:
+    logger.warning("⚠️ MOCK_GEMINI is enabled. Using MockGeminiService.")
+    # Import Mock Service
+    try:
+        from app.services.mock_gemini import MockGeminiService
+        gemini_service = MockGeminiService()
+    except ImportError as e:
+        logger.error(f"Failed to import MockGeminiService: {e}")
+        raise
+else:
+    # 2. Extraemos la llave de forma manual
+    api_key = os.getenv("GEMINI_API_KEY")
 
-# 4. Inicializamos el cliente
-client = genai.Client(api_key=api_key)
+    # 3. Si no la encuentra, explota
+    if not api_key:
+        raise ValueError(f"🚨 ERROR CRÍTICO: No se encontró la llave GEMINI_API_KEY en {env_path} 🚨")
 
-class GeminiLiveService:
-    """
-    Service to handle Gemini Live API connections.
-    """
+    # 4. Inicializamos el cliente
+    client = genai.Client(api_key=api_key)
 
-    @staticmethod
-    @asynccontextmanager
-    async def connect() -> AsyncGenerator[genai.live.AsyncSession, None]:
+    class GeminiLiveService:
         """
-        Establishes an asynchronous connection to the Gemini Live API.
-
-        Yields:
-            genai.live.AsyncSession: The active session for sending and receiving messages.
+        Service to handle Gemini Live API connections.
         """
-        # Configure the session
-        # We start with a simple system instruction as requested.
-        # Response modalities is set to AUDIO to ensure we get audio back.
-        config = types.LiveConnectConfig(
-            response_modalities=[types.Modality.AUDIO],
-            system_instruction=types.Content(
-                parts=[types.Part(text="Eres Kizuna, un asistente reactivo")]
-            ),
-        )
 
-        logger.info(f"Connecting to Gemini Live API with model: {"gemini-2.5-flash-native-audio-preview-12-2025"}")
+        @staticmethod
+        @asynccontextmanager
+        async def connect() -> AsyncGenerator['genai.live.AsyncSession', None]:
+            """
+            Establishes an asynchronous connection to the Gemini Live API.
 
-        try:
-            async with client.aio.live.connect(
-                model="gemini-2.5-flash-native-audio-preview-12-2025",
-                config=config
-            ) as session:
-                logger.info("Connected to Gemini Live API session.")
-                yield session
-        except Exception as e:
-            logger.error(f"Error connecting to Gemini Live API: {e}")
-            raise
+            Yields:
+                genai.live.AsyncSession: The active session for sending and receiving messages.
+            """
+            # Configure the session
+            # We start with a simple system instruction as requested.
+            # Response modalities is set to AUDIO to ensure we get audio back.
+            config = types.LiveConnectConfig(
+                response_modalities=[types.Modality.AUDIO],
+                system_instruction=types.Content(
+                    parts=[types.Part(text="Eres Kizuna, un asistente reactivo")]
+                ),
+            )
 
-gemini_service = GeminiLiveService()
+            model_id = "gemini-2.5-flash-native-audio-preview-12-2025"
+            logger.info(f"Connecting to Gemini Live API with model: {model_id}")
+
+            try:
+                async with client.aio.live.connect(
+                    model=model_id,
+                    config=config
+                ) as session:
+                    logger.info("Connected to Gemini Live API session.")
+                    yield session
+            except Exception as e:
+                logger.error(f"Error connecting to Gemini Live API: {e}")
+                raise
+
+    gemini_service = GeminiLiveService()
