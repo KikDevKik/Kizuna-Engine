@@ -6,7 +6,7 @@ const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/live';
 export interface UseLiveAPI {
   connected: boolean;
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
-  volume: number;
+  volumeRef: React.MutableRefObject<number>;
   isAiSpeaking: boolean;
   connect: () => Promise<void>;
   disconnect: () => void;
@@ -15,7 +15,7 @@ export interface UseLiveAPI {
 export const useLiveAPI = (): UseLiveAPI => {
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
-  const [volume, setVolume] = useState(0);
+  const volumeRef = useRef(0);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
 
   // 1. References for persistent connection objects
@@ -53,7 +53,7 @@ export const useLiveAPI = (): UseLiveAPI => {
     }
     setConnected(false);
     setStatus('disconnected');
-    setVolume(0);
+    volumeRef.current = 0;
     setIsAiSpeaking(false);
     nextStartTimeRef.current = 0;
     isConnectingRef.current = false;
@@ -181,7 +181,7 @@ export const useLiveAPI = (): UseLiveAPI => {
             sum += (int16Data[i] / 32768.0) ** 2;
         }
         const rms = Math.sqrt(sum / int16Data.length);
-        setVolume(Math.min(1, rms * 5));
+        volumeRef.current = Math.min(1, rms * 5);
 
         // Send to WebSocket if open
         if (ws.readyState === WebSocket.OPEN) {
@@ -235,5 +235,5 @@ export const useLiveAPI = (): UseLiveAPI => {
   }, [disconnect]);
   */
 
-  return { connected, status, volume, isAiSpeaking, connect, disconnect };
+  return { connected, status, volumeRef, isAiSpeaking, connect, disconnect };
 };
