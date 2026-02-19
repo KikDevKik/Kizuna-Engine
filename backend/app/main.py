@@ -1,3 +1,7 @@
+
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 import base64
 import logging
@@ -7,6 +11,7 @@ from google.genai import types
 
 from app.services.gemini_live import gemini_service
 from app.core.config import settings
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

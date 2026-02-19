@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+load_dotenv()
 
 # Load environment variables from .env file
 # This ensures .env is loaded from the backend root directory regardless of where the app is started

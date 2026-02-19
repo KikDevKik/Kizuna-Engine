@@ -1,12 +1,20 @@
 
 import logging
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+from google import genai
+
+client = genai.Client()
+
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from google import genai
 from google.genai import types
 
-from backend.core.config import settings
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
