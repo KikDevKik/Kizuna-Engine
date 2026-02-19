@@ -25,28 +25,44 @@ async def send_to_gemini(websocket: WebSocket, session):
     """
     Task A: Client -> Gemini
     Reads audio bytes from WebSocket and sends to Gemini session.
+    Buffering logic added to prevent flooding Gemini with tiny packets.
     """
     try:
         packet_count = 0
+        audio_buffer = bytearray()
+        # 16000 Hz * 2 bytes = 32000 bytes/sec
+        # 3200 bytes = 100ms
+        BUFFER_THRESHOLD = 3200
+
         while True:
             # Client sends raw PCM audio bytes
+            # Typically 256 bytes per packet from client (8ms)
             data = await websocket.receive_bytes()
             if not data:
-                # Usually receive_bytes raises disconnect or returns data
                 logger.warning("Received empty data from client.")
                 continue
 
             packet_count += 1
-            if packet_count % 50 == 0:
-                logger.info(f"Client -> Gemini: Received {packet_count} audio packets (approx {packet_count * len(data) / 1024:.2f} KB)")
+            if packet_count % 100 == 0:
+                logger.info(f"Client -> Gemini: Received {packet_count} packets. Buffer size: {len(audio_buffer)}")
 
-            # Send to Gemini with explicit mime_type as requested
-            # sending raw PCM 16kHz audio chunks
-            await session.send(input={"data": data, "mime_type": "audio/pcm;rate=16000"})
+            audio_buffer.extend(data)
+
+            # Buffer up to ~100ms (3200 bytes) to ensure efficient streaming
+            if len(audio_buffer) >= BUFFER_THRESHOLD:
+                # logger.debug(f"Sending {len(audio_buffer)} bytes to Gemini")
+                await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
+                audio_buffer.clear()
 
     except WebSocketDisconnect:
         logger.info("Client disconnected (send_to_gemini)")
-        # Start cancellation of the other task via TaskGroup logic (raising exception)
+        # Send remaining audio if any?
+        # Usually if user disconnects we don't care, but for completeness:
+        if len(audio_buffer) > 0:
+             try:
+                 await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
+             except Exception:
+                 pass
         raise
     except Exception as e:
         logger.error(f"Error sending to Gemini: {e}")
