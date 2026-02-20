@@ -12,26 +12,40 @@ from app.services.audio_session import send_to_gemini, receive_from_gemini, send
 from app.services.soul_assembler import assemble_soul
 from app.services.subconscious import subconscious_mind
 from app.repositories.local_graph import LocalSoulRepository
+from app.repositories.spanner_graph import SpannerSoulRepository
+from app.services.auth import FirebaseAuth
 from app.models.graph import AgentNode
 from core.config import settings
+import os
 
 # Creamos la maldita libreta de Jules
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Repository (Phase 3.1)
-soul_repo = LocalSoulRepository()
+# Initialize Repository
+# Phase 3.2: Check if Spanner Config is present
+if settings.GCP_PROJECT_ID and settings.SPANNER_INSTANCE_ID:
+    logger.info("🌐 Using Spanner Soul Repository (Production Mode)")
+    soul_repo = SpannerSoulRepository()
+else:
+    logger.info("🏠 Using Local Soul Repository (Development Mode)")
+    soul_repo = LocalSoulRepository()
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 
 # Lifecycle Event to load Graph
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Initializing Soul Repository (Local Graph)...")
+    logger.info("Initializing Soul Repository...")
     await soul_repo.initialize()
 
-    # Seed Kizuna if not exists (for Phase 3.1 Demo)
-    if not await soul_repo.get_agent("kizuna"):
+    # Initialize Auth (Lazy or Eager)
+    if settings.FIREBASE_CREDENTIALS:
+        FirebaseAuth.initialize()
+
+    # Seed Kizuna if not exists (for Demo/Dev)
+    # Note: Spanner seeding might need to be handled by migration scripts, but safe to check here.
+    if isinstance(soul_repo, LocalSoulRepository) and not await soul_repo.get_agent("kizuna"):
         kizuna = AgentNode(
             id="kizuna",
             name="Kizuna",
@@ -55,7 +69,7 @@ async def health_check():
 
 
 @app.websocket("/ws/live")
-async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, user_id: str | None = None):
+async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, token: str | None = None):
     # Security: Verify Origin
     origin = websocket.headers.get("origin")
     if origin and origin not in settings.CORS_ORIGINS:
@@ -69,10 +83,21 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
         await websocket.close(code=1008, reason="agent_id required")
         return
 
-    # Phase 3: Identity Management
-    # In a real scenario, user_id comes from Auth Token. Here we allow query param or generate one.
-    if not user_id:
-        user_id = "guest_user" # Default for demo
+    # Phase 3.2: Secure Identity
+    user_id = "guest_user"
+    if token:
+        try:
+            user_id = FirebaseAuth.verify_token(token)
+            logger.info(f"Authenticated User: {user_id}")
+        except Exception as e:
+            logger.warning(f"Authentication Failed: {e}")
+            await websocket.close(code=1008, reason="Invalid Token")
+            return
+    elif settings.GCP_PROJECT_ID:
+        # Enforce Auth in Prod
+        logger.warning("Connection rejected: No token provided in Production.")
+        await websocket.close(code=1008, reason="Authentication Required")
+        return
 
     # Ensure user exists in Graph
     await soul_repo.get_or_create_user(user_id)
