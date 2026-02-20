@@ -22,7 +22,7 @@ class Settings:
     MODEL_SUBCONSCIOUS: str = os.getenv("MODEL_SUBCONSCIOUS", "gemini-3-flash-preview")
 
     # 3. Dream Cycle (Deep Reasoning / Consolidation)
-    MODEL_DREAM: str = os.getenv("MODEL_DREAM", "gemini-3.1-pro-preview")
+    MODEL_DREAM: str = os.getenv("MODEL_DREAM", "gemini-2.5-pro")
 
     CORS_ORIGINS: list[str] = json.loads(os.getenv("CORS_ORIGINS", '["http://localhost:5173", "http://localhost:3000"]'))
 
