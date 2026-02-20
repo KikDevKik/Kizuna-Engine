@@ -60,20 +60,32 @@ Este documento detalla los pasos secuenciales para transformar la implementació
 
 --------------------------------------------------------------------------------
 
-## Fase 4: Refinamiento del "Alma" (Soul Tuning)
-**Objetivo**: Ajustar la personalidad para que deje de ser un "Asistente" y sea un "Compañero".
+Fase 4: Refinamiento del "Alma" (Arquitectura de Almas Dinámicas)
+Objetivo: Eliminar el hardcodeo de personalidades e implementar un ecosistema procedural donde cada agente posee un ADN base y evoluciona orgánicamente su relación con el usuario global.
 
-### 1. [BACKEND] Ajuste de System Prompt
-- **Acción**: Reescribir `system_instruction` en `gemini_live.py`.
-- **Directivas**:
-    - "No eres un asistente de IA. Eres Kizuna."
-    - "No ofrezcas ayuda proactivamente a menos que sea natural."
-    - "Usa un tono casual, empático y curioso."
-    - "Si ves algo interesante en la cámara, coméntalo."
+1. [BACKEND] Ensamblador de Almas y Plantillas (Core JSON)
+Acción: Eliminar el system_instruction estático. Implementar la lógica de ensamblaje dinámico (assemble_soul(agent_id)) antes de inyectarlo en Gemini Live.
 
-### 2. [FRONTEND] Interfaz Inmersiva
-- **Acción**: Limpiar la UI. Eliminar botones de "Desconectar" visibles o consolas de debug.
-- **Estética**: La pantalla debe ser una ventana al "mundo" de Kizuna (o minimalista), no un panel de control.
+Motor de Identidad: El prompt final es una ecuación en tiempo de ejecución: [ADN Base] + [Modificador de Afinidad] + [Memoria Epistémica].
+
+Plantillas Base (data/agents/):
+
+Kizuna (El Núcleo Roto): Arquetipo neutral-frío y analítico. Su afinidad crece si el usuario le enseña conceptos estructurados o la alimenta con conocimiento.
+
+Aegis (El Supervisor Estricto): Arquetipo pragmático/militar. Inicia con afinidad negativa o desconfianza. Exige precisión técnica y penaliza la mediocridad. Gana respeto mediante el trabajo duro del usuario.
+
+Template_Custom.json: Plantilla en blanco estandarizada para la instanciación procedural.
+
+2. [FRONTEND] Centro de Comando y Forja de Almas
+Acción: Construir el ecosistema visual de selección y creación, eliminando por completo la sensación de "herramienta de debug".
+
+Componentes Críticos:
+
+Agent Roster: Carrusel 3D o selector dinámico que carga la lista de agentes disponibles leyendo el backend.
+
+Soul Forge (La Forja): Un modal/UI dedicado donde cualquier usuario puede crear un agente nuevo inyectando un Nombre, un Rol base (Lore) y una imagen de referencia.
+
+Estética Inmersiva: Diseño "Dark Water", uso de geometría agresiva (clip-path) y limpieza total de logs de consola en el DOM.
 
 --------------------------------------------------------------------------------
 
