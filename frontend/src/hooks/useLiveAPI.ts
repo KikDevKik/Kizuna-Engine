@@ -81,7 +81,7 @@ export const useLiveAPI = (): UseLiveAPI => {
     try {
       // Initialize WebSocket
       // Assuming localhost:8000 based on standard dev setup if proxy isn't configured
-      const wsUrl = `ws://localhost:8000/ws/live?agent_id=${agentId}`;
+      const wsUrl = `ws://localhost:5173/ws/live?agent_id=${agentId}`;
       const ws = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
@@ -180,7 +180,7 @@ export const useLiveAPI = (): UseLiveAPI => {
 
             // Normalización matemática directa
             for (let i = 0; i < int16Data.length; i++) {
-                float32Data[i] = int16Data[i] / 32768.0;
+              float32Data[i] = int16Data[i] / 32768.0;
             }
 
             // Inyección al AudioContext
@@ -194,8 +194,8 @@ export const useLiveAPI = (): UseLiveAPI => {
             const startTime = Math.max(currentTime, nextStartTimeRef.current);
             source.start(startTime);
             nextStartTimeRef.current = startTime + buffer.duration;
-            
-            return; 
+
+            return;
           }
 
           // 2. Text / Control Messages
@@ -203,7 +203,7 @@ export const useLiveAPI = (): UseLiveAPI => {
             const message = JSON.parse(event.data) as ServerMessage;
 
             if (message.type === 'text') {
-                setLastAiMessage(message.data);
+              setLastAiMessage(message.data);
             } else if (message.type === 'turn_complete') {
               console.log("Turn complete signal received.");
               setIsAiSpeaking(false);
