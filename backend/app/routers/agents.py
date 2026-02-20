@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Response
+from fastapi import APIRouter, HTTPException, status, Response, Header
 from typing import List, Optional, Any
 from pydantic import BaseModel
 
@@ -52,7 +52,7 @@ async def create_agent(request: CreateAgentRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/ritual", response_model=RitualFlowResponse, status_code=status.HTTP_200_OK)
-async def conduct_ritual(history: List[RitualMessage], response: Response):
+async def conduct_ritual(history: List[RitualMessage], response: Response, accept_language: str = Header(default="en")):
     """
     The Incantation Ritual:
     A conversation with the Soul Forge to design a new agent.
@@ -60,7 +60,7 @@ async def conduct_ritual(history: List[RitualMessage], response: Response):
     If false, the next question is returned with status 200.
     """
     try:
-        ritual_result = await ritual_service.process_ritual(history)
+        ritual_result = await ritual_service.process_ritual(history, locale=accept_language)
 
         if ritual_result.is_complete and ritual_result.agent_data:
             # Auto-save the agent
