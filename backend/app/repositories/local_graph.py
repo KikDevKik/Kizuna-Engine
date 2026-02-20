@@ -40,48 +40,69 @@ class LocalSoulRepository(SoulRepository):
 
     async def load(self):
         """Helper to actually load data (called manually or lazily)."""
+        # 1. Load Graph Data (if exists)
+        if self.data_path.exists():
+            try:
+                with open(self.data_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                # Hydrate models
+                for u in data.get("users", []):
+                    node = UserNode(**u)
+                    self.users[node.id] = node
+
+                for a in data.get("agents", []):
+                    node = AgentNode(**a)
+                    self.agents[node.id] = node
+
+                for e in data.get("episodes", []):
+                    node = MemoryEpisodeNode(**e)
+                    self.episodes[node.id] = node
+
+                for f in data.get("facts", []):
+                    node = FactNode(**f)
+                    self.facts[node.id] = node
+
+                # Hydrate Edges
+                for r in data.get("resonances", []):
+                    edge = ResonanceEdge(**r)
+                    if edge.source_id not in self.resonances:
+                        self.resonances[edge.source_id] = {}
+                    self.resonances[edge.source_id][edge.target_id] = edge
+
+                self.experienced = data.get("experienced", {})
+                self.knows = data.get("knows", {})
+
+                logger.info(f"Graph Database loaded: {len(self.users)} Users, {len(self.agents)} Agents.")
+
+            except Exception as e:
+                logger.error(f"Failed to load graph database: {e}")
+                # We proceed to sync agents anyway, effectively starting with partial data if graph is corrupt
+        else:
+            logger.info("No graph.json found. Starting with empty graph.")
+
+        # ---------------------------------------------------------
+        # Sync with Agents Directory (Source of Truth for Agents)
+        # ---------------------------------------------------------
+        # This must happen regardless of graph.json state
+        agents_dir = self.data_path.parent / "agents"
+        if agents_dir.exists():
+            loaded_count = 0
+            for agent_file in agents_dir.glob("*.json"):
+                try:
+                    with open(agent_file, "r", encoding="utf-8") as af:
+                        agent_data = json.load(af)
+                        agent_node = AgentNode(**agent_data)
+                        # Upsert: Filesystem overrides graph.json cache
+                        self.agents[agent_node.id] = agent_node
+                        loaded_count += 1
+                except Exception as ae:
+                    logger.error(f"Failed to sync agent from {agent_file}: {ae}")
+            logger.info(f"Synced {loaded_count} agents from filesystem.")
+
+        # Ensure graph.json is initialized if it didn't exist
         if not self.data_path.exists():
-            # Seed initial empty structure
             self._save_sync()
-            return
-
-        try:
-            with open(self.data_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            # Hydrate models
-            for u in data.get("users", []):
-                node = UserNode(**u)
-                self.users[node.id] = node
-
-            for a in data.get("agents", []):
-                node = AgentNode(**a)
-                self.agents[node.id] = node
-
-            for e in data.get("episodes", []):
-                node = MemoryEpisodeNode(**e)
-                self.episodes[node.id] = node
-
-            for f in data.get("facts", []):
-                node = FactNode(**f)
-                self.facts[node.id] = node
-
-            # Hydrate Edges
-            for r in data.get("resonances", []):
-                edge = ResonanceEdge(**r)
-                if edge.source_id not in self.resonances:
-                    self.resonances[edge.source_id] = {}
-                self.resonances[edge.source_id][edge.target_id] = edge
-
-            self.experienced = data.get("experienced", {})
-            self.knows = data.get("knows", {})
-
-            logger.info(f"Graph Database loaded: {len(self.users)} Users, {len(self.agents)} Agents.")
-
-        except Exception as e:
-            logger.error(f"Failed to load graph database: {e}")
-            # Backup corrupt file?
-            raise
 
     def _save_sync(self):
         """Synchronous save for initialization."""

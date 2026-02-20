@@ -180,7 +180,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         initial="hidden"
         animate="visible"
         exit="exit"
-        className="flex flex-col items-center justify-center w-full h-[500px]"
+        className="flex flex-col items-center justify-center w-full h-[700px]"
       >
         {error && (
             <div className="absolute top-4 text-red-500 font-mono text-xs bg-black/50 p-2 border border-red-500">
@@ -189,7 +189,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         )}
 
         {/* 3D SCENE */}
-        <div className="perspective-scene" style={{ perspective: "1500px" }}>
+        <div className="perspective-scene" style={{ perspective: "1500px", height: '450px' }}>
           <motion.div
             className="carousel-axis"
             animate={{ rotateY: activeIndex * -theta }}
@@ -278,7 +278,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         </div>
 
         {/* CONTROLS */}
-        <motion.div variants={shardVariants} className="mt-8 flex gap-8 z-50">
+        <motion.div variants={shardVariants} className="mt-24 flex gap-8 z-50 relative">
           <button
             onClick={() => rotateCarousel(-1)}
             className="kizuna-shard-btn-wrapper"
