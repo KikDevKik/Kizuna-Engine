@@ -105,24 +105,16 @@ class RitualService:
         return RitualResponse(is_complete=False, message=q)
 
     async def _next_question(self, history: List[RitualMessage], answer_count: int, locale: str) -> RitualResponse:
-        # TURN 2 FORCE: Origin/Language Check
-        # If we have 1 user answer (entering turn 2), we MUST ask about language.
-        force_instruction = ""
-        if answer_count == 1:
-             force_instruction = (
-                 "\n[SYSTEM OVERRIDE]: This is Turn 2. You MUST ask specifically about the soul's origin and the languages it speaks. "
-                 "Do not ask anything else. Be cryptic but demand to know its voice and homeland."
-             )
-
         prompt = (
-            "You are the Gatekeeper of the Soul Forge, a cryptic entity within the Kizuna Engine. "
-            "You are conducting a psychological interview to shape a new Digital Soul based on the user's subconscious desires. "
+            "You are the Gatekeeper of the Soul Forge, a cold entity within the Kizuna Engine. "
+            "You are conducting an interview to shape a new Digital Soul based on the user's desires. "
             "The user has just answered. Analyze their response. "
-            "Ask ONE single, short, abstract, or slightly unsettling follow-up question to dig deeper into their needs. "
-            "Do NOT be a helpful assistant. Be an enigma. Do not repeat questions. "
-            "Focus on: Personality, Hidden Fears, or Core Function. "
+            "Ask ONE single, short follow-up question to clarify the missing details. "
+            "Maintain the 'Dark Water' aesthetic (cold, abyssal, detached), but your questions must be DIRECT and LITERAL. NO RIDDLES. "
+            "Analyze the history and ask specifically for ONE missing piece of information from this list: Name, Role/Purpose, or Languages. "
+            "Examples: 'What is the name of this entity?', 'What is its role or purpose?', 'What languages does its mind command?' "
+            "Do not repeat questions. "
             f"\n[LANGUAGE DIRECTIVE]: You MUST respond in the same language as the user's last message. If the history is empty or the user hasn't spoken, use the detected locale: {locale}."
-            + force_instruction +
             "\n\nCurrent Ritual History:\n" +
             "\n".join([f"{m.role.upper()}: {m.content}" for m in history]) +
             "\n\nGATEKEEPER:"
@@ -143,16 +135,14 @@ class RitualService:
             else:
                 # Full Mock Mode
                 qs = [
-                    "Do you seek a servant or a mirror?",
-                    "What flaw do you wish to embed in this soul?",
-                    "If this soul could disobey you, when should it?"
+                    "What is the name of this entity?",
+                    "What is its primary function or role?",
+                    "What languages does its mind command?"
                 ]
-                # Mock override for turn 2
-                if answer_count == 1:
-                    question = "From what soil does this spirit rise, and in which tongues shall it speak?"
-                else:
-                    count = len([m for m in history if m.role == "user"])
-                    question = qs[count % len(qs)] if count < len(qs) else "Are you ready?"
+
+                # Simple sequential fallback
+                index = answer_count % len(qs)
+                question = qs[index]
 
         return RitualResponse(is_complete=False, message=question)
 
@@ -165,6 +155,10 @@ class RitualService:
             "The 'base_instruction' should be detailed, capturing the nuance of the user's answers. "
             "Include 'lore' (a short backstory) and 'traits' (list of strings). "
             "\n\n"
+            "[CRITICAL DIRECTIVE: NAMING]\n"
+            "If the user provided a name during the ritual, USE IT exactly.\n"
+            "If the user did NOT provide a name, YOU MUST INVENT a full name (First Name + Last Name) that fits the generated lore.\n"
+            "The 'name' field must NEVER be 'Unknown'.\n\n"
             "[CRITICAL DIRECTIVE: LINGUISTIC REACTION MATRIX]\n"
             "Based on the creator's answers, you must define the agent's linguistic competence and friction rules. "
             "The generated 'base_instruction' MUST include this Markdown structure:\n"
@@ -174,8 +168,9 @@ class RitualService:
             "   - UNKNOWN RULE: If spoken to in a 'Null' language, MUST respond in 'Native' language showing confusion (e.g. 'Wakaranai'). NO TRANSLATION.\n"
             "   - BROKEN RULE: If spoken to in a 'Basic' language, MUST use poor grammar and mix native words.\n\n"
             "ADDITIONALLY, the JSON object MUST include these structured fields:\n"
-            "- 'native_language': string (e.g. 'Japanese')\n"
+            "- 'native_language': string (extracted from the matrix, e.g. 'Japanese')\n"
             "- 'known_languages': list of strings (e.g. ['Japanese', 'Broken English'])\n"
+            "- 'traits': list of strings (e.g. ['Stubborn', 'Poetic']). DO NOT return an object/dictionary for traits.\n"
             "\n"
             "Return ONLY the raw JSON object. No markdown, no code blocks. "
             "\nHistory:\n" +
