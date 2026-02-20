@@ -12,7 +12,6 @@ from app.services.audio_session import send_to_gemini, receive_from_gemini, send
 from app.services.soul_assembler import assemble_soul
 from app.services.subconscious import subconscious_mind
 from app.repositories.local_graph import LocalSoulRepository
-from app.repositories.spanner_graph import SpannerSoulRepository
 from app.services.auth import FirebaseAuth
 from app.models.graph import AgentNode
 from app.services.sleep_manager import SleepManager
@@ -25,14 +24,24 @@ import os
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Lazy Factory for Repository
+def get_soul_repository():
+    # Phase 3.2: Check if Spanner Config is present
+    if settings.GCP_PROJECT_ID and settings.SPANNER_INSTANCE_ID:
+        try:
+            # Lazy import to prevent crash in Local Mode if deps are missing
+            from app.repositories.spanner_graph import SpannerSoulRepository
+            logger.info("🌐 Using Spanner Soul Repository (Production Mode)")
+            return SpannerSoulRepository()
+        except ImportError as e:
+            logger.warning(f"⚠️ Failed to import Spanner Repository: {e}. Falling back to Local.")
+            return LocalSoulRepository()
+    else:
+        logger.info("🏠 Using Local Soul Repository (Development Mode)")
+        return LocalSoulRepository()
+
 # Initialize Repository
-# Phase 3.2: Check if Spanner Config is present
-if settings.GCP_PROJECT_ID and settings.SPANNER_INSTANCE_ID:
-    logger.info("🌐 Using Spanner Soul Repository (Production Mode)")
-    soul_repo = SpannerSoulRepository()
-else:
-    logger.info("🏠 Using Local Soul Repository (Development Mode)")
-    soul_repo = LocalSoulRepository()
+soul_repo = get_soul_repository()
 
 # Initialize Sleep Manager (Phase 4)
 sleep_manager = SleepManager(soul_repo)
