@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createAudioBuffer } from '../utils/audioUtils';
-import { ServerMessage } from '../types/websocket';
+import type { ServerMessage } from '../types/websocket';
 
 export interface UseLiveAPI {
   connected: boolean;
