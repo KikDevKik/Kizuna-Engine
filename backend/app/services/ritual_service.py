@@ -105,7 +105,7 @@ class RitualService:
             try:
                 config = types.GenerateContentConfig(response_mime_type="application/json")
                 response = await self.client.aio.models.generate_content(
-                    model=settings.MODEL_SUBCONSCIOUS,
+                    model=settings.MODEL_DREAM,
                     contents=prompt,
                     config=config
                 )

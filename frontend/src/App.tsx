@@ -7,6 +7,7 @@ import { VisionPanel } from './components/VisionPanel';
 import { EpistemicPanel } from './components/EpistemicPanel';
 import { SystemLogs } from './components/SystemLogs';
 import { JulesSanctuary } from './components/JulesSanctuary';
+import { RitualProvider } from './contexts/RitualContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Power } from 'lucide-react';
 import './KizunaHUD.css';
@@ -65,6 +66,7 @@ function App() {
   }, []);
 
   return (
+    <RitualProvider>
     <Layout>
       {/* HEADER / NAV */}
       <header className="fixed top-0 left-0 w-full p-6 flex justify-between items-start z-50 pointer-events-none">
@@ -172,6 +174,7 @@ function App() {
         </div>
       </footer>
     </Layout>
+    </RitualProvider>
   );
 }
 
