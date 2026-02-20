@@ -12,7 +12,18 @@ class Settings:
     PROJECT_NAME: str = "Kizuna Engine"
     VERSION: str = "1.0.0"
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    LIVE_MODEL_ID: str = "gemini-2.5-flash-native-audio-preview-12-2025"
+
+    # Model Configuration (The Gemini Triad)
+    # 1. Main Voice Thread (Low Latency Audio)
+    MODEL_LIVE_VOICE: str = os.getenv("MODEL_LIVE_VOICE", "gemini-2.0-flash-exp")
+    # Note: "gemini-2.5-flash-native-audio-preview-12-2025" was specific, defaulting to 2.0 Flash Exp for broader availability if needed.
+
+    # 2. Subconscious Worker (Fast Text Analysis)
+    MODEL_SUBCONSCIOUS: str = os.getenv("MODEL_SUBCONSCIOUS", "gemini-2.0-flash-exp")
+
+    # 3. Dream Cycle (Deep Reasoning / Consolidation)
+    MODEL_DREAM: str = os.getenv("MODEL_DREAM", "gemini-1.5-pro")
+
     CORS_ORIGINS: list[str] = json.loads(os.getenv("CORS_ORIGINS", '["http://localhost:5173", "http://localhost:3000"]'))
 
     # GCP Configuration (Phase 3.2)

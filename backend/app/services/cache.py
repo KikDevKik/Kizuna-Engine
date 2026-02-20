@@ -15,6 +15,7 @@ class RedisCache:
     def __init__(self):
         self.client = None
         self.connected = False
+        self.local_cache = {} # Fallback for Local Mode
 
     @classmethod
     def get_instance(cls):
@@ -25,10 +26,6 @@ class RedisCache:
     async def initialize(self):
         """Connect to Redis."""
         try:
-            # Check if we should use Mock Redis (for tests/local dev without redis)
-            # Or assume real Redis if host is set.
-            # If connection fails, we can fallback or log error.
-
             logger.info(f"Connecting to Redis at {settings.REDIS_HOST}:{settings.REDIS_PORT}")
             self.client = redis.Redis(
                 host=settings.REDIS_HOST,
@@ -42,14 +39,20 @@ class RedisCache:
             self.connected = True
             logger.info("✅ Redis Connected.")
         except Exception as e:
-            logger.warning(f"⚠️ Redis Connection Failed: {e}. Running without Cache.")
+            logger.warning(f"⚠️ Redis Connection Failed: {e}. Switching to Local Memory Cache (Fallback Mode).")
             self.connected = False
             self.client = None
+            self.local_cache = {}
 
     async def set(self, key: str, value: str, ttl: int = 60):
         """Set key with TTL (seconds)."""
         if not self.connected or not self.client:
+            # Fallback
+            self.local_cache[key] = value
+            # Simple fallback doesn't handle TTL expiration automatically,
+            # but suffices for "Warm-up then Connect" flow.
             return
+
         try:
             await self.client.set(key, value, ex=ttl)
         except Exception as e:
@@ -58,7 +61,14 @@ class RedisCache:
     async def get(self, key: str) -> str | None:
         """Get value by key."""
         if not self.connected or not self.client:
-            return None
+            # Fallback
+            val = self.local_cache.get(key)
+            if val:
+                # Invalidate immediately? No, keep it simple.
+                # Ideally we check timestamp if we implemented TTL logic.
+                logger.info(f"⚡ Local Cache Hit: {key}")
+            return val
+
         try:
             return await self.client.get(key)
         except Exception as e:
