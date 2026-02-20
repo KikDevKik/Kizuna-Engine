@@ -15,7 +15,7 @@ from app.repositories.local_graph import LocalSoulRepository
 from app.models.graph import AgentNode
 from app.services.sleep_manager import SleepManager
 from app.services.cache import cache
-from app.routers import warmup
+from app.routers import warmup, agents
 from core.config import settings
 import os
 
@@ -69,6 +69,7 @@ app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 
 # Register Routers (Phase 5)
 app.include_router(warmup.router)
+app.include_router(agents.router)
 
 # Lifecycle Event to load Graph
 @app.on_event("startup")

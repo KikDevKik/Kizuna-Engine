@@ -1,0 +1,17 @@
+INFO:app.main:🏠 Using Local Soul Repository (Development Mode)
+INFO:     Started server process [4931]
+INFO:     Waiting for application startup.
+INFO:app.main:Initializing Cache...
+INFO:app.services.cache:Connecting to Redis at localhost:6379
+WARNING:app.services.cache:⚠️ Redis Connection Failed: Error Multiple exceptions: [Errno 111] Connect call failed ('::1', 6379, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 6379) connecting to localhost:6379.. Switching to Local Memory Cache (Fallback Mode).
+INFO:app.main:Initializing Soul Repository...
+INFO:app.repositories.local_graph:Graph Database loaded: 1 Users, 0 Agents.
+INFO:app.main:Seeded Kizuna Agent into Graph.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:34846 - "GET /api/agents/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34850 - "GET /api/agents/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49698 - "OPTIONS /api/agents/ HTTP/1.1" 200 OK
+INFO:app.services.agent_service:Created new agent: TEST-SOUL-1771556007 (eae50fe4-dcc7-42f7-8f62-6c7b9fca598a)
+INFO:     127.0.0.1:49706 - "POST /api/agents/ HTTP/1.1" 201 Created
+INFO:     127.0.0.1:49706 - "GET /api/agents/ HTTP/1.1" 200 OK
