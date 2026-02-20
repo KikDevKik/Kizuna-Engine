@@ -1,4 +1,8 @@
-import redis.asyncio as redis
+try:
+    import redis.asyncio as redis
+except ImportError:
+    redis = None
+
 import logging
 from core.config import settings
 import asyncio
@@ -25,6 +29,13 @@ class RedisCache:
 
     async def initialize(self):
         """Connect to Redis."""
+        if redis is None:
+            logger.warning("⚠️ redis library missing. Using Local Memory Cache.")
+            self.connected = False
+            self.client = None
+            self.local_cache = {}
+            return
+
         try:
             logger.info(f"Connecting to Redis at {settings.REDIS_HOST}:{settings.REDIS_PORT}")
             self.client = redis.Redis(

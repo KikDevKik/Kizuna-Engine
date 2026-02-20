@@ -3,7 +3,6 @@ from pydantic import BaseModel
 import logging
 from app.services.soul_assembler import assemble_soul
 from app.services.cache import cache
-from app.services.auth import FirebaseAuth
 from app.repositories.local_graph import LocalSoulRepository
 from core.config import settings
 
@@ -55,14 +54,19 @@ async def warmup_soul(
     Pre-calculates the Agent's Soul (System Instruction) based on User History.
     Called by Frontend on page load.
     """
-    # 1. Authenticate (Phase 3.2 Logic)
+    # 1. Authenticate (Lazy Logic)
     user_id = "guest_user"
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
-        try:
-            user_id = FirebaseAuth.verify_token(token)
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid Token")
+        if settings.FIREBASE_CREDENTIALS:
+            try:
+                from app.services.auth import FirebaseAuth
+                user_id = FirebaseAuth.verify_token(token)
+            except ImportError:
+                # Should not happen if credentials exist unless lib is missing
+                logger.warning("Firebase credentials present but library missing.")
+            except Exception:
+                raise HTTPException(status_code=401, detail="Invalid Token")
     elif settings.GCP_PROJECT_ID:
         # Enforce strict auth in Prod
         raise HTTPException(status_code=401, detail="Authentication Required")
