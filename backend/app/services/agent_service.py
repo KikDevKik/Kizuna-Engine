@@ -1,5 +1,6 @@
 import json
 import logging
+import aiofiles
 from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
@@ -16,15 +17,19 @@ class AgentService:
         self.data_dir = data_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
-    def list_agents(self) -> List[AgentNode]:
+    async def list_agents(self) -> List[AgentNode]:
         """
         Scans the agents directory and returns a list of AgentNode objects.
         """
         agents = []
-        for file_path in self.data_dir.glob("*.json"):
+        # glob is synchronous, but fast enough for directory listing usually.
+        files = list(self.data_dir.glob("*.json"))
+
+        for file_path in files:
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+                    content = await f.read()
+                    data = json.loads(content)
                     # Validate and parse with Pydantic
                     agent = AgentNode(**data)
                     agents.append(agent)
@@ -32,7 +37,7 @@ class AgentService:
                 logger.error(f"Failed to load agent from {file_path}: {e}")
         return agents
 
-    def get_agent(self, agent_id: str) -> Optional[AgentNode]:
+    async def get_agent(self, agent_id: str) -> Optional[AgentNode]:
         """
         Retrieves a specific agent by ID.
         Since filename is [ID].json, we can look it up directly.
@@ -42,14 +47,15 @@ class AgentService:
             return None
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+                content = await f.read()
+                data = json.loads(content)
                 return AgentNode(**data)
         except Exception as e:
             logger.error(f"Failed to load agent {agent_id}: {e}")
             return None
 
-    def create_agent(self, name: str, role: str, base_instruction: str, traits: dict = None, tags: list = None) -> AgentNode:
+    async def create_agent(self, name: str, role: str, base_instruction: str, traits: dict = None, tags: list = None) -> AgentNode:
         """
         Creates a new agent file.
         Generates a UUID for the ID and filename.
@@ -68,9 +74,9 @@ class AgentService:
         file_path = self.data_dir / f"{agent_id}.json"
 
         try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                # Use model_dump to serialize
-                json.dump(agent.model_dump(mode='json'), f, indent=4, ensure_ascii=False)
+            content = json.dumps(agent.model_dump(mode='json'), indent=4, ensure_ascii=False)
+            async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+                await f.write(content)
             logger.info(f"Created new agent: {name} ({agent_id})")
             return agent
         except Exception as e:
