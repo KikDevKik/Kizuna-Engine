@@ -10,6 +10,7 @@ export interface UseLiveAPI {
   isAiSpeaking: boolean;
   connect: (agentId: string) => Promise<void>;
   disconnect: () => void;
+  sendImage: (base64Image: string) => void;
 }
 
 export const useLiveAPI = (): UseLiveAPI => {
@@ -17,6 +18,7 @@ export const useLiveAPI = (): UseLiveAPI => {
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const volumeRef = useRef(0);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const [lastAiMessage, setLastAiMessage] = useState<string | null>(null);
 
   // 1. References for persistent connection objects
   const socketRef = useRef<WebSocket | null>(null);
@@ -122,6 +124,11 @@ export const useLiveAPI = (): UseLiveAPI => {
       ws.onmessage = async (event) => {
         try {
           const message = JSON.parse(event.data);
+
+          if (message.type === 'text') {
+              setLastAiMessage(message.data);
+          }
+
           if (message.type === 'audio') {
             setIsAiSpeaking(true);
 

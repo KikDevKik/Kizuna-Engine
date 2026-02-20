@@ -6,6 +6,7 @@ import { AgentRoster } from './components/AgentRoster';
 import { VisionPanel } from './components/VisionPanel';
 import { EpistemicPanel } from './components/EpistemicPanel';
 import { SystemLogs } from './components/SystemLogs';
+import { JulesSanctuary } from './components/JulesSanctuary';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Power } from 'lucide-react';
 import './KizunaHUD.css';
@@ -139,6 +140,12 @@ function App() {
       <VisionPanel />
       <EpistemicPanel />
       <SystemLogs />
+
+      <JulesSanctuary
+        isOpen={isSanctuaryOpen}
+        onClose={() => setIsSanctuaryOpen(false)}
+        api={api}
+      />
 
       {/* FOOTER STATUS */}
       <footer className="fixed bottom-0 left-0 w-full p-4 flex justify-between items-end z-40 pointer-events-none opacity-80 text-[10px] font-technical text-cyan-700">
