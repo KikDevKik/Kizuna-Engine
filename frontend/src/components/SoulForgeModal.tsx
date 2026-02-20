@@ -1,8 +1,69 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Cpu, User, FileText } from 'lucide-react';
+import { X, Send, Terminal } from 'lucide-react';
+import { useRitual } from '../contexts/RitualContext';
 import '../KizunaHUD.css';
 
+// ------------------------------------------------------------------
+// TYPEWRITER COMPONENT (Shizuku Effect)
+// ------------------------------------------------------------------
+const TypewriterText: React.FC<{
+  text: string;
+  isActive: boolean;
+  onComplete?: () => void;
+}> = ({ text, isActive, onComplete }) => {
+  const [displayed, setDisplayed] = useState('');
+  const [isComplete, setIsComplete] = useState(false);
+
+  // If not active (e.g. old history), show full text immediately
+  useEffect(() => {
+    if (!isActive) {
+      setDisplayed(text);
+      setIsComplete(true);
+    }
+  }, [isActive, text]);
+
+  useEffect(() => {
+    if (!isActive || isComplete) return;
+
+    // Reset if text changes
+    setDisplayed('');
+    setIsComplete(false);
+
+    let index = 0;
+    const intervalId = setInterval(() => {
+      if (index < text.length) {
+        setDisplayed(text.slice(0, index + 1));
+        index++;
+      } else {
+        clearInterval(intervalId);
+        setIsComplete(true);
+        if (onComplete) onComplete();
+      }
+    }, 50); // Slow cadence (50ms)
+
+    return () => clearInterval(intervalId);
+  }, [text, isActive]); // Depend on text to restart if it changes
+
+  const finishImmediately = () => {
+    if (!isComplete && isActive) {
+      setDisplayed(text);
+      setIsComplete(true);
+      if (onComplete) onComplete();
+    }
+  };
+
+  return (
+    <div onClick={finishImmediately} className="cursor-pointer">
+      {displayed}
+      {isActive && !isComplete && <span className="animate-pulse">_</span>}
+    </div>
+  );
+};
+
+// ------------------------------------------------------------------
+// MAIN MODAL
+// ------------------------------------------------------------------
 interface SoulForgeModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -10,77 +71,86 @@ interface SoulForgeModalProps {
 }
 
 export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose, onCreated }) => {
-  const [name, setName] = useState('');
-  const [role, setRole] = useState('');
-  const [instruction, setInstruction] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { messages, status, isLoading, error, sendMessage, startRitual, resetRitual } = useRitual();
+  const [inputValue, setInputValue] = useState('');
+  const [animationPhase, setAnimationPhase] = useState<'normal' | 'resonance' | 'dissipation'>('normal');
+  const scrollRef = useRef<HTMLDivElement>(null);
 
+  // 1. Initial Fetch & State Reset on Open
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
     if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
+      startRitual();
+      setAnimationPhase('normal');
     }
+  }, [isOpen, startRitual]);
 
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, onClose]);
+  // 2. Auto-scroll to bottom
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, inputValue]);
+
+  // 3. Completion Sequence (Catarsis Procedural)
+  useEffect(() => {
+    if (status === 'complete') {
+      // 0s: Lock (Implicit via status check in input)
+
+      // 1.5s: Resonance
+      setAnimationPhase('resonance');
+
+      const timer1 = setTimeout(() => {
+        // 3. Dissipation
+        setAnimationPhase('dissipation');
+
+        const timer2 = setTimeout(() => {
+           // 4. Close & Reset
+           onCreated(); // Fetch new roster
+           onClose();   // Close modal
+
+           // We reset AFTER closing to ensure next time is fresh.
+           // Requirement: "return to reality without losing progress" applies to *interruption*.
+           // But completion is *final*. So we reset.
+           setTimeout(() => resetRitual(), 500);
+
+        }, 1000); // 1s Dissipation duration
+        return () => clearTimeout(timer2);
+      }, 1500); // 1.5s Resonance duration
+
+      return () => clearTimeout(timer1);
+    }
+  }, [status, onClose, onCreated, resetRitual]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
-    setError(null);
+    if (!inputValue.trim() || isLoading || status === 'complete') return;
 
-    try {
-      // Direct fetch to the backend API we just created
-      // Assuming backend is on port 8000 (standard FastAPI) or configured proxy
-      // Use relative path /api/agents assuming proxy is set up in package.json or vite.config
-      // If not, we might need full URL. For now, try /api/agents.
+    const content = inputValue;
+    setInputValue(''); // Clear immediately
+    await sendMessage(content);
+  };
 
-      const response = await fetch('http://localhost:8000/api/agents/', { // Hardcoded for dev, or use env var
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name,
-          role,
-          base_instruction: instruction,
-          traits: {}, // Default empty
-          tags: []    // Default empty
-        }),
-      });
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') onClose();
+  };
 
-      if (!response.ok) {
-        throw new Error(`Failed to create agent: ${response.statusText}`);
-      }
+  // ------------------------------------------------------------------
+  // RENDER HELPERS
+  // ------------------------------------------------------------------
 
-      const data = await response.json();
-      console.log('Agent Created:', data);
-
-      // Reset form
-      setName('');
-      setRole('');
-      setInstruction('');
-
-      onCreated();
-      onClose();
-    } catch (err: unknown) {
-      console.error(err);
-      let message = 'Unknown error occurred';
-      if (err instanceof Error) {
-        message = err.message;
-      }
-      setError(message);
-    } finally {
-      setIsSubmitting(false);
+  // Resonance Effect Style
+  const getContainerStyle = () => {
+    if (animationPhase === 'dissipation') {
+      return { opacity: 0, scale: 0.95, filter: 'blur(10px)' };
     }
+    return { opacity: 1, scale: 1, filter: 'blur(0px)' };
+  };
+
+  const getLastMessageStyle = (isLast: boolean) => {
+    if (isLast && animationPhase === 'resonance') {
+       return "text-cyan-300 drop-shadow-[0_0_10px_rgba(0,255,255,0.8)] animate-pulse";
+    }
+    return "";
   };
 
   return (
@@ -90,134 +160,135 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
-          onClick={onClose} // Close on backdrop click
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="soul-forge-title"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md"
+          onClick={onClose}
+          onKeyDown={handleKeyDown}
         >
           <motion.div
-            initial={{ scale: 0.9, y: 20, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            exit={{ scale: 0.9, y: 20, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-            className="relative w-full max-w-2xl mx-4"
-            onClick={(e) => e.stopPropagation()} // Prevent close on modal click
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={getContainerStyle()}
+            transition={{ duration: 0.8, ease: "easeInOut" }}
+            className="relative w-full max-w-3xl mx-4 h-[600px] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Container with Dark Water Aesthetic */}
+            {/* TERMINAL CONTAINER */}
             <div
-              className="kizuna-liquid-glass p-8 text-white relative overflow-hidden"
+              className="kizuna-liquid-glass w-full h-full flex flex-col p-8 text-white relative overflow-hidden border border-cyan-900/30"
               style={{
-                clipPath: 'polygon(5% 0, 100% 0, 100% 95%, 95% 100%, 0 100%, 0 5%)',
-                border: '1px solid rgba(0, 209, 255, 0.2)'
+                clipPath: 'polygon(2% 0, 100% 0, 100% 98%, 98% 100%, 0 100%, 0 2%)',
               }}
             >
-              {/* Header */}
-              <div className="flex justify-between items-start mb-8 border-b border-white/10 pb-4">
+              {/* HEADER */}
+              <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4 shrink-0">
                 <div>
-                  <h2 id="soul-forge-title" className="font-monumental text-3xl tracking-widest text-cyan-400">
-                    SOUL FORGE <span className="text-white/30 text-lg align-top">PROTOCOL</span>
+                  <h2 className="font-monumental text-2xl tracking-widest text-cyan-400 flex items-center gap-3">
+                    <Terminal size={24} />
+                    SOUL FORGE <span className="text-white/20 text-sm align-top">TERMINAL_LINK</span>
                   </h2>
-                  <p className="font-technical text-xs text-cyan-200/60 mt-1">
-                    DESIGN NEW INTELLIGENCE // ARCHETYPE DEFINITION
-                  </p>
                 </div>
                 <button
                   onClick={onClose}
-                  className="text-white/50 hover:text-red-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-sm"
-                  aria-label="Close modal"
+                  className="text-white/30 hover:text-red-500 transition-colors"
                 >
-                  <X size={32} />
+                  <X size={24} />
                 </button>
               </div>
 
-              {/* Form */}
-              <form onSubmit={handleSubmit} className="space-y-6">
-
-                {/* Name Input */}
-                <div className="space-y-2">
-                  <label htmlFor="agent-name" className="font-technical text-cyan-300 text-sm flex items-center gap-2">
-                    <User size={14} /> DESIGNATION (NAME)
-                  </label>
-                  <input
-                    id="agent-name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                    className="w-full bg-black/40 border border-white/10 p-3 text-white font-mono focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
-                    placeholder="e.g. KIZUNA-02"
-                    style={{ clipPath: 'polygon(0 0, 100% 0, 100% 85%, 98% 100%, 0 100%)' }}
-                  />
-                </div>
-
-                {/* Role Input */}
-                <div className="space-y-2">
-                  <label htmlFor="agent-role" className="font-technical text-cyan-300 text-sm flex items-center gap-2">
-                    <Cpu size={14} /> FUNCTIONAL ROLE
-                  </label>
-                  <input
-                    id="agent-role"
-                    type="text"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    required
-                    className="w-full bg-black/40 border border-white/10 p-3 text-white font-mono focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all"
-                    placeholder="e.g. TACTICAL SUPPORT"
-                    style={{ clipPath: 'polygon(0 0, 100% 0, 100% 85%, 98% 100%, 0 100%)' }}
-                  />
-                </div>
-
-                {/* Base Instruction Input */}
-                <div className="space-y-2">
-                  <label htmlFor="agent-instruction" className="font-technical text-cyan-300 text-sm flex items-center gap-2">
-                    <FileText size={14} /> CORE DIRECTIVE (SYSTEM PROMPT)
-                  </label>
-                  <textarea
-                    id="agent-instruction"
-                    value={instruction}
-                    onChange={(e) => setInstruction(e.target.value)}
-                    required
-                    rows={5}
-                    className="w-full bg-black/40 border border-white/10 p-3 text-white font-mono focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all resize-none"
-                    placeholder="Define the soul's behavior, constraints, and personality..."
-                    style={{ clipPath: 'polygon(0 0, 100% 0, 100% 95%, 98% 100%, 0 100%)' }}
-                  />
-                </div>
-
-                {/* Error Message */}
-                {error && (
-                  <div className="text-red-500 font-mono text-sm bg-red-500/10 p-2 border border-red-500/30">
-                    ERROR: {error}
-                  </div>
+              {/* CONVERSATION HISTORY (Scrollable) */}
+              <div
+                className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scrollbar mb-6"
+                ref={scrollRef}
+              >
+                {/* Empty State / Loader */}
+                {messages.length === 0 && isLoading && (
+                   <div className="text-cyan-500/50 font-mono animate-pulse">CONNECTING TO THE VOID...</div>
                 )}
 
-                {/* Actions */}
-                <div className="flex justify-end gap-4 pt-4 border-t border-white/10">
-                   <button
-                    type="button"
-                    onClick={onClose}
-                    className="font-technical text-white/50 hover:text-white px-6 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-sm"
-                  >
-                    ABORT
-                  </button>
+                {messages.map((msg, idx) => {
+                  const isLast = idx === messages.length - 1;
+                  const isSystem = msg.role === 'system';
 
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="kizuna-shard-btn-wrapper relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-sm"
-                  >
-                     <span className="kizuna-shard-btn-inner">
-                       {isSubmitting ? 'COMPILING...' : 'INITIALIZE SOUL'}
-                     </span>
-                  </button>
-                </div>
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex flex-col ${isSystem ? 'items-start' : 'items-end'}`}
+                    >
+                      <span className="text-[10px] text-white/20 font-technical mb-1 uppercase">
+                        {msg.role === 'system' ? 'THE VOID' : 'YOU'}
+                      </span>
 
+                      <div
+                        className={`max-w-[80%] font-mono text-sm leading-relaxed p-3 border border-white/5
+                          ${isSystem
+                            ? `text-cyan-100/90 bg-black/40 ${getLastMessageStyle(isLast && isSystem)}`
+                            : 'text-white/80 bg-white/5'
+                          }
+                        `}
+                        style={{
+                           clipPath: isSystem
+                             ? 'polygon(0 0, 100% 0, 100% 90%, 95% 100%, 0 100%)'
+                             : 'polygon(0 0, 100% 0, 100% 100%, 5% 100%, 0 90%)'
+                        }}
+                      >
+                         {isSystem ? (
+                           <TypewriterText
+                             text={msg.content}
+                             isActive={isLast} // Only type the last message
+                           />
+                         ) : (
+                           msg.content
+                         )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Loading Indicator for Reply */}
+                {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
+                   <div className="text-cyan-500/30 text-xs font-technical animate-pulse mt-2">
+                     ANALYZING RESONANCE...
+                   </div>
+                )}
+
+                {/* Error Display */}
+                {error && (
+                   <div className="text-red-500/80 font-mono text-sm border border-red-900/50 p-2 bg-red-900/10">
+                     ERROR: {error}
+                   </div>
+                )}
+
+                {/* Completion Message Placeholder (Visually handled by Resonance) */}
+                {status === 'complete' && animationPhase !== 'dissipation' && (
+                   <div className="text-center mt-8">
+                      <h3 className="font-monumental text-xl text-cyan-400 animate-pulse tracking-[0.5em]">INVOCATION COMPLETE</h3>
+                   </div>
+                )}
+              </div>
+
+              {/* INPUT AREA */}
+              <form onSubmit={handleSubmit} className="shrink-0 relative">
+                <input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  disabled={isLoading || status === 'complete'}
+                  placeholder={status === 'complete' ? "SOUL CRYSTALLIZED" : "Enter your response..."}
+                  className="w-full bg-black/60 border border-white/20 p-4 pr-12 text-white font-mono focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ clipPath: 'polygon(0 0, 100% 0, 100% 80%, 98% 100%, 0 100%)' }}
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  disabled={!inputValue.trim() || isLoading || status === 'complete'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-400 hover:text-white disabled:opacity-30 transition-colors"
+                >
+                  <Send size={20} />
+                </button>
               </form>
 
-              {/* Decorative Elements */}
-              <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 blur-3xl rounded-full pointer-events-none" />
-              <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-600/10 blur-3xl rounded-full pointer-events-none" />
+              {/* DECORATIVE BG */}
+              <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/5 blur-[80px] rounded-full pointer-events-none" />
+              <div className="absolute bottom-0 left-0 w-48 h-48 bg-purple-600/5 blur-[60px] rounded-full pointer-events-none" />
             </div>
           </motion.div>
         </motion.div>
