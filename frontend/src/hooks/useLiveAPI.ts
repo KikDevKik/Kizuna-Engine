@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 // Use environment variable for WebSocket URL, defaulting to localhost
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/live';
+const BASE_WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/live';
 
 export interface UseLiveAPI {
   connected: boolean;
@@ -9,7 +9,7 @@ export interface UseLiveAPI {
   volumeRef: React.MutableRefObject<number>;
   isAiSpeaking: boolean;
   lastAiMessage: string | null;
-  connect: () => Promise<void>;
+  connect: (agentId: string) => Promise<void>;
   disconnect: () => void;
   sendImage: (base64Image: string) => void;
 }
@@ -34,9 +34,7 @@ export const useLiveAPI = (): UseLiveAPI => {
 
   const disconnect = useCallback(() => {
     console.log("Disconnecting by user command...");
-    console.trace("Disconnect called from:");
     if (socketRef.current) {
-      // Only close if open to avoid errors
       if (socketRef.current.readyState === WebSocket.OPEN || socketRef.current.readyState === WebSocket.CONNECTING) {
           socketRef.current.close();
       }
@@ -63,7 +61,14 @@ export const useLiveAPI = (): UseLiveAPI => {
     packetCountRef.current = 0;
   }, []);
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (agentId: string) => {
+    // GUARD CLAUSE: Prevent connection without agent ID
+    if (!agentId) {
+        console.error("Cannot connect: No agent ID provided.");
+        setStatus('error');
+        return;
+    }
+
     // Prevent multiple connections
     if (socketRef.current || isConnectingRef.current) {
         console.warn("Connection attempt ignored: already connected or connecting.");
@@ -73,7 +78,7 @@ export const useLiveAPI = (): UseLiveAPI => {
     try {
       isConnectingRef.current = true;
       setStatus('connecting');
-      console.log("Initiating connection...");
+      console.log(`Initiating connection to agent: ${agentId}...`);
       packetCountRef.current = 0;
 
       // 1. Initialize AudioContext
@@ -87,16 +92,16 @@ export const useLiveAPI = (): UseLiveAPI => {
 
       // 2. Load AudioWorklet
       try {
-        // Cache Busting: Add timestamp to force reload
         await ctx.audioWorklet.addModule(`/pcm-processor.js?v=${Date.now()}`);
       } catch (e) {
         console.error("Failed to load audio worklet", e);
         throw e;
       }
 
-      // 3. Setup WebSocket
-      console.log(`Connecting to WebSocket at ${WS_URL}...`);
-      const ws = new WebSocket(WS_URL);
+      // 3. Setup WebSocket with Query Param
+      const wsUrl = `${BASE_WS_URL}?agent_id=${encodeURIComponent(agentId)}`;
+      console.log(`Connecting to WebSocket at ${wsUrl}...`);
+      const ws = new WebSocket(wsUrl);
       socketRef.current = ws;
 
       ws.onopen = () => {
@@ -107,23 +112,17 @@ export const useLiveAPI = (): UseLiveAPI => {
       };
 
       ws.onclose = (event) => {
-        console.log(`WebSocket disconnected (onclose event). Code: ${event.code}, Reason: "${event.reason}", WasClean: ${event.wasClean}`);
-        // DO NOT call disconnect() here automatically.
-        // Just update UI status if needed, but keep objects alive per request "Immovable constant".
-        // However, if the socket is closed, we can't really use it.
-        // We will mark it as not connected in UI but NOT cleanup the AudioContext/MediaStream.
+        console.log(`WebSocket disconnected (onclose event). Code: ${event.code}, Reason: "${event.reason}"`);
         setConnected(false);
-        // setStatus('disconnected'); // Maybe keep 'connected' visual to show it *was* connected? No, 'disconnected' is honest.
+        // Do not verify status here to avoid flickering logic, relies on parent to handle state
       };
 
       ws.onerror = (error) => {
         console.error('WebSocket error (onerror event)', error);
         setStatus('error');
-        // DO NOT call disconnect() here.
       };
 
       ws.onmessage = async (event) => {
-        // console.log('WebSocket message received:', event.data.substring(0, 50) + "..."); // Reduce noise
         try {
           const message = JSON.parse(event.data);
 
@@ -134,7 +133,6 @@ export const useLiveAPI = (): UseLiveAPI => {
           if (message.type === 'audio') {
             setIsAiSpeaking(true);
 
-            // Audio processing
             const binaryString = atob(message.data);
             const len = binaryString.length;
             const bytes = new Uint8Array(len);
@@ -161,10 +159,7 @@ export const useLiveAPI = (): UseLiveAPI => {
 
           } else if (message.type === 'turn_complete') {
             console.log("Turn complete signal received.");
-            // STRICT HANDLING: Only update UI state.
-            // DO NOT stop microphone, DO NOT close socket.
             setIsAiSpeaking(false);
-            // Explicitly do NOT call disconnect()
           }
         } catch (e) {
           console.error("Error processing message", e);
@@ -201,12 +196,7 @@ export const useLiveAPI = (): UseLiveAPI => {
         // Send to WebSocket if open
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(int16Data);
-
-          // Telemetry
           packetCountRef.current++;
-          if (packetCountRef.current % 50 === 0) {
-              console.log(`[UseLiveAPI] Sent ${packetCountRef.current} audio packets via WebSocket`);
-          }
         }
       };
 
@@ -217,7 +207,6 @@ export const useLiveAPI = (): UseLiveAPI => {
     } catch (e) {
       console.error("Error connecting", e);
       setStatus('error');
-      // DO NOT automatically disconnect here to allow inspection
       isConnectingRef.current = false;
     }
   }, [disconnect]);
