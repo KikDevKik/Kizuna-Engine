@@ -1,6 +1,7 @@
 import json
 import logging
 import aiofiles
+import aiofiles.os
 from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
@@ -81,6 +82,23 @@ class AgentService:
             return agent
         except Exception as e:
             logger.error(f"Failed to create agent {name}: {e}")
+            raise
+
+    async def delete_agent(self, agent_id: str) -> bool:
+        """
+        Deletes an agent file by ID.
+        """
+        file_path = self.data_dir / f"{agent_id}.json"
+        if not file_path.exists():
+            logger.warning(f"Agent deletion requested for non-existent ID: {agent_id}")
+            return False
+
+        try:
+            await aiofiles.os.remove(file_path)
+            logger.info(f"Deleted agent: {agent_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete agent {agent_id}: {e}")
             raise
 
 # Singleton instance
