@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLiveAPI } from './hooks/useLiveAPI';
 import { Layout } from './components/Layout';
 import { KizunaCore } from './components/KizunaCore';
@@ -6,13 +6,27 @@ import { AgentRoster } from './components/AgentRoster';
 import { VisionPanel } from './components/VisionPanel'; // Assuming VisionPanel exists in components/VisionPanel.tsx
 import { EpistemicPanel } from './components/EpistemicPanel'; // Assuming EpistemicPanel exists in components/EpistemicPanel.tsx
 import { SystemLogs } from './components/SystemLogs';
+import { JulesSanctuary } from './components/JulesSanctuary';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Power } from 'lucide-react';
 import './KizunaHUD.css';
 
 function App() {
-  const { connected, status, volumeRef, isAiSpeaking, connect, disconnect } = useLiveAPI();
+  const api = useLiveAPI();
+  const { connected, status, volumeRef, isAiSpeaking, connect, disconnect } = api;
   const [viewMode, setViewMode] = useState<'core' | 'roster'>('core');
+  const [isSanctuaryOpen, setIsSanctuaryOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setIsSanctuaryOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Derived state for Law 4 logic (passed to Core)
   const isListening = connected && !isAiSpeaking;
@@ -113,6 +127,12 @@ function App() {
       <VisionPanel />
       <EpistemicPanel />
       <SystemLogs />
+
+      <JulesSanctuary
+        isOpen={isSanctuaryOpen}
+        onClose={() => setIsSanctuaryOpen(false)}
+        api={api}
+      />
 
       {/* FOOTER STATUS */}
       <footer className="fixed bottom-0 left-0 w-full p-4 flex justify-between items-end z-40 pointer-events-none opacity-80 text-[10px] font-technical text-cyan-700">
