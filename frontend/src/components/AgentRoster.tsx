@@ -282,9 +282,8 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
           <button
             onClick={() => rotateCarousel(-1)}
             className="kizuna-shard-btn-wrapper"
-            style={{ padding: '2px', clipPath: 'polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%)' }}
           >
-            <div className="kizuna-shard-btn-inner" style={{ padding: '8px 24px' }}>
+            <div className="kizuna-shard-btn-inner">
                &lt; PREV
             </div>
           </button>
@@ -301,9 +300,8 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
           <button
             onClick={() => rotateCarousel(1)}
             className="kizuna-shard-btn-wrapper"
-            style={{ padding: '2px', clipPath: 'polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%)' }}
           >
-            <div className="kizuna-shard-btn-inner" style={{ padding: '8px 24px' }}>
+            <div className="kizuna-shard-btn-inner">
               NEXT &gt;
             </div>
           </button>
