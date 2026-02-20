@@ -1,4 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import type { ServerMessage } from '../types/websocket';
+import { base64ToFloat32, createAudioBuffer } from '../utils/audioUtils';
 
 // Use environment variable for WebSocket URL, defaulting to localhost
 const BASE_WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/live';
@@ -136,7 +138,8 @@ export const useLiveAPI = (): UseLiveAPI => {
 
       ws.onmessage = async (event) => {
         try {
-          const message = JSON.parse(event.data);
+          // Use discriminated union for type safety
+          const message = JSON.parse(event.data) as ServerMessage;
 
           if (message.type === 'text') {
               setLastAiMessage(message.data);
@@ -145,21 +148,13 @@ export const useLiveAPI = (): UseLiveAPI => {
           if (message.type === 'audio') {
             setIsAiSpeaking(true);
 
-            const binaryString = atob(message.data);
-            const len = binaryString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            const int16Data = new Int16Array(bytes.buffer);
-            const float32Data = new Float32Array(int16Data.length);
-            for (let i = 0; i < int16Data.length; i++) {
-                float32Data[i] = int16Data[i] / 32768.0;
-            }
+            // Decode base64 to Float32 using the utility
+            const float32Data = base64ToFloat32(message.data);
 
-            const buffer = ctx.createBuffer(1, float32Data.length, 24000);
-            buffer.copyToChannel(float32Data, 0);
+            // Create AudioBuffer
+            const buffer = createAudioBuffer(ctx, float32Data);
 
+            // Schedule playback
             const source = ctx.createBufferSource();
             source.buffer = buffer;
             source.connect(ctx.destination);
