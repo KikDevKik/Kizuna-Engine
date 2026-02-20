@@ -6,3 +6,4 @@ python-dotenv
 aiofiles
 google-cloud-spanner
 firebase-admin
+redis
