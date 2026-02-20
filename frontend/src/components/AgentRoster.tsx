@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { SoulForgeModal } from './SoulForgeModal';
 import '../KizunaHUD.css';
@@ -17,7 +17,7 @@ interface AgentRosterProps {
 }
 
 // ------------------------------------------------------------------
-// ANIMATION VARIANTS
+// ANIMATION VARIANTS (Container & UI)
 // ------------------------------------------------------------------
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -51,7 +51,7 @@ const shardVariants = {
     rotateZ: 0,
     filter: "blur(0px)",
     transition: {
-      type: "spring" as const,
+      type: "spring",
       stiffness: 200,
       damping: 20,
       mass: 0.8
@@ -77,7 +77,6 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
     try {
       setIsLoading(true);
       setError(null);
-      // Use explicit URL or env var
       const res = await fetch('http://localhost:8000/api/agents/');
 
       if (!res.ok) {
@@ -112,7 +111,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
 
       setAgents([...loadedAgents, createCard]);
 
-      // If we have agents, ensure active index is valid
+      // Ensure active index is valid
       if (activeIndex >= loadedAgents.length + 1) {
           setActiveIndex(0);
       }
@@ -130,23 +129,24 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
     } finally {
       setIsLoading(false);
     }
-  }, []); // Remove dependency on activeIndex to prevent loops
+  }, []); // Removed activeIndex dependency
 
   useEffect(() => {
     fetchAgents();
   }, [fetchAgents]);
 
-  // Carousel Parameters
-  const radius = 350;
-  // Prevent division by zero
-  const theta = agents.length > 0 ? 360 / agents.length : 0;
+  // ------------------------------------------------------------------
+  // AUTONOMOUS AGENT LOGIC (Option B)
+  // ------------------------------------------------------------------
 
+  // Strict Linear Navigation (No Wrapping)
   const rotateCarousel = (direction: number) => {
     if (agents.length === 0) return;
     setActiveIndex((prev) => {
-      let next = prev + direction;
-      if (next < 0) next = agents.length - 1;
-      if (next >= agents.length) next = 0;
+      const next = prev + direction;
+      // Clamp values
+      if (next < 0) return 0;
+      if (next >= agents.length) return agents.length - 1;
       return next;
     });
   };
@@ -158,23 +158,80 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
     if (selected.id === 'create-new') {
       setIsModalOpen(true);
     } else if (onSelect) {
-      // Pass the Agent ID to the parent
       onSelect(selected.id);
     }
   };
 
   const handleAgentCreated = async () => {
     await fetchAgents();
-    // Move selection to the newly created agent (2nd to last, before 'create new')
-    // We can't easily predict the index without knowing the new list length,
-    // but typically it appends. The API returns all agents.
-    // Ideally we'd select the last real agent.
-    // For now, let's just refresh. User can navigate.
+  };
+
+  // Determine Card Style based on relative offset
+  const getCardStyle = (index: number) => {
+    const offset = index - activeIndex;
+    const absOffset = Math.abs(offset);
+    const direction = offset > 0 ? 1 : -1;
+
+    // Base Transition Config
+    const transition = {
+      type: "spring",
+      stiffness: 300,
+      damping: 30,
+      mass: 1
+    };
+
+    // 1. ACTIVE CENTER CARD (Focus)
+    if (offset === 0) {
+      return {
+        x: 0,
+        z: 0,
+        rotateY: 0,
+        scale: 1.1,
+        opacity: 1,
+        zIndex: 100,
+        filter: "blur(0px) brightness(1.2) drop-shadow(0 0 30px rgba(0,209,255,0.3))",
+        transition
+      };
+    }
+
+    // 2. IMMEDIATE NEIGHBORS (Visible Side Cards)
+    if (absOffset === 1) {
+      return {
+        x: direction * 320, // Spread out to sides
+        z: -100,            // Push back slightly
+        rotateY: direction * -15, // Angle inward slightly to face camera
+        scale: 0.9,
+        opacity: 0.7,
+        zIndex: 90,
+        filter: "blur(0px) brightness(0.6)",
+        transition
+      };
+    }
+
+    // 3. DISTANT STACK (Deck Effect)
+    // Tightly stacked behind the neighbors
+    const baseStackX = direction * 380;
+    const stackSpacing = 20;
+    const stackZ = -200 - (absOffset * 40);
+
+    return {
+      x: baseStackX + (direction * (absOffset - 2) * stackSpacing),
+      z: stackZ,
+      rotateY: direction * -5, // Flatter angle for the stack
+      scale: 0.8,
+      opacity: 0.2, // Faded
+      zIndex: 80 - absOffset,
+      filter: "blur(4px) brightness(0.4)",
+      transition
+    };
   };
 
   if (isLoading && agents.length === 0) {
       return <div className="text-cyan-500 font-technical text-center mt-20 animate-pulse">ESTABLISHING LINK...</div>;
   }
+
+  const isFirst = activeIndex === 0;
+  const isLast = activeIndex === agents.length - 1;
 
   return (
     <>
@@ -183,60 +240,44 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         initial="hidden"
         animate="visible"
         exit="exit"
-        className="flex flex-col items-center justify-center w-full h-[700px]"
+        className="flex flex-col items-center justify-center w-full h-[700px] relative overflow-hidden"
       >
         {error && (
-            <div className="absolute top-4 text-red-500 font-mono text-xs bg-black/50 p-2 border border-red-500">
+            <div className="absolute top-4 text-red-500 font-mono text-xs bg-black/50 p-2 border border-red-500 z-50">
                 CONNECTION_ERROR: {error}
             </div>
         )}
 
-        {/* 3D SCENE */}
-        <div className="perspective-scene" style={{ perspective: "1500px", height: '450px' }}>
-          <motion.div
-            className="carousel-axis"
-            animate={{ rotateY: activeIndex * -theta }}
-            transition={{ type: "spring", stiffness: 220, damping: 25, mass: 1 }}
-            style={{ transformStyle: "preserve-3d", width: '260px', height: '380px', position: 'relative' }}
-          >
+        {/* 3D STAGE - Single Relative Container */}
+        <div
+          className="w-full h-[450px] flex items-center justify-center relative"
+          style={{ perspective: "1200px" }} // Perspective on container
+        >
+            <AnimatePresence>
             {agents.map((agent, index) => {
-              const angle = index * theta;
-              const isFocused = activeIndex === index;
               const isCreateCard = agent.id === 'create-new';
+              const isFocused = activeIndex === index;
 
-              // Calculate dynamic Z-Index based on distance from active index
-              // We need to account for wrapping (e.g., if total 5, index 4 is "close" to index 0)
-              let dist = Math.abs(index - activeIndex);
-              if (dist > agents.length / 2) {
-                 dist = agents.length - dist;
-              }
-              const zIndex = 100 - dist;
+              // Only render if within reasonable range to save DOM performance
+              // (Optional optimization, but good for large lists)
+              if (Math.abs(index - activeIndex) > 5) return null;
 
               return (
                 <motion.div
                   key={agent.id}
-                  className="agent-card-container"
+                  layoutId={`agent-card-${agent.id}`}
+                  className="absolute w-[260px] h-[380px]" // Fixed size card
+                  initial={false}
+                  animate={getCardStyle(index)}
                   style={{
-                    transform: `rotateY(${angle}deg) translateZ(${radius}px)`,
-                    rotateZ: isFocused ? "-2deg" : "-15deg",
-                    opacity: isFocused ? 1 : 0.6, // Increased visibility for non-focused cards
-                    scale: isFocused ? 1.05 : 0.9,
-                    zIndex: zIndex, // Critical Fix: Ensure focused item is visually on top
-                    backfaceVisibility: "visible", // Ensure cards are visible from all angles
+                    transformStyle: "preserve-3d",
+                    cursor: "pointer"
                   }}
-                  transition={{ duration: 0.4 }}
+                  onClick={() => setActiveIndex(index)}
                 >
-                  <motion.div
-                    className={`agent-card-glass ${isFocused ? 'border-cyan-400' : 'border-slate-700'}`}
-                    animate={{
-                       filter: isFocused
-                         ? "drop-shadow(0 0 20px #00D1FF) saturate(150%)"
-                         : "drop-shadow(0 0 0px #141413) saturate(0%)",
-                    }}
-                    onClick={() => {
-                       setActiveIndex(index);
-                       // Optional: Select immediately on click? Better to keep it two-step (focus -> initiate)
-                    }}
+                  {/* CARD CONTENT */}
+                  <div
+                    className={`agent-card-glass w-full h-full ${isFocused ? 'border-cyan-400' : 'border-slate-700'}`}
                   >
                     {isCreateCard ? (
                       // CREATE NEW CARD CONTENT
@@ -244,20 +285,20 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                         <div className="p-4 border border-dashed border-cyan-400/50 rounded-full">
                           <Plus size={48} />
                         </div>
-                        <h2 className="font-monumental text-xl tracking-widest">FORGE NEW SOUL</h2>
+                        <h2 className="font-monumental text-xl tracking-widest text-center">FORGE NEW SOUL</h2>
                       </div>
                     ) : (
                       // AGENT CARD CONTENT
                       <>
                         {/* Avatar / Visual Placeholder */}
-                        <div className="flex-1 flex items-center justify-center mb-4 relative overflow-hidden">
+                        <div className="flex-1 flex items-center justify-center mb-4 relative overflow-hidden bg-black/20 rounded-sm">
                            {agent.avatar_path ? (
-                             <img src={agent.avatar_path} alt={agent.name} className="w-full h-full object-cover opacity-80" />
+                             <img src={agent.avatar_path} alt={agent.name} className="w-full h-full object-cover opacity-90" />
                            ) : (
                              // TYPOGRAPHIC FALLBACK
-                             <div className="relative w-32 h-32 flex items-center justify-center">
-                               <div className="absolute inset-0 border-2 border-cyan-400/30" style={{ clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }} />
-                               <span className="font-monumental text-6xl text-cyan-400 drop-shadow-[0_0_10px_rgba(0,209,255,0.8)]">
+                             <div className="relative w-full h-full flex items-center justify-center">
+                               <div className="absolute inset-0 border border-cyan-400/10" />
+                               <span className="font-monumental text-6xl text-cyan-400/80 drop-shadow-[0_0_15px_rgba(0,209,255,0.5)]">
                                  {agent.name.charAt(0).toUpperCase()}
                                </span>
                              </div>
@@ -265,12 +306,12 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                         </div>
 
                         <div className="flex flex-col gap-1">
-                          <h2 className="agent-card-title text-3xl">{agent.name}</h2>
-                          <p className="agent-card-role text-xs tracking-widest text-cyan-200/70">{agent.role}</p>
+                          <h2 className="agent-card-title text-3xl truncate">{agent.name}</h2>
+                          <p className="agent-card-role text-xs tracking-widest text-cyan-200/70 uppercase">{agent.role}</p>
                         </div>
 
                         <div className="mt-4">
-                          <div className="w-full h-[1px] bg-white/20 my-2" />
+                          <div className="w-full h-[1px] bg-white/10 my-2" />
                           <div className="flex justify-between items-end">
                              <span className="font-technical text-2xl text-cyan-300">
                                 {agent.systemStatus === 'ONLINE' ? '100%' : '---'}
@@ -282,18 +323,19 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                         </div>
                       </>
                     )}
-                  </motion.div>
+                  </div>
                 </motion.div>
               );
             })}
-          </motion.div>
+            </AnimatePresence>
         </div>
 
         {/* CONTROLS */}
-        <motion.div variants={shardVariants} className="mt-24 flex gap-8 z-50 relative">
+        <motion.div variants={shardVariants} className="mt-12 flex gap-8 z-50 relative">
           <button
             onClick={() => rotateCarousel(-1)}
-            className="kizuna-shard-btn-wrapper"
+            disabled={isFirst}
+            className={`kizuna-shard-btn-wrapper transition-opacity duration-300 ${isFirst ? 'opacity-30 cursor-not-allowed' : 'opacity-100'}`}
           >
             <div className="kizuna-shard-btn-inner">
                &lt; PREV
@@ -311,7 +353,8 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
 
           <button
             onClick={() => rotateCarousel(1)}
-            className="kizuna-shard-btn-wrapper"
+            disabled={isLast}
+            className={`kizuna-shard-btn-wrapper transition-opacity duration-300 ${isLast ? 'opacity-30 cursor-not-allowed' : 'opacity-100'}`}
           >
             <div className="kizuna-shard-btn-inner">
               NEXT &gt;
