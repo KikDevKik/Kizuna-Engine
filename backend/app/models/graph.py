@@ -18,6 +18,8 @@ class AgentNode(BaseModel):
     avatar_path: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     traits: dict = Field(default_factory=dict)
+    native_language: str = "Unknown"
+    known_languages: List[str] = Field(default_factory=list)
 
 class MemoryEpisodeNode(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
