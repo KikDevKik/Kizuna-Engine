@@ -220,9 +220,10 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                   style={{
                     transform: `rotateY(${angle}deg) translateZ(${radius}px)`,
                     rotateZ: isFocused ? "-2deg" : "-15deg",
-                    opacity: isFocused ? 1 : 0.4,
+                    opacity: isFocused ? 1 : 0.6, // Increased visibility for non-focused cards
                     scale: isFocused ? 1.05 : 0.9,
                     zIndex: zIndex, // Critical Fix: Ensure focused item is visually on top
+                    backfaceVisibility: "visible", // Ensure cards are visible from all angles
                   }}
                   transition={{ duration: 0.4 }}
                 >
