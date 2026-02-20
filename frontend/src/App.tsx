@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useLiveAPI } from './hooks/useLiveAPI';
 import { Layout } from './components/Layout';
 import { KizunaCore } from './components/KizunaCore';
@@ -12,9 +12,12 @@ import { Power } from 'lucide-react';
 import './KizunaHUD.css';
 
 function App() {
-  const { connected, status, volumeRef, isAiSpeaking, connect, disconnect } = useLiveAPI();
+  const liveApi = useLiveAPI();
+  const { connected, status, volumeRef, isAiSpeaking, connect, disconnect } = liveApi;
+
   const [viewMode, setViewMode] = useState<'core' | 'roster'>('roster'); // Default to Roster to force selection
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [isSanctuaryOpen, setIsSanctuaryOpen] = useState(false);
 
   // Derived state for Law 4 logic (passed to Core)
   const isListening = connected && !isAiSpeaking;
@@ -48,6 +51,18 @@ function App() {
       }
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.ctrlKey && event.shiftKey && (event.key === 'P' || event.key === 'p')) {
+            event.preventDefault();
+            setIsSanctuaryOpen(prev => !prev);
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <Layout>
@@ -144,7 +159,7 @@ function App() {
       <JulesSanctuary
         isOpen={isSanctuaryOpen}
         onClose={() => setIsSanctuaryOpen(false)}
-        api={api}
+        api={liveApi}
       />
 
       {/* FOOTER STATUS */}

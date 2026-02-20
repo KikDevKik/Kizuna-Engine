@@ -8,6 +8,7 @@ export interface UseLiveAPI {
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
   volumeRef: React.MutableRefObject<number>;
   isAiSpeaking: boolean;
+  lastAiMessage: string | null;
   connect: (agentId: string) => Promise<void>;
   disconnect: () => void;
   sendImage: (base64Image: string) => void;
@@ -58,6 +59,18 @@ export const useLiveAPI = (): UseLiveAPI => {
     nextStartTimeRef.current = 0;
     isConnectingRef.current = false;
     packetCountRef.current = 0;
+  }, []);
+
+  const sendImage = useCallback((base64Image: string) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      const payload = {
+        type: "image",
+        data: base64Image
+      };
+      socketRef.current.send(JSON.stringify(payload));
+    } else {
+      console.warn("Cannot send image: WebSocket is not open.");
+    }
   }, []);
 
   const connect = useCallback(async (agentId: string) => {
@@ -228,5 +241,5 @@ export const useLiveAPI = (): UseLiveAPI => {
     };
   }, [connected]);
 
-  return { connected, status, volumeRef, isAiSpeaking, connect, disconnect };
+  return { connected, status, volumeRef, isAiSpeaking, lastAiMessage, connect, disconnect, sendImage };
 };
