@@ -209,32 +209,6 @@ body {
 /* 6. 3D AGENT CAROUSEL                                                       */
 /* -------------------------------------------------------------------------- */
 
-.perspective-scene {
-  perspective: 1500px;
-  width: 100%;
-  height: 400px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-}
-
-.carousel-axis {
-  position: relative;
-  width: 260px; /* Card Width */
-  height: 380px; /* Card Height */
-  transform-style: preserve-3d;
-  /* Rotation logic handled by Framer Motion */
-}
-
-.agent-card-container {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  backface-visibility: hidden; /* Or visible for double-sided effects */
-  /* Transform logic handled by Framer Motion (rotateY + translateZ) */
-}
-
 .agent-card-glass {
   width: 100%;
   height: 100%;
