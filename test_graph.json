@@ -1,0 +1,30 @@
+{
+  "users": [
+    {
+      "id": "test_user_001",
+      "name": "Anonymous",
+      "created_at": "2026-02-19T22:04:58.477990"
+    }
+  ],
+  "agents": [
+    {
+      "id": "test_kizuna",
+      "name": "TestKizuna",
+      "base_instruction": "You are a test.",
+      "traits": {}
+    }
+  ],
+  "episodes": [],
+  "facts": [],
+  "resonances": [
+    {
+      "source_id": "test_user_001",
+      "target_id": "test_kizuna",
+      "affinity_level": 0,
+      "last_interaction": "2026-02-19T22:04:58.478411",
+      "shared_memories": []
+    }
+  ],
+  "experienced": {},
+  "knows": {}
+}

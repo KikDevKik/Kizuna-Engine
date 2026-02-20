@@ -1,54 +1,34 @@
-import json
-import os
-from pathlib import Path
 import logging
-import aiofiles
+from ..repositories.base import SoulRepository
 
 logger = logging.getLogger(__name__)
 
-# Path to data/agents
-# Resolves to: backend/data/agents
-AGENTS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "agents"
-
-async def assemble_soul(agent_id: str) -> str:
+async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository) -> str:
     """
-    Reads the agent's JSON and assembles the system instruction.
-    Applies psychological modifiers based on affinity_level.
+    Assembles the system instruction using the SoulRepository.
+    Applies psychological modifiers based on the specific affinity between User and Agent.
 
     Args:
-        agent_id (str): The ID of the agent (filename without extension).
+        agent_id (str): The ID of the agent.
+        user_id (str): The ID of the user.
+        repository (SoulRepository): The data access layer.
 
     Returns:
         str: The fully assembled system instruction.
 
     Raises:
-        FileNotFoundError: If the agent file does not exist.
-        ValueError: If the JSON is invalid.
+        ValueError: If the agent is not found.
     """
-    # Sanitize input to prevent traversal (basic check)
-    if ".." in agent_id or "/" in agent_id or "\\" in agent_id:
-        raise ValueError("Invalid agent_id format.")
+    # 1. Fetch Agent (Static DNA)
+    agent = await repository.get_agent(agent_id)
+    if not agent:
+        raise ValueError(f"Agent {agent_id} not found in repository.")
 
-    agent_filename = f"{agent_id}.json"
-    agent_path = AGENTS_DIR / agent_filename
+    # 2. Fetch Resonance (Dynamic Relationship)
+    resonance = await repository.get_resonance(user_id, agent_id)
+    affinity_level = resonance.affinity_level
 
-    if not agent_path.exists():
-        logger.error(f"Agent file not found: {agent_path}")
-        raise FileNotFoundError(f"Agent {agent_id} not found.")
-
-    try:
-        async with aiofiles.open(agent_path, "r", encoding="utf-8") as f:
-            content = await f.read()
-            data = json.loads(content)
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse agent file {agent_path}: {e}")
-        raise ValueError(f"Corrupt agent file: {agent_filename}") from e
-
-    base_instruction = data.get("base_instruction", "")
-    affinity_level = data.get("affinity_level", 0)
-    name = data.get("name", "Unknown Entity")
-
-    # Dynamic Modifiers based on Affinity (Phase 1 Logic)
+    # 3. Dynamic Modifiers based on Affinity (Phase 3 Logic)
     modifiers = []
 
     # Simple affinity thresholds for demonstration
@@ -63,14 +43,14 @@ async def assemble_soul(agent_id: str) -> str:
         modifiers.append("RELATIONSHIP: STRANGER. You are meeting the user for the first time. Be polite, helpful, and professional, but show your personality.")
 
     # Construct the final prompt
-    # We append the modifiers to the base instruction
     full_instruction = (
-        f"{base_instruction}\n\n"
+        f"{agent.base_instruction}\n\n"
         f"--- DYNAMIC SOUL STATE ---\n"
-        f"Agent Name: {name}\n"
+        f"Agent Name: {agent.name}\n"
+        f"User ID: {user_id}\n"
         f"Affinity Level: {affinity_level}\n"
         f"Directives:\n" + "\n".join(modifiers)
     )
 
-    logger.info(f"Soul assembled for {name} (ID: {agent_id}) with affinity {affinity_level}.")
+    logger.info(f"Soul assembled for {agent.name} (ID: {agent_id}) with affinity {affinity_level}.")
     return full_instruction
