@@ -15,4 +15,15 @@ class Settings:
     LIVE_MODEL_ID: str = "gemini-2.5-flash-native-audio-preview-12-2025"
     CORS_ORIGINS: list[str] = json.loads(os.getenv("CORS_ORIGINS", '["http://localhost:5173", "http://localhost:3000"]'))
 
+    # GCP Configuration (Phase 3.2)
+    GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "")
+    SPANNER_INSTANCE_ID: str = os.getenv("SPANNER_INSTANCE_ID", "")
+    SPANNER_DATABASE_ID: str = os.getenv("SPANNER_DATABASE_ID", "")
+    FIREBASE_CREDENTIALS: str = os.getenv("FIREBASE_CREDENTIALS", "") # Path to JSON or JSON content
+
+    # Redis Configuration (Phase 5)
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
+
 settings = Settings()
