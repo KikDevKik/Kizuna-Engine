@@ -40,22 +40,23 @@ Este documento detalla los pasos secuenciales para transformar la implementació
 
 --------------------------------------------------------------------------------
 
-## Fase 3: Memoria Epistémica (La Mente de Kizuna)
-**Objetivo**: Crear una persistencia de datos que permita a Kizuna recordar hechos entre sesiones.
+## Fase 3: Memoria Epistémica y "Mente" (Híbrido Local/Nube)
+**Objetivo**: Implementar persistencia de memoria y análisis emocional en modo local (JSON Graph) como preparación para la infraestructura Cloud Spanner.
 
-### 1. [BACKEND] Implementar Almacén de Memoria Simple
-- **Acción**: Crear un archivo `backend/app/services/memory_store.py`.
-- **Inicio**: Usar un archivo JSON local (`memory.json`) como base de datos simple.
-- **Estructura**: `{ "user_id": { "facts": ["Tiene un gato llamado Luna", "Le gusta el café amargo"] } }`.
+### 1. [BACKEND] Implementar Grafo Local (✅ Hecho - Semi-Aplicado)
+- **Acción**: Implementación de `LocalSoulRepository` en `backend/app/repositories/local_graph.py`.
+- **Detalle**: Simulación completa de la estructura de grafos (Usuarios, Agentes, Hechos, Resonancia, Episodios) utilizando JSON local (`backend/data/graph.json`).
+- **Estado**: Funcional. Permite persistencia entre reinicios del servidor local.
 
-### 2. [BACKEND] Inyección de Contexto al Inicio
-- **Acción**: Modificar `GeminiLiveService.connect` en `backend/app/services/gemini_live.py`.
-- **Lógica**: Leer `memory.json` antes de iniciar la sesión. Añadir los hechos al `system_instruction` o enviar un mensaje inicial oculto al modelo.
+### 2. [BACKEND] Inyección de Contexto Dinámico (✅ Hecho)
+- **Acción**: Implementación de `SoulAssembler` en `backend/app/services/soul_assembler.py`.
+- **Lógica**: Al conectar, el sistema consulta el repositorio local para obtener la afinidad (`Resonance`) y construye un `system_instruction` personalizado.
+- **Estado**: Implementado. Kizuna ahora reacciona diferente según el nivel de amistad acumulado.
 
-### 3. [BACKEND] Extracción y Guardado de Nuevas Memorias
-- **Estrategia**:
-    - **Opción A (Síncrona)**: Pedir a Gemini que extraiga hechos al final de la sesión (complicado si la conexión se corta).
-    - **Opción B (Paralela)**: Usar una segunda llamada ligera a Gemini Flash con el historial de texto reciente para extraer hechos clave en segundo plano cada X turnos.
+### 3. [BACKEND] Mente Subconsciente (🚧 En Progreso)
+- **Acción**: Implementación del servicio `SubconsciousMind` en `backend/app/services/subconscious.py`.
+- **Lógica**: Análisis en segundo plano de las transcripciones para detectar emociones y guardar "insights" en el repositorio local.
+- **Estado**: Activo en modo simulación (detecta palabras clave simples y actualiza afinidad). Pendiente integración completa con LLM para análisis profundo.
 
 --------------------------------------------------------------------------------
 
@@ -73,3 +74,16 @@ Este documento detalla los pasos secuenciales para transformar la implementació
 ### 2. [FRONTEND] Interfaz Inmersiva
 - **Acción**: Limpiar la UI. Eliminar botones de "Desconectar" visibles o consolas de debug.
 - **Estética**: La pantalla debe ser una ventana al "mundo" de Kizuna (o minimalista), no un panel de control.
+
+--------------------------------------------------------------------------------
+
+## Fase 5: Ascensión a la Nube (Preparación Final)
+**Objetivo**: Migrar la infraestructura local validada a Google Cloud Platform para producción masiva.
+
+### 1. [CLOUD] Migración a Spanner (Pendiente)
+- **Acción**: Reemplazar `LocalSoulRepository` con `SpannerSoulRepository`.
+- **Estrategia**: La interfaz `SoulRepository` abstrae la implementación subyacente, permitiendo un cambio transparente ("Lift-and-Shift") de JSON a Spanner SQL/Graph.
+- **Trigger**: Se ejecutará cuando el modelo de datos local esté estable y validado.
+
+### 2. [CLOUD] Despliegue de Redis (Pendiente)
+- **Acción**: Activar caché distribuida para sesiones de usuario y ensamblaje de almas en alta concurrencia.
