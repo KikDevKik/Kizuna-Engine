@@ -133,12 +133,8 @@ async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: a
                         # Handle Audio
                         if part.inline_data:
                             # part.inline_data.data is bytes
-                            # logger.debug(f"Gemini -> Client: Audio chunk ({len(part.inline_data.data)} bytes)")
-                            b64_data = base64.b64encode(part.inline_data.data).decode('utf-8')
-                            await websocket.send_json({
-                                "type": "audio",
-                                "data": b64_data
-                            })
+                            # Optimize: Send raw binary directly to avoid Base64 overhead
+                            await websocket.send_bytes(part.inline_data.data)
 
                         # Handle Text (if interleaved or final transcript)
                         if part.text:

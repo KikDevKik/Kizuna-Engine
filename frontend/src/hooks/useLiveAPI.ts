@@ -114,6 +114,7 @@ export const useLiveAPI = (): UseLiveAPI => {
       const wsUrl = `${BASE_WS_URL}?agent_id=${encodeURIComponent(agentId)}`;
       console.log(`Connecting to WebSocket at ${wsUrl}...`);
       const ws = new WebSocket(wsUrl);
+      ws.binaryType = "arraybuffer"; // Optimize: Handle raw binary audio frames
       socketRef.current = ws;
 
       ws.onopen = () => {
@@ -136,23 +137,15 @@ export const useLiveAPI = (): UseLiveAPI => {
 
       ws.onmessage = async (event) => {
         try {
-          const message = JSON.parse(event.data);
-
-          if (message.type === 'text') {
-              setLastAiMessage(message.data);
-          }
-
-          if (message.type === 'audio') {
+          if (event.data instanceof ArrayBuffer) {
+            // --- BINARY AUDIO FLOW (Optimized) ---
             setIsAiSpeaking(true);
 
-            const binaryString = atob(message.data);
-            const len = binaryString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            const int16Data = new Int16Array(bytes.buffer);
+            // Direct view into the buffer (No base64 decode needed)
+            const int16Data = new Int16Array(event.data);
             const float32Data = new Float32Array(int16Data.length);
+
+            // Standard Int16 -> Float32 normalization
             for (let i = 0; i < int16Data.length; i++) {
                 float32Data[i] = int16Data[i] / 32768.0;
             }
@@ -168,7 +161,14 @@ export const useLiveAPI = (): UseLiveAPI => {
             const startTime = Math.max(currentTime, nextStartTimeRef.current);
             source.start(startTime);
             nextStartTimeRef.current = startTime + buffer.duration;
+            return;
+          }
 
+          // --- TEXT / CONTROL FLOW ---
+          const message = JSON.parse(event.data);
+
+          if (message.type === 'text') {
+              setLastAiMessage(message.data);
           } else if (message.type === 'turn_complete') {
             console.log("Turn complete signal received.");
             setIsAiSpeaking(false);
