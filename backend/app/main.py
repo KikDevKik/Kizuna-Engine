@@ -36,10 +36,17 @@ def verify_user(token: str | None) -> str:
         except Exception as e:
             logger.warning(f"Authentication Failed: {e}")
             raise
-    elif settings.GCP_PROJECT_ID and not token:
-        # Enforce Auth in Prod
-        logger.warning("Connection rejected: No token provided in Production.")
-        raise ValueError("Authentication Required in Production")
+
+    # Enforce Auth in Prod (GCP)
+    if settings.GCP_PROJECT_ID:
+        if not token:
+            logger.warning("Connection rejected: No token provided in Production.")
+            raise ValueError("Authentication Required in Production")
+
+        # If we have a token but NO credentials in Prod -> CRITICAL ERROR
+        if not settings.FIREBASE_CREDENTIALS:
+            logger.critical("SECURITY ALERT: Production environment detected but FIREBASE_CREDENTIALS are missing. Cannot verify token.")
+            raise ValueError("Server Misconfiguration: Auth credentials missing in Production.")
 
     # Lab Mode / Guest
     return "guest_user"
