@@ -35,7 +35,7 @@ def run(playwright):
     print("Waiting for agents to load...")
     try:
         # Check for Kizuna card (Name) - wait longer for fetch
-        expect(page.get_by_text("Kizuna")).to_be_visible(timeout=10000)
+        expect(page.get_by_role("heading", name="Kizuna", exact=True)).to_be_visible(timeout=10000)
         print("Kizuna card visible.")
     except Exception as e:
         print(f"Kizuna card not found: {e}")

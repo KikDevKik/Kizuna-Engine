@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { SoulForgeModal } from './SoulForgeModal';
@@ -9,11 +9,11 @@ interface Agent {
   name: string;
   role: string;
   avatar_path?: string | null;
-  systemStatus?: string; // Optional decoration
+  systemStatus?: string;
 }
 
 interface AgentRosterProps {
-  onSelect?: (agent: Agent) => void;
+  onSelect?: (agentId: string) => void;
 }
 
 // ------------------------------------------------------------------
@@ -70,20 +70,33 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch Agents
-  const fetchAgents = async () => {
+  const fetchAgents = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('http://localhost:8000/api/agents/'); // Env var recommended
-      if (!res.ok) throw new Error('Failed to fetch agents');
+      setError(null);
+      // Use explicit URL or env var
+      const res = await fetch('http://localhost:8000/api/agents/');
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch agents: ${res.statusText}`);
+      }
+
       const data = await res.json();
 
-      // Transform data to match UI expectations if needed
-      // Add "Create New" placeholder
-      const loadedAgents = data.map((a: any) => ({
-        ...a,
-        systemStatus: 'ONLINE' // Mock status
+      if (!Array.isArray(data)) {
+        throw new Error("Invalid API response format");
+      }
+
+      // Transform data
+      const loadedAgents: Agent[] = data.map((a: any) => ({
+        id: a.id,
+        name: a.name,
+        role: a.role || 'UNKNOWN',
+        avatar_path: a.avatar_path,
+        systemStatus: 'ONLINE'
       }));
 
       // Append the "Create New" card
@@ -95,9 +108,16 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
       };
 
       setAgents([...loadedAgents, createCard]);
-    } catch (err) {
-      console.error(err);
-      // Fallback or empty state
+
+      // If we have agents, ensure active index is valid
+      if (activeIndex >= loadedAgents.length + 1) {
+          setActiveIndex(0);
+      }
+
+    } catch (err: any) {
+      console.error("Error fetching agents:", err);
+      setError(err.message);
+      // Fallback
       setAgents([{
           id: 'create-new',
           name: 'NEW SOUL',
@@ -107,14 +127,15 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []); // Remove dependency on activeIndex to prevent loops
 
   useEffect(() => {
     fetchAgents();
-  }, []);
+  }, [fetchAgents]);
 
   // Carousel Parameters
   const radius = 350;
+  // Prevent division by zero
   const theta = agents.length > 0 ? 360 / agents.length : 0;
 
   const rotateCarousel = (direction: number) => {
@@ -129,20 +150,28 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
 
   const handleSelect = () => {
     const selected = agents[activeIndex];
+    if (!selected) return;
+
     if (selected.id === 'create-new') {
       setIsModalOpen(true);
     } else if (onSelect) {
-      onSelect(selected);
+      // Pass the Agent ID to the parent
+      onSelect(selected.id);
     }
   };
 
-  const handleAgentCreated = () => {
-    fetchAgents();
-    // Optionally jump to the new agent (would be at index length-1 before the create card?)
-    // For now just refresh list.
+  const handleAgentCreated = async () => {
+    await fetchAgents();
+    // Move selection to the newly created agent (2nd to last, before 'create new')
+    // We can't easily predict the index without knowing the new list length,
+    // but typically it appends. The API returns all agents.
+    // Ideally we'd select the last real agent.
+    // For now, let's just refresh. User can navigate.
   };
 
-  if (isLoading) return <div className="text-cyan-500 font-technical text-center mt-20">ESTABLISHING LINK...</div>;
+  if (isLoading && agents.length === 0) {
+      return <div className="text-cyan-500 font-technical text-center mt-20 animate-pulse">ESTABLISHING LINK...</div>;
+  }
 
   return (
     <>
@@ -153,6 +182,11 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         exit="exit"
         className="flex flex-col items-center justify-center w-full h-[500px]"
       >
+        {error && (
+            <div className="absolute top-4 text-red-500 font-mono text-xs bg-black/50 p-2 border border-red-500">
+                CONNECTION_ERROR: {error}
+            </div>
+        )}
 
         {/* 3D SCENE */}
         <div className="perspective-scene" style={{ perspective: "1500px" }}>
@@ -189,7 +223,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                     }}
                     onClick={() => {
                        setActiveIndex(index);
-                       if (isFocused) handleSelect();
+                       // Optional: Select immediately on click? Better to keep it two-step (focus -> initiate)
                     }}
                   >
                     {isCreateCard ? (

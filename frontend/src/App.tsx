@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useLiveAPI } from './hooks/useLiveAPI';
 import { Layout } from './components/Layout';
 import { KizunaCore } from './components/KizunaCore';
 import { AgentRoster } from './components/AgentRoster';
-import { VisionPanel } from './components/VisionPanel'; // Assuming VisionPanel exists in components/VisionPanel.tsx
-import { EpistemicPanel } from './components/EpistemicPanel'; // Assuming EpistemicPanel exists in components/EpistemicPanel.tsx
+import { VisionPanel } from './components/VisionPanel';
+import { EpistemicPanel } from './components/EpistemicPanel';
 import { SystemLogs } from './components/SystemLogs';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Power } from 'lucide-react';
@@ -12,14 +12,40 @@ import './KizunaHUD.css';
 
 function App() {
   const { connected, status, volumeRef, isAiSpeaking, connect, disconnect } = useLiveAPI();
-  const [viewMode, setViewMode] = useState<'core' | 'roster'>('core');
+  const [viewMode, setViewMode] = useState<'core' | 'roster'>('roster'); // Default to Roster to force selection
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
   // Derived state for Law 4 logic (passed to Core)
   const isListening = connected && !isAiSpeaking;
 
+  const handleAgentSelect = useCallback((agentId: string) => {
+    console.log(`Agent Selected: ${agentId}`);
+    setSelectedAgentId(agentId);
+    setViewMode('core');
+    // Optional: Auto-connect?
+    // connect(agentId);
+    // Better to let user manually initiate via the big button in Core view,
+    // or initiate immediately if that's the UX.
+    // The Roster button says "INITIATE LINK", so maybe auto-connect is expected?
+    // Let's stick to the manual "SYNCING..." button in Core view for safety,
+    // but the user might expect the Roster button to start it.
+    // Given the "INITIATE LINK" text in Roster, let's just set the ID and switch view.
+    // The Core view has the Power button.
+  }, []);
+
   const handleToggleConnection = () => {
-    if (connected) disconnect();
-    else connect();
+    if (connected) {
+      disconnect();
+    } else {
+      if (selectedAgentId) {
+        connect(selectedAgentId);
+      } else {
+        // Fallback: If no agent selected (shouldn't happen in Core view if we force Roster first),
+        // maybe switch back to roster?
+        console.warn("No agent selected. Switching to Roster.");
+        setViewMode('roster');
+      }
+    }
   };
 
   return (
@@ -32,7 +58,7 @@ function App() {
           </h1>
           <div className="h-1 w-32 bg-cyan-500 skew-x-[-10deg] mt-1" />
           <div className="font-technical text-xs mt-1 opacity-70">
-            MULTIMODAL INTERFACE V4.0
+            MULTIMODAL INTERFACE V4.0 // AGENT: {selectedAgentId || 'NONE'}
           </div>
         </div>
 
@@ -79,8 +105,8 @@ function App() {
               <div className="mt-12 pointer-events-auto">
                 <button
                   onClick={handleToggleConnection}
-                  disabled={status === 'connecting'}
-                  className="kizuna-shard-btn-wrapper"
+                  disabled={status === 'connecting' || !selectedAgentId}
+                  className={`kizuna-shard-btn-wrapper ${!selectedAgentId ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
                 >
                   <span className="kizuna-shard-btn-inner">
                     {status === 'connecting' ? (
@@ -88,7 +114,7 @@ function App() {
                     ) : connected ? (
                       <>TERMINATE <Power size={20} /></>
                     ) : (
-                      <>INITIATE LINK <Power size={20} /></>
+                      <>{selectedAgentId ? 'INITIATE LINK' : 'SELECT AGENT'} <Power size={20} /></>
                     )}
                   </span>
                 </button>
@@ -103,7 +129,7 @@ function App() {
               transition={{ duration: 0.5 }}
               className="w-full h-full flex items-center justify-center pointer-events-auto"
             >
-              <AgentRoster onSelect={() => setViewMode('core')} />
+              <AgentRoster onSelect={handleAgentSelect} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -120,7 +146,7 @@ function App() {
            MEMORY_USAGE: 64TB // LATENCY: 12ms
         </div>
         <div>
-           SECURE_CHANNEL: {connected ? 'ENCRYPTED' : 'OPEN'} // PORT: 8000
+           SECURE_CHANNEL: {connected ? 'ENCRYPTED' : 'OPEN'} // TARGET: {selectedAgentId || 'NULL'}
         </div>
       </footer>
     </Layout>
