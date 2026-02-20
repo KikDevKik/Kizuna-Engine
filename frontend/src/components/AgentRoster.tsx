@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { SoulForgeModal } from './SoulForgeModal';
+import { DeleteAgentModal } from './DeleteAgentModal';
 import '../KizunaHUD.css';
 
 interface Agent {
@@ -69,6 +70,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -164,6 +166,25 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
 
   const handleAgentCreated = async () => {
     await fetchAgents();
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!agentToDelete) return;
+    try {
+      const res = await fetch(`http://localhost:8000/api/agents/${agentToDelete.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        throw new Error('Failed to delete agent');
+      }
+      setAgentToDelete(null);
+      await fetchAgents();
+      // Reset to beginning to avoid index bounds issues
+      setActiveIndex(0);
+    } catch (err: any) {
+      console.error("Delete error:", err);
+      setError(err.message || "DELETE_FAILED");
+    }
   };
 
   // Determine Card Style based on relative offset
@@ -279,6 +300,22 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                   <div
                     className={`agent-card-glass w-full h-full ${isFocused ? 'border-cyan-400' : 'border-slate-700'}`}
                   >
+                    {/* DELETE BUTTON (Only on Focused & Real Agents) */}
+                    {isFocused && !isCreateCard && (
+                      <div className="absolute top-2 right-2 z-50">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAgentToDelete(agent);
+                          }}
+                          className="p-2 text-slate-600 hover:text-red-500 transition-colors opacity-50 hover:opacity-100"
+                          title="Terminate Soul"
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      </div>
+                    )}
+
                     {isCreateCard ? (
                       // CREATE NEW CARD CONTENT
                       <div className="flex flex-col items-center justify-center h-full gap-4 text-cyan-400">
@@ -367,6 +404,13 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onCreated={handleAgentCreated}
+      />
+
+      <DeleteAgentModal
+        isOpen={!!agentToDelete}
+        onClose={() => setAgentToDelete(null)}
+        onConfirm={handleDeleteConfirm}
+        agentName={agentToDelete?.name || ''}
       />
     </>
   );

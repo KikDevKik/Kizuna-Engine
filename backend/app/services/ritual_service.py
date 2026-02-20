@@ -1,5 +1,6 @@
 import json
 import logging
+import asyncio
 from typing import List, Dict, Optional, Any
 from pydantic import BaseModel
 
@@ -30,6 +31,47 @@ class RitualService:
             self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
         else:
             logger.warning("Gemini API Key not found or SDK missing. Ritual will run in Mock Mode.")
+
+    async def _generate_with_retry(self, model: str, contents: str, config=None) -> Optional[str]:
+        """
+        Wraps Gemini generation with a retry mechanism for 429 Rate Limit errors.
+        Sleeps 4s then retries once.
+        """
+        if not self.client:
+             return None
+
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config
+            )
+            return response.text.strip()
+        except Exception as e:
+            # Check for 429 (Rate Limit)
+            # Some SDKs raise google.api_core.exceptions.ResourceExhausted (429)
+            # Others raise generic with code. We check broadly.
+            error_str = str(e)
+            is_429 = "429" in error_str or getattr(e, "code", 0) == 429 or getattr(e, "status_code", 0) == 429
+
+            if is_429:
+                logger.warning(f"Ritual: 429 Rate Limit on model {model}. Engaging Sleep Protocol (4s)...")
+                await asyncio.sleep(4)
+                try:
+                    logger.info("Ritual: Retrying generation...")
+                    response = await self.client.aio.models.generate_content(
+                        model=model,
+                        contents=contents,
+                        config=config
+                    )
+                    return response.text.strip()
+                except Exception as retry_e:
+                    logger.error(f"Ritual: Retry Failed: {retry_e}")
+                    return None
+            else:
+                # Other errors (e.g. 500, 400)
+                logger.error(f"Ritual: Generation Error: {e}")
+                return None
 
     async def process_ritual(self, history: List[RitualMessage], locale: str = "en") -> RitualResponse:
         """
@@ -86,29 +128,31 @@ class RitualService:
             "\n\nGATEKEEPER:"
         )
 
+        question = None
         if self.client:
-            try:
-                response = await self.client.aio.models.generate_content(
-                    model=settings.MODEL_SUBCONSCIOUS,
-                    contents=prompt
-                )
-                question = response.text.strip()
-            except Exception as e:
-                logger.error(f"Gemini Ritual Error: {e}")
-                question = "The connection flickers. Tell me more of your intent."
-        else:
-            # Fallback
-            qs = [
-                "Do you seek a servant or a mirror?",
-                "What flaw do you wish to embed in this soul?",
-                "If this soul could disobey you, when should it?"
-            ]
-            # Mock override for turn 2
-            if answer_count == 1:
-                question = "From what soil does this spirit rise, and in which tongues shall it speak?"
+            question = await self._generate_with_retry(
+                model=settings.MODEL_SUBCONSCIOUS,
+                contents=prompt
+            )
+
+        if not question:
+            # Fallback (Manual or Mock)
+            if self.client:
+                 # If client exists but _generate_with_retry returned None -> Connection flickers
+                 question = "The connection flickers. Tell me more of your intent."
             else:
-                count = len([m for m in history if m.role == "user"])
-                question = qs[count % len(qs)] if count < len(qs) else "Are you ready?"
+                # Full Mock Mode
+                qs = [
+                    "Do you seek a servant or a mirror?",
+                    "What flaw do you wish to embed in this soul?",
+                    "If this soul could disobey you, when should it?"
+                ]
+                # Mock override for turn 2
+                if answer_count == 1:
+                    question = "From what soil does this spirit rise, and in which tongues shall it speak?"
+                else:
+                    count = len([m for m in history if m.role == "user"])
+                    question = qs[count % len(qs)] if count < len(qs) else "Are you ready?"
 
         return RitualResponse(is_complete=False, message=question)
 
@@ -138,34 +182,36 @@ class RitualService:
             "\n".join([f"{m.role.upper()}: {m.content}" for m in history])
         )
 
+        agent_data = None
+
         if self.client:
-            try:
-                config = types.GenerateContentConfig(response_mime_type="application/json")
-                response = await self.client.aio.models.generate_content(
-                    model=settings.MODEL_DREAM,
-                    contents=prompt,
-                    config=config
-                )
-                text = response.text.strip()
-                if text.startswith("```json"):
-                    text = text[7:-3]
+            config = types.GenerateContentConfig(response_mime_type="application/json")
+            text = await self._generate_with_retry(
+                model=settings.MODEL_DREAM,
+                contents=prompt,
+                config=config
+            )
 
-                agent_data = json.loads(text)
+            if text:
+                try:
+                    if text.startswith("```json"):
+                        text = text[7:-3]
+                    agent_data = json.loads(text)
+                except json.JSONDecodeError:
+                    logger.error("Gemini Ritual: Failed to parse JSON response.")
+                    agent_data = None
 
-                # Validation / Defaults
-                agent_data.setdefault("name", "Unnamed Soul")
-                agent_data.setdefault("role", "Unknown")
-                agent_data.setdefault("base_instruction", "You are a soul without a past.")
-                agent_data.setdefault("lore", "Invoked from the void.")
-                agent_data.setdefault("traits", [])
-                agent_data.setdefault("native_language", "Unknown")
-                agent_data.setdefault("known_languages", [])
-
-            except Exception as e:
-                logger.error(f"Gemini Finalize Error: {e}")
-                agent_data = self._mock_agent()
+        if not agent_data:
+             agent_data = self._mock_agent()
         else:
-            agent_data = self._mock_agent()
+             # Validation / Defaults
+             agent_data.setdefault("name", "Unnamed Soul")
+             agent_data.setdefault("role", "Unknown")
+             agent_data.setdefault("base_instruction", "You are a soul without a past.")
+             agent_data.setdefault("lore", "Invoked from the void.")
+             agent_data.setdefault("traits", [])
+             agent_data.setdefault("native_language", "Unknown")
+             agent_data.setdefault("known_languages", [])
 
         return RitualResponse(is_complete=True, agent_data=agent_data)
 

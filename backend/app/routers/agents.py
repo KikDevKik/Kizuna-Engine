@@ -51,6 +51,19 @@ async def create_agent(request: CreateAgentRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_agent(agent_id: str):
+    """
+    Delete an agent by ID.
+    """
+    try:
+        success = await agent_service.delete_agent(agent_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/ritual", response_model=RitualFlowResponse, status_code=status.HTTP_200_OK)
 async def conduct_ritual(history: List[RitualMessage], response: Response, accept_language: str = Header(default="en")):
     """
