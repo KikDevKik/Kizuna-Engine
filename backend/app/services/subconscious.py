@@ -1,9 +1,18 @@
 import asyncio
 import logging
 import json
+import os
 from asyncio import Queue
 from datetime import datetime
 from ..repositories.base import SoulRepository
+from core.config import settings
+
+# Try import genai
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +35,11 @@ class SubconsciousMind:
             "tired": "The user is tired. Keep responses short and soothing."
         }
 
+        # Real GenAI Client (Phase 5)
+        self.client = None
+        if genai and settings.GEMINI_API_KEY:
+            self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
     def set_repository(self, repo: SoulRepository):
         self.repository = repo
 
@@ -44,12 +58,13 @@ class SubconsciousMind:
 
                 self.buffer.append(text_segment)
 
-                # Simple logic: Check buffer for keywords every time (or batch)
-                # For demo purposes, we check immediately.
-                full_text = " ".join(self.buffer).lower()
+                # Buffer accumulation logic (wait for ~10 words or sentence end)
+                full_text = " ".join(self.buffer)
+                if len(self.buffer) < 5 and not any(p in text_segment for p in ".!?"):
+                    continue
 
-                # Analyze (Mock Logic)
-                hint = self._analyze_sentiment(full_text)
+                # Analyze (Real or Mock)
+                hint = await self._analyze_sentiment(full_text)
 
                 if hint:
                     logger.info(f"🧠 Insight detected: {hint}")
@@ -104,13 +119,41 @@ class SubconsciousMind:
             # Don't crash the whole app, just log
             pass
 
-    def _analyze_sentiment(self, text: str) -> str | None:
+    async def _analyze_sentiment(self, text: str) -> str | None:
         """
-        Mock implementation of sentiment analysis.
-        In production, this calls Gemini 2.5 Flash.
+        Analyzes text for emotional cues.
+        Uses Real Gemini Flash if configured, otherwise falls back to keyword matching.
         """
+        # 1. Real Intelligence (The Guide Dog)
+        mock_mode = os.getenv("MOCK_GEMINI", "false").lower() == "true"
+
+        if self.client and not mock_mode:
+            try:
+                # Run in executor to avoid blocking loop if sync
+                # SDK 0.x is sync, 1.x has aio? client.aio.models...
+                # Assuming unified SDK supports async or we wrap it.
+                # For safety, let's wrap the generate call.
+
+                prompt = f"Analyze the user's emotional state from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return nothing."
+
+                # Using 2.0 Flash Exp or configured model
+                response = await self.client.aio.models.generate_content(
+                    model=settings.MODEL_SUBCONSCIOUS,
+                    contents=prompt
+                )
+
+                result = response.text.strip()
+                if "SYSTEM_HINT:" in result:
+                    return result.replace("SYSTEM_HINT:", "").strip()
+                return None
+
+            except Exception as e:
+                logger.warning(f"Subconscious inference failed: {e}. Fallback to keywords.")
+
+        # 2. Fallback (Keyword Matching)
+        text_lower = text.lower()
         for trigger, hint in self.triggers.items():
-            if trigger in text:
+            if trigger in text_lower:
                 return hint
         return None
 
