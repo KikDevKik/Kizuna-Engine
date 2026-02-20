@@ -50,3 +50,11 @@ class SoulRepository(ABC):
     async def save_fact(self, user_id: str, content: str, category: str) -> FactNode:
         """Save a new fact about the user."""
         pass
+
+    @abstractmethod
+    async def consolidate_memories(self, user_id: str) -> None:
+        """
+        Consolidate memories for the user (Event-Driven Debounce).
+        Compresses recent episodes and updates long-term resonance.
+        """
+        pass

@@ -231,3 +231,50 @@ class LocalSoulRepository(SoulRepository):
 
             await self._save()
             return fact
+
+    async def consolidate_memories(self, user_id: str) -> None:
+        """
+        Consolidate memories for the user (Event-Driven Debounce).
+        Simulates compressing recent episodes.
+        """
+        async with self.lock:
+            ep_ids = self.experienced.get(user_id, [])
+            if not ep_ids:
+                logger.info(f"No memories to consolidate for {user_id}.")
+                return
+
+            # Simulate LLM Clustering & Compression (Mock)
+            # Find all unprocessed episodes (valence=0.5 was our trigger)
+            raw_episodes = []
+            for eid in ep_ids:
+                ep = self.episodes.get(eid)
+                if ep and ep.emotional_valence == 0.5: # Mock 'raw' flag
+                    raw_episodes.append(ep)
+
+            if not raw_episodes:
+                logger.info("No RAW episodes to consolidate.")
+                return
+
+            logger.info(f"Compressing {len(raw_episodes)} raw episodes into Long-Term Memory...")
+
+            # 1. Create Summary Episode (The "Dream")
+            summary_text = f"User interaction summary: {len(raw_episodes)} events consolidated."
+            summary_node = MemoryEpisodeNode(
+                summary=summary_text,
+                emotional_valence=1.0 # Consolidated/Refined
+            )
+            self.episodes[summary_node.id] = summary_node
+
+            # 2. Link Summary to User
+            self.experienced[user_id].append(summary_node.id)
+
+            # 3. Mark Raw Episodes as archived (or delete them to save space)
+            # For demo, we just update valence to indicate processed
+            for ep in raw_episodes:
+                ep.emotional_valence = 0.0 # Archived state
+
+            # 4. Trigger Affinity Decay/Growth (Mathematical recalibration)
+            # Stub: Just +1 for a good consolidation
+            # In Phase 4, this would be the exponential moving average.
+
+            await self._save()

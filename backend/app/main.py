@@ -15,6 +15,7 @@ from app.repositories.local_graph import LocalSoulRepository
 from app.repositories.spanner_graph import SpannerSoulRepository
 from app.services.auth import FirebaseAuth
 from app.models.graph import AgentNode
+from app.services.sleep_manager import SleepManager
 from core.config import settings
 import os
 
@@ -30,6 +31,9 @@ if settings.GCP_PROJECT_ID and settings.SPANNER_INSTANCE_ID:
 else:
     logger.info("🏠 Using Local Soul Repository (Development Mode)")
     soul_repo = LocalSoulRepository()
+
+# Initialize Sleep Manager (Phase 4)
+sleep_manager = SleepManager(soul_repo)
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 
@@ -102,6 +106,10 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
     # Ensure user exists in Graph
     await soul_repo.get_or_create_user(user_id)
 
+    # Phase 4: Waking Up
+    # If the user reconnects within the Grace Period, cancel any pending consolidation.
+    sleep_manager.cancel_sleep(user_id)
+
     try:
         # Load agent and assemble system instruction using Repository
         system_instruction = await assemble_soul(agent_id, user_id, soul_repo)
@@ -155,3 +163,6 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
             pass
     finally:
         logger.info("WebSocket session closed.")
+        # Phase 4: Entering REM Sleep (Debounced Consolidation)
+        # Schedule consolidation after grace period.
+        sleep_manager.schedule_sleep(user_id)
