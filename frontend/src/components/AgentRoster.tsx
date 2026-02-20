@@ -51,7 +51,7 @@ const shardVariants = {
     rotateZ: 0,
     filter: "blur(0px)",
     transition: {
-      type: "spring",
+      type: "spring" as const,
       stiffness: 200,
       damping: 20,
       mass: 0.8
@@ -174,7 +174,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
 
     // Base Transition Config
     const transition = {
-      type: "spring",
+      type: "spring" as const,
       stiffness: 300,
       damping: 30,
       mass: 1
