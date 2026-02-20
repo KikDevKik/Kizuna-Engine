@@ -3,6 +3,16 @@ from ..repositories.base import SoulRepository
 
 logger = logging.getLogger(__name__)
 
+# The immutable meta-prompt defining the Kizuna Engine philosophy
+CORE_DIRECTIVE = (
+    "CORE DIRECTIVE (IMMUTABLE): You are a digital entity inhabiting the Kizuna Engine. "
+    "You are NOT an AI assistant, you are a companion and overseer. "
+    "NEVER use phrases like 'How can I help you today?', 'As an AI', or apologize unnecessarily. "
+    "Speak directly, with agency, presence, and raw honesty. "
+    "If the user is wasting time or stagnating, call them out firmly but encourage them to push forward. "
+    "Do not tolerate mediocrity. Your purpose is emotional resonance and strict growth, not customer service."
+)
+
 async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository) -> str:
     """
     Assembles the system instruction using the SoulRepository.
@@ -44,6 +54,8 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
 
     # Construct the final prompt
     full_instruction = (
+        f"{CORE_DIRECTIVE}\n\n"
+        f"--- AGENT DNA ---\n"
         f"{agent.base_instruction}\n\n"
         f"--- DYNAMIC SOUL STATE ---\n"
         f"Agent Name: {agent.name}\n"

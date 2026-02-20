@@ -1,6 +1,8 @@
 import json
 import logging
 import asyncio
+import aiofiles
+import os
 from typing import List, Optional, Dict
 from pathlib import Path
 from datetime import datetime
@@ -102,20 +104,13 @@ class LocalSoulRepository(SoulRepository):
 
         # Ensure graph.json is initialized if it didn't exist
         if not self.data_path.exists():
-            self._save_sync()
-
-    def _save_sync(self):
-        """Synchronous save for initialization."""
-        self._write_to_disk()
+            await self._save()
 
     async def _save(self):
-        """Async wrapper for save."""
-        # In a real scenario with aiofiles, we'd await here.
-        # For simplicity with JSON dumps, we'll keep it sync-wrapped or just call it.
-        # Since this is a local simulation, a small blocking write is acceptable for Phase 3.1
-        self._write_to_disk()
+        """Async save using aiofiles."""
+        await self._write_to_disk()
 
-    def _write_to_disk(self):
+    async def _write_to_disk(self):
         # Helper to dump pydantic models to dict
         def to_dict_list(models):
              return [m.model_dump(mode='json') for m in models]
@@ -139,13 +134,25 @@ class LocalSoulRepository(SoulRepository):
 
         temp_path = self.data_path.with_suffix(".tmp")
         try:
-            with open(temp_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, default=str)
-            temp_path.replace(self.data_path)
+            # Serialize to string first (CPU bound, but usually fast enough for JSON)
+            # For extremely large graphs, this should also be offloaded to an executor.
+            data_str = json.dumps(data, indent=2, default=str)
+
+            async with aiofiles.open(temp_path, "w", encoding="utf-8") as f:
+                await f.write(data_str)
+
+            # Use run_in_executor for atomic replace to be truly non-blocking
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, os.replace, temp_path, self.data_path)
+
         except Exception as e:
             logger.error(f"Failed to save graph database: {e}")
             if temp_path.exists():
-                temp_path.unlink()
+                # Cleanup also async/non-blocking ideally, but unlink is fast.
+                try:
+                    temp_path.unlink()
+                except:
+                    pass
 
     async def get_or_create_user(self, user_id: str, name: str = "Anonymous") -> UserNode:
         async with self.lock:
