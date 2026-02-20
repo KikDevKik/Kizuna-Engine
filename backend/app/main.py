@@ -16,6 +16,8 @@ from app.repositories.spanner_graph import SpannerSoulRepository
 from app.services.auth import FirebaseAuth
 from app.models.graph import AgentNode
 from app.services.sleep_manager import SleepManager
+from app.services.cache import cache
+from app.routers import warmup
 from core.config import settings
 import os
 
@@ -37,9 +39,14 @@ sleep_manager = SleepManager(soul_repo)
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 
+# Register Routers (Phase 5)
+app.include_router(warmup.router)
+
 # Lifecycle Event to load Graph
 @app.on_event("startup")
 async def startup_event():
+    logger.info("Initializing Cache...")
+    await cache.initialize()
     logger.info("Initializing Soul Repository...")
     await soul_repo.initialize()
 
@@ -107,12 +114,19 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
     await soul_repo.get_or_create_user(user_id)
 
     # Phase 4: Waking Up
-    # If the user reconnects within the Grace Period, cancel any pending consolidation.
     sleep_manager.cancel_sleep(user_id)
 
     try:
-        # Load agent and assemble system instruction using Repository
-        system_instruction = await assemble_soul(agent_id, user_id, soul_repo)
+        # Phase 5: Neural Sync (Redis Check)
+        cache_key = f"soul:{user_id}:{agent_id}"
+        system_instruction = await cache.get(cache_key)
+
+        if system_instruction:
+            logger.info("⚡ Using Warmed-up Soul from Cache (Zero Latency).")
+        else:
+            logger.info("❄️ Cold Start: Assembling Soul from Graph...")
+            system_instruction = await assemble_soul(agent_id, user_id, soul_repo)
+
     except ValueError as e:
         logger.warning(f"Connection rejected: {e}")
         await websocket.close(code=1008, reason="Agent not found")

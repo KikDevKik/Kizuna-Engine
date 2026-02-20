@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import logging
+import json
 from fastapi import WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
@@ -51,36 +52,52 @@ async def send_to_gemini(websocket: WebSocket, session):
         carry_over = bytearray()  # Buffer for odd bytes
 
         while True:
-            # Client sends raw PCM audio bytes
-            # Typically 256 bytes per packet from client (8ms)
-            data = await websocket.receive_bytes()
-            if not data:
-                logger.warning("Received empty data from client.")
-                continue
+            # Handle Multimodal Input (Phase 5)
+            # We must detect if the message is bytes (audio) or text/json (video/control)
+            message = await websocket.receive()
 
-            # Prepend carry_over from previous iteration
-            if carry_over:
-                data = carry_over + data
-                carry_over.clear()
+            if "bytes" in message:
+                # --- AUDIO FLOW ---
+                data = message["bytes"]
+                if not data: continue
 
-            # Handle odd number of bytes (alignment check)
-            if len(data) % 2 != 0:
-                # Save the last byte for next time
-                carry_over.extend(data[-1:])
-                # Process the rest
-                data = data[:-1]
+                # Prepend carry_over from previous iteration
+                if carry_over:
+                    data = carry_over + data
+                    carry_over.clear()
 
-            packet_count += 1
-            if packet_count % 100 == 0:
-                logger.info(f"Client -> Gemini: Received {packet_count} packets. Buffer size: {len(audio_buffer)}")
+                # Handle odd number of bytes (alignment check)
+                # In Python 3.12, extend works with bytes too.
+                # data is 'bytes'. We need to be careful.
+                if len(data) % 2 != 0:
+                    carry_over.extend(data[-1:])
+                    data = data[:-1]
 
-            audio_buffer.extend(data)
+                packet_count += 1
+                audio_buffer.extend(data)
 
-            # Buffer up to ~100ms (3200 bytes) to ensure efficient streaming
-            if len(audio_buffer) >= AUDIO_BUFFER_THRESHOLD:
-                # logger.debug(f"Sending {len(audio_buffer)} bytes to Gemini")
-                await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
-                audio_buffer.clear()
+                # Buffer up to ~100ms (3200 bytes)
+                if len(audio_buffer) >= AUDIO_BUFFER_THRESHOLD:
+                    await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
+                    audio_buffer.clear()
+
+            elif "text" in message:
+                # --- VIDEO / CONTROL FLOW ---
+                try:
+                    payload = json.loads(message["text"])
+                    if payload.get("type") == "image":
+                        # Phase 5: Ojos Digitales
+                        # Payload: {type: "image", data: "base64..."}
+                        b64_image = payload.get("data")
+                        if b64_image:
+                            logger.info("📷 Sending Video Frame to Gemini...")
+                            # Decode base64 to bytes
+                            image_bytes = base64.b64decode(b64_image)
+                            await session.send(input={"data": image_bytes, "mime_type": "image/jpeg"})
+                except json.JSONDecodeError:
+                    logger.warning("Received invalid JSON text from client.")
+                except Exception as e:
+                    logger.error(f"Error handling text message: {e}")
 
     except WebSocketDisconnect:
         logger.info("Client disconnected (send_to_gemini)")

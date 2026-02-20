@@ -21,4 +21,9 @@ class Settings:
     SPANNER_DATABASE_ID: str = os.getenv("SPANNER_DATABASE_ID", "")
     FIREBASE_CREDENTIALS: str = os.getenv("FIREBASE_CREDENTIALS", "") # Path to JSON or JSON content
 
+    # Redis Configuration (Phase 5)
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
+
 settings = Settings()
