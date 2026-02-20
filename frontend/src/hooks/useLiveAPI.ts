@@ -80,8 +80,9 @@ export const useLiveAPI = (): UseLiveAPI => {
 
     try {
       // Initialize WebSocket
-      // Assuming localhost:8000 based on standard dev setup if proxy isn't configured
-      const wsUrl = `ws://localhost:5173/ws/live?agent_id=${agentId}`;
+      // Connect to the same host/port as the frontend, letting Vite proxy to backend
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws/live?agent_id=${agentId}`;
       const ws = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
