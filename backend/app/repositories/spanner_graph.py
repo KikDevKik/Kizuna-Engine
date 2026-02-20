@@ -1,5 +1,10 @@
-from google.cloud import spanner
-from google.cloud.spanner_v1.pool import FixedSizePool
+try:
+    from google.cloud import spanner
+    from google.cloud.spanner_v1.pool import FixedSizePool
+except ImportError:
+    spanner = None
+    FixedSizePool = None
+
 from ..repositories.base import SoulRepository
 from ..models.graph import UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode
 import logging
@@ -25,6 +30,10 @@ class SpannerSoulRepository(SoulRepository):
 
     async def initialize(self) -> None:
         """Connect to Cloud Spanner."""
+        if spanner is None:
+            logger.error("❌ google-cloud-spanner is not installed. Cannot initialize Spanner Repository.")
+            raise ImportError("google-cloud-spanner library missing")
+
         logger.info(f"Connecting to Spanner Instance: {self.instance_id}, Database: {self.database_id}")
         try:
             self.client = spanner.Client(project=self.project_id)

@@ -4,7 +4,6 @@ import logging
 from app.services.soul_assembler import assemble_soul
 from app.services.cache import cache
 from app.services.auth import FirebaseAuth
-from app.repositories.spanner_graph import SpannerSoulRepository
 from app.repositories.local_graph import LocalSoulRepository
 from core.config import settings
 
@@ -17,9 +16,13 @@ class WarmupRequest(BaseModel):
 
 # Dependency to inject the correct repository
 def get_repository():
-    # This logic duplicates Main.py a bit, but for now it's fine.
+    # Lazy Factory Logic duplicated from main (allows router isolation)
     if settings.GCP_PROJECT_ID and settings.SPANNER_INSTANCE_ID:
-        return SpannerSoulRepository()
+        try:
+            from app.repositories.spanner_graph import SpannerSoulRepository
+            return SpannerSoulRepository()
+        except ImportError:
+            return LocalSoulRepository()
     return LocalSoulRepository()
 
 async def perform_warmup(user_id: str, agent_id: str):
