@@ -99,6 +99,9 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         systemStatus: 'ONLINE'
       }));
 
+      // Ensure consistent sort order (by Name)
+      loadedAgents.sort((a, b) => a.name.localeCompare(b.name));
+
       // Append the "Create New" card
       const createCard: Agent = {
         id: 'create-new',
@@ -201,6 +204,14 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
               const isFocused = activeIndex === index;
               const isCreateCard = agent.id === 'create-new';
 
+              // Calculate dynamic Z-Index based on distance from active index
+              // We need to account for wrapping (e.g., if total 5, index 4 is "close" to index 0)
+              let dist = Math.abs(index - activeIndex);
+              if (dist > agents.length / 2) {
+                 dist = agents.length - dist;
+              }
+              const zIndex = 100 - dist;
+
               return (
                 <motion.div
                   key={agent.id}
@@ -211,6 +222,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                     rotateZ: isFocused ? "-2deg" : "-15deg",
                     opacity: isFocused ? 1 : 0.4,
                     scale: isFocused ? 1.05 : 0.9,
+                    zIndex: zIndex, // Critical Fix: Ensure focused item is visually on top
                   }}
                   transition={{ duration: 0.4 }}
                 >
