@@ -44,9 +44,13 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     try {
       // Empty history triggers initial question from backend
       // Using absolute URL to avoid Proxy method stripping or 404s
+      const locale = navigator.language || 'en';
       const response = await fetch('http://localhost:8000/api/agents/ritual', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept-Language': locale
+        },
         body: JSON.stringify([])
       });
 
@@ -83,9 +87,13 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setError(null);
 
     try {
+      const locale = navigator.language || 'en';
       const response = await fetch('http://localhost:8000/api/agents/ritual', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept-Language': locale
+        },
         body: JSON.stringify(newHistory)
       });
 

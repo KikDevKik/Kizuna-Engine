@@ -31,7 +31,7 @@ class RitualService:
         else:
             logger.warning("Gemini API Key not found or SDK missing. Ritual will run in Mock Mode.")
 
-    async def process_ritual(self, history: List[RitualMessage]) -> RitualResponse:
+    async def process_ritual(self, history: List[RitualMessage], locale: str = "en") -> RitualResponse:
         """
         Conducts the Incantation Ritual (Soul Forge).
         Analyzes the conversation history to either ask the next question or finalize the Soul.
@@ -40,20 +40,29 @@ class RitualService:
 
         # If no history, start the ritual
         if not history:
-             return await self._start_ritual()
+             return await self._start_ritual(locale)
 
         # If we have 3 or more user answers, we finalize
         if len(user_answers) >= 3:
             return await self._finalize_soul(history)
         else:
-            return await self._next_question(history, len(user_answers))
+            return await self._next_question(history, len(user_answers), locale)
 
-    async def _start_ritual(self) -> RitualResponse:
-        # The Hook
-        q = "The Void gazes back. State your desire. What form shall I take?"
+    async def _start_ritual(self, locale: str) -> RitualResponse:
+        # The Hook - Localized
+        q_en = "The Void gazes back. State your desire. What form shall I take?"
+        q_es = "El Vacío te devuelve la mirada. Declara tu deseo. ¿Qué forma debo tomar?"
+        q_jp = "虚空が見つめ返している。望みを言え。どのような姿になるべきか？"
+
+        q = q_en # default
+        if locale.startswith("es"):
+            q = q_es
+        elif locale.startswith("ja") or locale.startswith("jp"):
+            q = q_jp
+
         return RitualResponse(is_complete=False, message=q)
 
-    async def _next_question(self, history: List[RitualMessage], answer_count: int) -> RitualResponse:
+    async def _next_question(self, history: List[RitualMessage], answer_count: int, locale: str) -> RitualResponse:
         # TURN 2 FORCE: Origin/Language Check
         # If we have 1 user answer (entering turn 2), we MUST ask about language.
         force_instruction = ""
@@ -70,6 +79,7 @@ class RitualService:
             "Ask ONE single, short, abstract, or slightly unsettling follow-up question to dig deeper into their needs. "
             "Do NOT be a helpful assistant. Be an enigma. Do not repeat questions. "
             "Focus on: Personality, Hidden Fears, or Core Function. "
+            f"\n[LANGUAGE DIRECTIVE]: You MUST respond in the same language as the user's last message. If the history is empty or the user hasn't spoken, use the detected locale: {locale}."
             + force_instruction +
             "\n\nCurrent Ritual History:\n" +
             "\n".join([f"{m.role.upper()}: {m.content}" for m in history]) +
