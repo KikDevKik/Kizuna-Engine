@@ -13,6 +13,7 @@ La arquitectura actual está diseñada como un sistema de streaming de audio ful
     3. **Envío (Gemini -> Client)**: Recibe chunks de audio y texto de Gemini en tiempo real y los reenvía al cliente mediante un protocolo JSON personalizado (`{'type': 'audio', ...}`, `{'type': 'turn_complete'}`).
 - **Gestión de Conexión**: Utiliza `asyncio.TaskGroup` para manejar tareas de envío y recepción simultáneamente, asegurando que la desconexión en un sentido cierre limpiamente ambos lados.
 - **Modelo**: Configurado para usar `gemini-2.5-flash-native-audio-preview-12-2025`.
+- **Memoria y Mente**: Implementación Híbrida Local (`LocalSoulRepository`) activa. Simula la estructura de grafos de Google Cloud Spanner utilizando JSON local para persistencia de episodios, hechos y resonancia emocional.
 
 ### Frontend (frontend/src/)
 - **Tecnología**: React, TypeScript, Vite.
@@ -28,10 +29,12 @@ La arquitectura actual está diseñada como un sistema de streaming de audio ful
 Anteriormente, en `frontend/src/hooks/useLiveAPI.ts`, existía una conexión errónea que conectaba el micrófono directamente a los altavoces: `source.connect(ctx.destination);`
 **Estado Actual**: El problema ha sido corregido. La línea problemática fue eliminada, asegurando que el audio del micrófono solo se envíe al AudioWorklet para su transmisión al backend, evitando el eco y el feedback infinito.
 
-### 🟠 Limitación: Ausencia de Memoria Epistémica
-Actualmente, la "personalidad" de Kizuna reside únicamente en una instrucción de sistema simple ("Eres Kizuna...").
-- **Problema**: Si la sesión se reinicia, Kizuna olvida todo. No hay persistencia de hechos sobre el usuario (ej. nombre de mascotas, preferencias).
-- **Impacto**: Rompe la ilusión de una relación continua ("Isekai Inverso"). Se siente como un "NPC genérico" en lugar de un compañero único.
+### 🟡 Estado de Transición: Memoria Epistémica Híbrida (Local/Nube)
+Originalmente, Kizuna carecía de memoria a largo plazo. Actualmente, se ha implementado una solución **semi-aplicada** que sienta las bases para el futuro RAG en la nube.
+- **Implementación Actual**: Se utiliza `LocalSoulRepository` (basado en JSON) para simular la estructura de datos de un Grafo de Conocimiento (Usuarios, Agentes, Episodios, Hechos, Resonancia).
+- **Mente Subconsciente**: El servicio `SubconsciousMind` opera en segundo plano analizando transcripciones para detectar emociones y generar "insights" que se guardan localmente.
+- **Estrategia**: El sistema funciona 100% local para desarrollo ágil, pero la arquitectura (`SoulRepository` interface) está diseñada para cambiar a **Google Cloud Spanner** sin modificar la lógica de negocio cuando el proyecto entre en fase de producción.
+- **Impacto**: Kizuna ya puede "recordar" interacciones pasadas y ajustar su personalidad dinámicamente (`SoulAssembler`) basado en la afinidad acumulada localmente.
 
 ### 🟡 Limitación: Unimodalidad (Solo Audio)
 La implementación actual solo transmite audio.
@@ -41,7 +44,7 @@ La implementación actual solo transmite audio.
 --------------------------------------------------------------------------------
 
 ## 3. Arquitectura Propuesta (La Visión Kizuna)
-Para lograr el "Motor de Encarnación Universal", la arquitectura debe evolucionar hacia un sistema multimodal con memoria persistente.
+Para lograr el "Motor de Encarnación Universal", la arquitectura debe evolucionar hacia un sistema multimodal con memoria persistente distribuida.
 
 ### A. Flujo de Audio Full-Duplex (✅ IMPLEMENTADO)
 El sistema actual cumple con el objetivo de latencia total (boca-a-oído) de 400ms-600ms.
@@ -50,11 +53,11 @@ El sistema actual cumple con el objetivo de latencia total (boca-a-oído) de 400
 3. **Frontend (Speaker)**: WebSocket -> Decode Base64 -> AudioBufferSource -> AudioContext.destination.
 *Nota: La capacidad de interrupción (Barge-in) es posible gracias a la arquitectura full-duplex.*
 
-### B. Sistema de Memoria Epistémica (Deep Memory)
-Para que Kizuna recuerde "tienes un gato llamado Luna" entre sesiones:
-1. **Base de Datos Vectorial (RAG)**: Implementar una base de datos (como Pinecone, Weaviate o incluso un JSON local para empezar) que almacene "hechos" extraídos de conversaciones anteriores.
-2. **Inyección de Contexto**: Al iniciar una sesión (`GeminiLiveService.connect`), consultar la base de datos por hechos relevantes e inyectarlos en el `system_instruction` o como un mensaje inicial invisible ("Recuerda: El usuario tiene un gato llamado Luna").
-3. **Extracción de Memorias**: Un proceso secundario (o un prompt específico al final de la sesión) que analice la conversación y extraiga nuevos hechos para guardarlos.
+### B. Sistema de Memoria Epistémica (Deep Memory) - (🔄 SEMI-APLICADO)
+La infraestructura para que Kizuna recuerde hechos está activa en modo Local:
+1. **Base de Datos Vectorial (RAG)**: Actualmente implementada como `LocalSoulRepository` (JSON). Esta estructura espejo permite validar el modelo de datos (Grafo) antes de la migración final a Google Cloud Spanner.
+2. **Inyección de Contexto**: Al iniciar una sesión, `SoulAssembler` consulta el repositorio local para construir un `system_instruction` único basado en la `Resonance` (afinidad) y los hechos recordados.
+3. **Mente Subconsciente**: Un proceso secundario (`SubconsciousMind`) analiza la conversación en tiempo real (simulado localmente) para extraer nuevos hechos y emociones, guardándolos en el JSON local para futuras sesiones.
 
 ### C. Percepción Multimodal (Visión)
 Para que Kizuna "vea":
