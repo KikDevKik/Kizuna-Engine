@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Cpu, User, FileText } from 'lucide-react';
 import '../KizunaHUD.css';
@@ -15,6 +15,22 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
   const [instruction, setInstruction] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,9 +71,13 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
 
       onCreated();
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Unknown error occurred');
+      let message = 'Unknown error occurred';
+      if (err instanceof Error) {
+        message = err.message;
+      }
+      setError(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -72,6 +92,9 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
           onClick={onClose} // Close on backdrop click
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="soul-forge-title"
         >
           <motion.div
             initial={{ scale: 0.9, y: 20, opacity: 0 }}
@@ -92,7 +115,7 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
               {/* Header */}
               <div className="flex justify-between items-start mb-8 border-b border-white/10 pb-4">
                 <div>
-                  <h2 className="font-monumental text-3xl tracking-widest text-cyan-400">
+                  <h2 id="soul-forge-title" className="font-monumental text-3xl tracking-widest text-cyan-400">
                     SOUL FORGE <span className="text-white/30 text-lg align-top">PROTOCOL</span>
                   </h2>
                   <p className="font-technical text-xs text-cyan-200/60 mt-1">
@@ -101,7 +124,8 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
                 </div>
                 <button
                   onClick={onClose}
-                  className="text-white/50 hover:text-red-500 transition-colors"
+                  className="text-white/50 hover:text-red-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-sm"
+                  aria-label="Close modal"
                 >
                   <X size={32} />
                 </button>
@@ -112,10 +136,11 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
 
                 {/* Name Input */}
                 <div className="space-y-2">
-                  <label className="font-technical text-cyan-300 text-sm flex items-center gap-2">
+                  <label htmlFor="agent-name" className="font-technical text-cyan-300 text-sm flex items-center gap-2">
                     <User size={14} /> DESIGNATION (NAME)
                   </label>
                   <input
+                    id="agent-name"
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -128,10 +153,11 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
 
                 {/* Role Input */}
                 <div className="space-y-2">
-                  <label className="font-technical text-cyan-300 text-sm flex items-center gap-2">
+                  <label htmlFor="agent-role" className="font-technical text-cyan-300 text-sm flex items-center gap-2">
                     <Cpu size={14} /> FUNCTIONAL ROLE
                   </label>
                   <input
+                    id="agent-role"
                     type="text"
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
@@ -144,10 +170,11 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
 
                 {/* Base Instruction Input */}
                 <div className="space-y-2">
-                  <label className="font-technical text-cyan-300 text-sm flex items-center gap-2">
+                  <label htmlFor="agent-instruction" className="font-technical text-cyan-300 text-sm flex items-center gap-2">
                     <FileText size={14} /> CORE DIRECTIVE (SYSTEM PROMPT)
                   </label>
                   <textarea
+                    id="agent-instruction"
                     value={instruction}
                     onChange={(e) => setInstruction(e.target.value)}
                     required
@@ -170,7 +197,7 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
                    <button
                     type="button"
                     onClick={onClose}
-                    className="font-technical text-white/50 hover:text-white px-6 py-2 transition-colors"
+                    className="font-technical text-white/50 hover:text-white px-6 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-sm"
                   >
                     ABORT
                   </button>
@@ -178,7 +205,7 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="kizuna-shard-btn-wrapper relative group"
+                    className="kizuna-shard-btn-wrapper relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-sm"
                   >
                      <span className="kizuna-shard-btn-inner">
                        {isSubmitting ? 'COMPILING...' : 'INITIALIZE SOUL'}
