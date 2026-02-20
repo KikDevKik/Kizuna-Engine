@@ -15,6 +15,7 @@ from app.repositories.local_graph import LocalSoulRepository
 from app.models.graph import AgentNode
 from app.services.sleep_manager import SleepManager
 from app.services.cache import cache
+from app.services.seeder import seed_data
 from app.routers import warmup, agents
 from core.config import settings
 import os
@@ -76,6 +77,10 @@ app.include_router(agents.router)
 async def startup_event():
     logger.info("Initializing Cache...")
     await cache.initialize()
+
+    # Ensure Data Integrity (Seeding)
+    await seed_data()
+
     logger.info("Initializing Soul Repository...")
     await soul_repo.initialize()
 
