@@ -43,13 +43,19 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     try {
       // Empty history triggers initial question from backend
-      const response = await fetch('/api/agents/ritual', {
+      // Using absolute URL to avoid Proxy method stripping or 404s
+      const response = await fetch('http://localhost:8000/api/agents/ritual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify([])
       });
 
-      if (!response.ok) throw new Error('Failed to initiate ritual');
+      if (!response.ok) {
+          if (response.status === 405) {
+             throw new Error('Method Not Allowed (405). Check backend routing.');
+          }
+          throw new Error(`Failed to initiate ritual: ${response.status}`);
+      }
 
       const data = await response.json();
 
@@ -77,7 +83,7 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setError(null);
 
     try {
-      const response = await fetch('/api/agents/ritual', {
+      const response = await fetch('http://localhost:8000/api/agents/ritual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newHistory)
@@ -89,12 +95,6 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
       if (data.is_complete) {
         setStatus('complete');
-        // We don't add a final system message here usually, or maybe a "Ritual Complete" message?
-        // The backend might return a message even on completion?
-        // Let's check the backend logic again.
-        // Backend: returns { is_complete: True, agent: ... }
-        // It does NOT return a message field on completion in the code I read.
-        // So we stop here. The UI will handle the completion animation.
       } else if (data.message) {
         setMessages(prev => [...prev, { role: 'system', content: data.message }]);
       }
