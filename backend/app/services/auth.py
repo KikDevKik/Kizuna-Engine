@@ -1,5 +1,11 @@
-import firebase_admin
-from firebase_admin import auth, credentials
+try:
+    import firebase_admin
+    from firebase_admin import auth, credentials
+except ImportError:
+    firebase_admin = None
+    auth = None
+    credentials = None
+
 import logging
 from core.config import settings
 import os
@@ -22,8 +28,15 @@ class FirebaseAuth:
         if cls._initialized:
             return
 
+        if firebase_admin is None:
+            logger.error("❌ firebase_admin is not installed. Auth will fail unless in Mock mode.")
+            return
+
         try:
             cred_path = settings.FIREBASE_CREDENTIALS
+            if not cred_path:
+                logger.warning("⚠️ No FIREBASE_CREDENTIALS provided.")
+                return
 
             # Check if it's a path or raw JSON
             cred = None
@@ -44,8 +57,6 @@ class FirebaseAuth:
             logger.info("Firebase Admin SDK initialized.")
         except Exception as e:
             logger.error(f"Failed to initialize Firebase Admin: {e}")
-            # Do not raise here, allow app to start in case of local dev fallback
-            # But verify_token will fail.
 
     @staticmethod
     def verify_token(token: str) -> str:
@@ -54,15 +65,23 @@ class FirebaseAuth:
         Returns the User UID if valid.
         Raises ValueError if invalid.
         """
+        # 1. Fallback for Missing Libs
+        if firebase_admin is None:
+             if os.getenv("MOCK_AUTH", "false").lower() == "true" or not settings.FIREBASE_CREDENTIALS:
+                 logger.warning("⚠️ Auth Library Missing. Returning Mock User.")
+                 return "mock_user_no_lib"
+             raise RuntimeError("firebase_admin library missing.")
+
+        # 2. Check Initialization
         if not FirebaseAuth._initialized:
              # Try lazy init
              FirebaseAuth.initialize()
              if not FirebaseAuth._initialized:
-                 # If still not init, maybe we are in mock/local mode without creds?
-                 if os.getenv("MOCK_AUTH", "false").lower() == "true":
-                     logger.warning("⚠️ MOCK_AUTH enabled. Accepting dummy token.")
-                     return "mock_user_123"
-                 raise RuntimeError("Firebase not initialized.")
+                 # If still not init, allow mock if no creds
+                 if not settings.FIREBASE_CREDENTIALS or os.getenv("MOCK_AUTH", "false").lower() == "true":
+                     logger.warning("⚠️ Firebase not initialized. Accepting dummy token.")
+                     return "mock_user_no_init"
+                 raise RuntimeError("Firebase not initialized and credentials present.")
 
         try:
             # Verify the token

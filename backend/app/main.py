@@ -12,7 +12,6 @@ from app.services.audio_session import send_to_gemini, receive_from_gemini, send
 from app.services.soul_assembler import assemble_soul
 from app.services.subconscious import subconscious_mind
 from app.repositories.local_graph import LocalSoulRepository
-from app.services.auth import FirebaseAuth
 from app.models.graph import AgentNode
 from app.services.sleep_manager import SleepManager
 from app.services.cache import cache
@@ -23,6 +22,26 @@ import os
 # Creamos la maldita libreta de Jules
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Lazy Auth Verification
+def verify_user(token: str | None) -> str:
+    # Phase 3.2: Secure Identity if Configured
+    if token and settings.FIREBASE_CREDENTIALS:
+        try:
+            from app.services.auth import FirebaseAuth
+            user_id = FirebaseAuth.verify_token(token)
+            logger.info(f"Authenticated User: {user_id}")
+            return user_id
+        except Exception as e:
+            logger.warning(f"Authentication Failed: {e}")
+            raise
+    elif settings.GCP_PROJECT_ID and not token:
+        # Enforce Auth in Prod
+        logger.warning("Connection rejected: No token provided in Production.")
+        raise ValueError("Authentication Required in Production")
+
+    # Lab Mode / Guest
+    return "guest_user"
 
 # Lazy Factory for Repository
 def get_soul_repository():
@@ -59,9 +78,13 @@ async def startup_event():
     logger.info("Initializing Soul Repository...")
     await soul_repo.initialize()
 
-    # Initialize Auth (Lazy or Eager)
+    # Initialize Auth (Lazy or Eager) if configured
     if settings.FIREBASE_CREDENTIALS:
-        FirebaseAuth.initialize()
+        try:
+            from app.services.auth import FirebaseAuth
+            FirebaseAuth.initialize()
+        except ImportError:
+            logger.warning("Firebase Auth skipped (Library missing).")
 
     # Seed Kizuna if not exists (for Demo/Dev)
     # Note: Spanner seeding might need to be handled by migration scripts, but safe to check here.
@@ -103,20 +126,11 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
         await websocket.close(code=1008, reason="agent_id required")
         return
 
-    # Phase 3.2: Secure Identity
-    user_id = "guest_user"
-    if token:
-        try:
-            user_id = FirebaseAuth.verify_token(token)
-            logger.info(f"Authenticated User: {user_id}")
-        except Exception as e:
-            logger.warning(f"Authentication Failed: {e}")
-            await websocket.close(code=1008, reason="Invalid Token")
-            return
-    elif settings.GCP_PROJECT_ID:
-        # Enforce Auth in Prod
-        logger.warning("Connection rejected: No token provided in Production.")
-        await websocket.close(code=1008, reason="Authentication Required")
+    # Phase 3.2: Secure Identity (Lazy)
+    try:
+        user_id = verify_user(token)
+    except Exception as e:
+        await websocket.close(code=1008, reason=str(e))
         return
 
     # Ensure user exists in Graph
