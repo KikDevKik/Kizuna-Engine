@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useLiveAPI } from './hooks/useLiveAPI';
 import { Layout } from './components/Layout';
 import { KizunaCore } from './components/KizunaCore';
@@ -12,23 +12,9 @@ import { Power } from 'lucide-react';
 import './KizunaHUD.css';
 
 function App() {
-  const api = useLiveAPI();
-  const { connected, status, volumeRef, isAiSpeaking, connect, disconnect } = api;
-
+  const { connected, status, volumeRef, isAiSpeaking, connect, disconnect } = useLiveAPI();
   const [viewMode, setViewMode] = useState<'core' | 'roster'>('roster'); // Default to Roster to force selection
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [isSanctuaryOpen, setIsSanctuaryOpen] = useState(false);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'j') {
-        e.preventDefault();
-        setIsSanctuaryOpen(prev => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   // Derived state for Law 4 logic (passed to Core)
   const isListening = connected && !isAiSpeaking;
@@ -37,6 +23,15 @@ function App() {
     console.log(`Agent Selected: ${agentId}`);
     setSelectedAgentId(agentId);
     setViewMode('core');
+    // Optional: Auto-connect?
+    // connect(agentId);
+    // Better to let user manually initiate via the big button in Core view,
+    // or initiate immediately if that's the UX.
+    // The Roster button says "INITIATE LINK", so maybe auto-connect is expected?
+    // Let's stick to the manual "SYNCING..." button in Core view for safety,
+    // but the user might expect the Roster button to start it.
+    // Given the "INITIATE LINK" text in Roster, let's just set the ID and switch view.
+    // The Core view has the Power button.
   }, []);
 
   const handleToggleConnection = () => {
@@ -46,6 +41,8 @@ function App() {
       if (selectedAgentId) {
         connect(selectedAgentId);
       } else {
+        // Fallback: If no agent selected (shouldn't happen in Core view if we force Roster first),
+        // maybe switch back to roster?
         console.warn("No agent selected. Switching to Roster.");
         setViewMode('roster');
       }

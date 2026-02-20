@@ -8,7 +8,6 @@ export interface UseLiveAPI {
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
   volumeRef: React.MutableRefObject<number>;
   isAiSpeaking: boolean;
-  lastAiMessage: string | null;
   connect: (agentId: string) => Promise<void>;
   disconnect: () => void;
   sendImage: (base64Image: string) => void;
@@ -229,29 +228,5 @@ export const useLiveAPI = (): UseLiveAPI => {
     };
   }, [connected]);
 
-  // Cleanup ONLY on unmount - DISABLED per request for "immovable constant"
-  // The user explicitly requested to REMOVE any automatic close triggers.
-  // We will leave this empty or comment it out to prevent React Strict Mode from killing the connection.
-  /*
-  useEffect(() => {
-    return () => {
-        console.log("Component unmounting - cleanup skipped per 'immovable' requirement");
-        // disconnect();
-    };
-  }, [disconnect]);
-  */
-
-  const sendImage = useCallback((base64Image: string) => {
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      const payload = JSON.stringify({
-          type: "image",
-          data: base64Image
-      });
-      socketRef.current.send(payload);
-    } else {
-        console.warn("Attempted to send image but WebSocket is not open.");
-    }
-  }, []);
-
-  return { connected, status, volumeRef, isAiSpeaking, lastAiMessage, connect, disconnect, sendImage };
+  return { connected, status, volumeRef, isAiSpeaking, connect, disconnect };
 };
