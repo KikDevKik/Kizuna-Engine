@@ -215,7 +215,6 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
               return (
                 <motion.div
                   key={agent.id}
-                  variants={shardVariants}
                   className="agent-card-container"
                   style={{
                     transform: `rotateY(${angle}deg) translateZ(${radius}px)`,
