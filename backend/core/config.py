@@ -15,14 +15,14 @@ class Settings:
 
     # Model Configuration (The Gemini Triad)
     # 1. Main Voice Thread (Low Latency Audio)
-    MODEL_LIVE_VOICE: str = os.getenv("MODEL_LIVE_VOICE", "gemini-2.0-flash-exp")
+    MODEL_LIVE_VOICE: str = os.getenv("MODEL_LIVE_VOICE", "gemini-3-flash-preview")
     # Note: "gemini-2.5-flash-native-audio-preview-12-2025" was specific, defaulting to 2.0 Flash Exp for broader availability if needed.
 
     # 2. Subconscious Worker (Fast Text Analysis)
-    MODEL_SUBCONSCIOUS: str = os.getenv("MODEL_SUBCONSCIOUS", "gemini-2.0-flash-exp")
+    MODEL_SUBCONSCIOUS: str = os.getenv("MODEL_SUBCONSCIOUS", "gemini-3-flash-preview")
 
     # 3. Dream Cycle (Deep Reasoning / Consolidation)
-    MODEL_DREAM: str = os.getenv("MODEL_DREAM", "gemini-1.5-pro")
+    MODEL_DREAM: str = os.getenv("MODEL_DREAM", "gemini-3.1-pro-preview")
 
     CORS_ORIGINS: list[str] = json.loads(os.getenv("CORS_ORIGINS", '["http://localhost:5173", "http://localhost:3000"]'))
 
