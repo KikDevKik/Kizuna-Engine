@@ -199,3 +199,16 @@ class SpannerSoulRepository(SoulRepository):
 
     async def save_fact(self, user_id: str, content: str, category: str) -> FactNode:
         return FactNode(content=content, category=category) # Stub
+
+    async def consolidate_memories(self, user_id: str) -> None:
+        """
+        GQL implementation for memory consolidation.
+        """
+        # Stub for now.
+        # In Production Spanner, this would involve complex GQL:
+        # 1. MATCH (u:User {id: @uid})-[:EXPERIENCED]->(e:Episode) WHERE e.valence = 0.5
+        # 2. Extract texts -> Send to Gemini -> Get Summary
+        # 3. CREATE (new_e:Episode)
+        # 4. DELETE old edges or mark e.valence = 0.0
+        logger.info(f"Spanner Consolidation triggered for {user_id} (Stub).")
+        return
