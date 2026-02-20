@@ -11,9 +11,12 @@ class UserNode(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
 
 class AgentNode(BaseModel):
-    id: str
+    id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
+    role: str = "System Core" # Default role if not specified
     base_instruction: str
+    avatar_path: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
     traits: dict = Field(default_factory=dict)
 
 class MemoryEpisodeNode(BaseModel):
