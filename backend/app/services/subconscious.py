@@ -155,6 +155,10 @@ class SubconsciousMind:
                     contents=prompt
                 )
 
+                if not response.text:
+                    logger.warning("Subconscious inference yielded no text/invalid response")
+                    return None
+
                 result = response.text.strip()
                 if "SYSTEM_HINT:" in result:
                     return result.replace("SYSTEM_HINT:", "").strip()
@@ -215,6 +219,10 @@ class SubconsciousMind:
                     contents=prompt
                 )
 
+                if not response.text:
+                    logger.warning("Dream generation yielded no text.")
+                    return DreamNode(theme="Void", intensity=0.0, surrealism_level=0.0)
+
                 # Simple parsing (robust JSON parsing needed for production)
                 text_resp = response.text.strip()
                 if "```json" in text_resp:
@@ -222,10 +230,15 @@ class SubconsciousMind:
                 elif "```" in text_resp:
                     text_resp = text_resp.split("```")[1].split("```")[0]
 
-                data = json.loads(text_resp)
-                theme = data.get("theme", theme)
-                intensity = float(data.get("intensity", intensity))
-                surrealism = float(data.get("surrealism_level", surrealism))
+                try:
+                    data = json.loads(text_resp)
+                    theme = data.get("theme", theme)
+                    intensity = float(data.get("intensity", intensity))
+                    surrealism = float(data.get("surrealism_level", surrealism))
+                except json.JSONDecodeError:
+                    logger.warning(f"Dream generation returned invalid JSON: {text_resp[:50]}...")
+                except Exception as e:
+                    logger.warning(f"Error parsing dream data: {e}")
 
             except Exception as e:
                 logger.error(f"Dream generation failed: {e}")
