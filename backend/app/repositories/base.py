@@ -32,7 +32,7 @@ class SoulRepository(ABC):
         pass
 
     @abstractmethod
-    async def update_resonance(self, user_id: str, agent_id: str, delta: int) -> ResonanceEdge:
+    async def update_resonance(self, user_id: str, agent_id: str, delta: float) -> ResonanceEdge:
         """Update the affinity level of a resonance edge."""
         pass
 
