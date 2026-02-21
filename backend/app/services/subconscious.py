@@ -4,7 +4,7 @@ import json
 import os
 import httpx
 from asyncio import Queue
-from datetime import datetime
+from datetime import datetime, timedelta
 from ..repositories.base import SoulRepository
 from ..models.graph import DreamNode, MemoryEpisodeNode, AgentNode, ArchetypeNode
 from core.config import settings
@@ -13,8 +13,10 @@ from core.config import settings
 try:
     from google import genai
     from google.genai import types
+    from google.genai import errors as genai_errors
 except ImportError:
     genai = None
+    genai_errors = None
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,9 @@ class SubconsciousMind:
         self.buffer = []
         self.last_process_time = datetime.now()
         self.repository: SoulRepository | None = None
-        self.active_sessions: dict[str, Queue] = {} # user_id -> injection_queue
+          
+          self.active_sessions: dict[str, Queue] = {} # user_id -> injection_queue
+          self.backoff_until: datetime | None = None
 
         # Default fallback if agent traits are missing
         self.default_triggers = {
@@ -161,6 +165,14 @@ class SubconsciousMind:
         mock_mode = settings.MOCK_GEMINI
 
         if self.client and not mock_mode:
+            # Check for active backoff
+            if self.backoff_until:
+                if datetime.now() < self.backoff_until:
+                    return None
+                else:
+                    self.backoff_until = None
+                    logger.info("🧠 Subconscious Mind resuming from backoff.")
+
             try:
                 # Dynamic Prompt Loading
                 prompt_template = "Analyze the user's emotional state from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return nothing."
@@ -173,31 +185,57 @@ class SubconsciousMind:
                 # Use system_instruction to prevent prompt injection
                 system_instruction = prompt_template.replace("{text}", "[TRANSCRIPT]")
 
-                # Using 2.0 Flash Exp or configured model
-                response = await self.client.aio.models.generate_content(
-                    model=settings.MODEL_SUBCONSCIOUS,
-                    contents=text,
-                    config=types.GenerateContentConfig(
-                        system_instruction=types.Content(
-                            parts=[types.Part(text=system_instruction)]
-                        )
-                    )
-                )
+                # Waterfall Logic
+                models = settings.MODEL_SUBCONSCIOUS
+                if isinstance(models, str):
+                    models = [models]
 
-                if not response.text:
+                response = None
+                quota_exhausted = False
+
+                for model in models:
+                    try:
+                        response = await self.client.aio.models.generate_content(
+                            model=model,
+                            contents=text,
+                            config=types.GenerateContentConfig(
+                                system_instruction=types.Content(
+                                    parts=[types.Part(text=system_instruction)]
+                                )
+                            )
+                        )
+                        break # Success
+                    except (httpx.RemoteProtocolError, httpx.ConnectError) as e:
+                        logger.debug(f"Subconscious inference network error on {model}: {e}")
+                        continue
+                    except Exception as e:
+                        # Check for Google GenAI ClientError (Rate Limit)
+                        if genai_errors and isinstance(e, genai_errors.ClientError) and e.code == 429:
+                            logger.info(f"Model {model} quota exhausted. Falling back...")
+                            quota_exhausted = True
+                            continue
+
+                        logger.warning(f"Subconscious inference failed on {model}: {e}")
+                        continue
+
+                if not response:
+                    if quota_exhausted:
+                        logger.warning("Subconscious paused: ALL models exhausted. Backing off for 60s.")
+                        self.backoff_until = datetime.now() + timedelta(seconds=60)
+                    # Fall through to keywords
+
+                elif not response.text:
                     logger.warning("Subconscious inference yielded no text/invalid response")
                     return None
 
-                result = response.text.strip()
-                if "SYSTEM_HINT:" in result:
-                    return result.replace("SYSTEM_HINT:", "").strip()
-                return None
+                else:
+                    result = response.text.strip()
+                    if "SYSTEM_HINT:" in result:
+                        return result.replace("SYSTEM_HINT:", "").strip()
+                    return None
 
-            except (httpx.RemoteProtocolError, httpx.ConnectError) as e:
-                logger.debug(f"Subconscious inference network error: {e}")
-                return None
-            except Exception:
-                logger.warning("Subconscious inference failed. Fallback to keywords.", exc_info=True)
+            except Exception as e:
+                logger.warning("Subconscious inference failed (Global). Fallback to keywords.", exc_info=True)
 
         # 2. Fallback (Keyword Matching via Archetypes -> Traits)
         triggers = self.default_triggers
@@ -255,18 +293,33 @@ class SubconsciousMind:
                 # Use system_instruction to prevent prompt injection
                 system_instruction = prompt_template.replace("{summary_text}", "[MEMORIES]")
 
-                response = await self.client.aio.models.generate_content(
-                    model=settings.MODEL_DREAM, # Or SUBCONSCIOUS if DREAM model not defined
-                    contents=summary_text,
-                    config=types.GenerateContentConfig(
-                        system_instruction=types.Content(
-                            parts=[types.Part(text=system_instruction)]
-                        )
-                    )
-                )
+                # Waterfall Logic
+                models = settings.MODEL_DREAM
+                if isinstance(models, str):
+                    models = [models]
 
-                if not response.text:
-                    logger.warning("Dream generation yielded no text.")
+                response = None
+                for model in models:
+                    try:
+                        response = await self.client.aio.models.generate_content(
+                            model=model, # Or SUBCONSCIOUS if DREAM model not defined
+                            contents=summary_text,
+                            config=types.GenerateContentConfig(
+                                system_instruction=types.Content(
+                                    parts=[types.Part(text=system_instruction)]
+                                )
+                            )
+                        )
+                        break
+                    except Exception as e:
+                        if genai_errors and isinstance(e, genai_errors.ClientError) and e.code == 429:
+                            logger.info(f"Dream Model {model} quota exhausted. Falling back...")
+                            continue
+                        logger.warning(f"Dream generation failed on {model}: {e}")
+                        continue
+
+                if not response or not response.text:
+                    logger.warning("Dream generation yielded no text (all models failed).")
                     return DreamNode(theme="Void", intensity=0.0, surrealism_level=0.0)
 
                 # Simple parsing (robust JSON parsing needed for production)

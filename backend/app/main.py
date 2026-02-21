@@ -3,6 +3,7 @@ load_dotenv()
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,16 +30,11 @@ logger = logging.getLogger(__name__)
 # Initialize Sleep Manager (Phase 4)
 sleep_manager = SleepManager(soul_repo)
 
-app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
-
-# Register Routers (Phase 5)
-app.include_router(warmup.router)
-app.include_router(agents.router)
-app.include_router(bio.router)
 
 # Lifecycle Event to load Graph
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     logger.info("Initializing Cache...")
     await cache.initialize()
 
@@ -73,6 +69,18 @@ async def startup_event():
         )
         await soul_repo.create_agent(kizuna)
         logger.info("Seeded Kizuna Agent into Graph.")
+
+    yield
+
+    # Shutdown
+    await sleep_manager.shutdown()
+
+app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=lifespan)
+
+# Register Routers (Phase 5)
+app.include_router(warmup.router)
+app.include_router(agents.router)
+app.include_router(bio.router)
 
 app.add_middleware(
     CORSMiddleware,
