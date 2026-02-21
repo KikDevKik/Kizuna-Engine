@@ -78,6 +78,10 @@ class SleepManager:
 
         logger.info(f"💤 User {user_id} disconnected. Scheduling REM Sleep in {delay}s...")
 
+        if self._is_shutting_down:
+            logger.info(f"🛑 Shutdown in progress. Skipping sleep schedule for {user_id}.")
+            return
+
         # Create a background task that sleeps then triggers
         task = asyncio.create_task(self._sleep_timer(user_id, delay))
         self.active_timers[user_id] = task
