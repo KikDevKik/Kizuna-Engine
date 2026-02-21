@@ -6,7 +6,7 @@ import httpx
 from asyncio import Queue
 from datetime import datetime, timedelta
 from ..repositories.base import SoulRepository
-from ..models.graph import DreamNode, MemoryEpisodeNode, AgentNode
+from ..models.graph import DreamNode, MemoryEpisodeNode, AgentNode, ArchetypeNode
 from core.config import settings
 
 # Try import genai
@@ -25,12 +25,15 @@ class SubconsciousMind:
     Simulates the Subconscious Observer (Phase 2/3).
     It processes transcripts in the background, injects System Hints,
     and saves short-term insights to the Graph.
+    Includes Phase 3 (Bio-Signals) and Phase 1 (Ontology).
     """
     def __init__(self):
         self.buffer = []
         self.last_process_time = datetime.now()
         self.repository: SoulRepository | None = None
-        self.backoff_until: datetime | None = None
+          
+          self.active_sessions: dict[str, Queue] = {} # user_id -> injection_queue
+          self.backoff_until: datetime | None = None
 
         # Default fallback if agent traits are missing
         self.default_triggers = {
@@ -53,6 +56,8 @@ class SubconsciousMind:
         Main loop for the Subconscious Mind.
         """
         logger.info(f"🧠 Subconscious Mind activated for User: {user_id}")
+        self.active_sessions[user_id] = injection_queue
+
         try:
             while True:
                 try:
@@ -126,13 +131,35 @@ class SubconsciousMind:
                     await asyncio.sleep(1) # Small delay to avoid error storm
 
         except asyncio.CancelledError:
+            pass
+        finally:
+            if user_id in self.active_sessions:
+                del self.active_sessions[user_id]
             logger.info("🧠 Subconscious Mind deactivated.")
-            raise
+
+    async def process_bio_signal(self, user_id: str, data: dict):
+        """Phase 3: Bio-Feedback Integration."""
+        queue = self.active_sessions.get(user_id)
+        if not queue:
+            # Silent warning to avoid spam if user disconnected
+            return
+
+        bpm = data.get("bpm")
+        if bpm and isinstance(bpm, (int, float)):
+            # Thresholds could be user-specific in future
+            if bpm > 110:
+                hint = f"SYSTEM_HINT: User's Heart Rate is HIGH ({bpm} BPM). They might be stressed or excited. Check tone."
+                await queue.put({"text": hint, "turn_complete": False})
+                logger.info(f"❤️ Bio-Signal Injected: {hint}")
+            elif bpm < 55:
+                 hint = f"SYSTEM_HINT: User's Heart Rate is LOW ({bpm} BPM). They are very calm or possibly tired."
+                 await queue.put({"text": hint, "turn_complete": False})
+                 logger.info(f"💙 Bio-Signal Injected: {hint}")
 
     async def _analyze_sentiment(self, text: str, agent_id: str = None) -> str | None:
         """
         Analyzes text for emotional cues.
-        Uses Real Gemini Flash if configured, otherwise falls back to keyword matching.
+        Uses Real Gemini Flash if configured, otherwise falls back to keyword matching via Archetypes/Traits.
         """
         # 1. Real Intelligence (The Guide Dog)
         mock_mode = settings.MOCK_GEMINI
@@ -147,11 +174,6 @@ class SubconsciousMind:
                     logger.info("🧠 Subconscious Mind resuming from backoff.")
 
             try:
-                # Run in executor to avoid blocking loop if sync
-                # SDK 0.x is sync, 1.x has aio? client.aio.models...
-                # Assuming unified SDK supports async or we wrap it.
-                # For safety, let's wrap the generate call.
-
                 # Dynamic Prompt Loading
                 prompt_template = "Analyze the user's emotional state from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return nothing."
 
@@ -215,12 +237,19 @@ class SubconsciousMind:
             except Exception as e:
                 logger.warning("Subconscious inference failed (Global). Fallback to keywords.", exc_info=True)
 
-        # 2. Fallback (Keyword Matching via Traits)
+        # 2. Fallback (Keyword Matching via Archetypes -> Traits)
         triggers = self.default_triggers
+
         if agent_id and self.repository:
-            agent = await self.repository.get_agent(agent_id)
-            if agent and agent.traits and "emotional_triggers" in agent.traits:
-                triggers = agent.traits["emotional_triggers"]
+            # Ontology Phase 1: Check Archetype First
+            archetype = await self.repository.get_agent_archetype(agent_id)
+            if archetype and archetype.triggers:
+                triggers = archetype.triggers
+            else:
+                # Fallback to Traits
+                agent = await self.repository.get_agent(agent_id)
+                if agent and agent.traits and "emotional_triggers" in agent.traits:
+                    triggers = agent.traits["emotional_triggers"]
 
         text_lower = text.lower()
         for trigger, hint in triggers.items():

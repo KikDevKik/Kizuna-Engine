@@ -73,7 +73,7 @@ interface SoulForgeModalProps {
 }
 
 export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose, onCreated }) => {
-  const { messages, status, isLoading, error, sendMessage, startRitual, resetRitual } = useRitual();
+  const { messages, status, isLoading, error, sendMessage, startRitual, resetRitual, setArchetype, archetype } = useRitual();
   const [inputValue, setInputValue] = useState('');
   const [animationPhase, setAnimationPhase] = useState<'normal' | 'resonance' | 'dissipation'>('normal');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -187,11 +187,30 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
             >
               {/* HEADER */}
               <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4 shrink-0 relative">
-                <div>
+                <div className="flex flex-col gap-1">
                   <h2 className="font-monumental text-2xl tracking-widest text-electric-blue flex items-center gap-3">
                     <Terminal size={24} />
                     SOUL FORGE <span className="text-white/20 text-sm align-top">TERMINAL_LINK</span>
                   </h2>
+
+                  {/* ARCHETYPE SELECTOR */}
+                  <div className="flex items-center gap-2 pl-9">
+                      <span className="text-white/40 text-[10px] font-mono tracking-wider">ARCHETYPE PROTOCOL:</span>
+                      <select
+                          value={archetype || ""}
+                          onChange={(e) => setArchetype(e.target.value || null)}
+                          className="bg-abyssal-black/50 border border-white/10 text-electric-blue text-[10px] font-mono px-2 py-0.5 focus:outline-none focus:border-electric-blue/50 hover:bg-white/5 cursor-pointer uppercase"
+                          disabled={messages.length > 0}
+                      >
+                          <option value="">[ UNDEFINED ]</option>
+                          <option value="The Guardian">The Guardian</option>
+                          <option value="The Trickster">The Trickster</option>
+                          <option value="The Sage">The Sage</option>
+                          <option value="The Shadow">The Shadow</option>
+                          <option value="The Muse">The Muse</option>
+                          <option value="The Rebel">The Rebel</option>
+                      </select>
+                  </div>
                 </div>
 
                 {/* CREATE AGENT BUTTON (Floating in Header) */}

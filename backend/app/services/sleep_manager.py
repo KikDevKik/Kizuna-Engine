@@ -1,27 +1,61 @@
 import asyncio
 import logging
 from typing import Dict
+from datetime import datetime
 from ..repositories.base import SoulRepository
 from .subconscious import subconscious_mind
+from .cache import cache
 
 logger = logging.getLogger(__name__)
 
 class SleepManager:
     """
     Manages the REM Sleep Cycle (Consolidation) using an Event-Driven Debounce Pattern.
-    When a user disconnects, a timer starts (Grace Period).
-    If the user reconnects within the Grace Period, the timer is CANCELLED (session continues).
-    If the timer expires, the consolidation process (Worker) is triggered.
+    Persists state to Redis (Neural Sync) to survive restarts.
     """
     def __init__(self, repository: SoulRepository):
         self.repository = repository
         # Map user_id -> asyncio.TimerHandle (or Task)
         self.active_timers: Dict[str, asyncio.Task] = {}
         # Default grace period in seconds (e.g., 300s = 5 mins)
-        # For demo purposes, we might use a shorter duration.
         self.grace_period = 300
 
-    def schedule_sleep(self, user_id: str, delay: int = None):
+    async def restore_state(self):
+        """
+        On Startup: Scan Redis for pending sleep intents and restore timers.
+        """
+        logger.info("💤 Restoring Sleep State from Neural Sync...")
+        keys = await cache.scan_match("sleep_intent:*")
+        restored_count = 0
+
+        for key in keys:
+            user_id = key.split(":")[1]
+            val = await cache.get(key)
+            if not val:
+                continue
+
+            try:
+                target_ts = float(val)
+                now = datetime.now().timestamp()
+                remaining = target_ts - now
+
+                if remaining > 0:
+                    logger.info(f"Rescheduling sleep for {user_id} (in {remaining:.1f}s)")
+                    task = asyncio.create_task(self._sleep_timer(user_id, remaining))
+                    self.active_timers[user_id] = task
+                    restored_count += 1
+                else:
+                    logger.info(f"Sleep overdue for {user_id}. Triggering immediately.")
+                    # We trigger in background to not block startup
+                    asyncio.create_task(self._trigger_consolidation(user_id))
+                    await cache.delete(key)
+
+            except ValueError:
+                logger.warning(f"Invalid sleep intent value for {key}")
+
+        logger.info(f"💤 Restored {restored_count} pending sleep cycles.")
+
+    async def schedule_sleep(self, user_id: str, delay: int = None):
         """
         Schedule consolidation after a grace period.
         Called on WebSocket Disconnect.
@@ -29,8 +63,13 @@ class SleepManager:
         if delay is None:
             delay = self.grace_period
 
+        # Persist Intent (Neural Sync)
+        target_ts = datetime.now().timestamp() + delay
+        # TTL slightly longer than delay to ensure it exists until trigger
+        await cache.set(f"sleep_intent:{user_id}", str(target_ts), ttl=int(delay + 60))
+
         # Cancel any existing timer just in case
-        self.cancel_sleep(user_id)
+        await self.cancel_sleep(user_id, remove_intent=False)
 
         logger.info(f"💤 User {user_id} disconnected. Scheduling REM Sleep in {delay}s...")
 
@@ -38,18 +77,20 @@ class SleepManager:
         task = asyncio.create_task(self._sleep_timer(user_id, delay))
         self.active_timers[user_id] = task
 
-    def cancel_sleep(self, user_id: str):
+    async def cancel_sleep(self, user_id: str, remove_intent: bool = True):
         """
         Cancel pending consolidation.
         Called on WebSocket Connect (Reconnection).
         """
+        if remove_intent:
+            await cache.delete(f"sleep_intent:{user_id}")
+
         if user_id in self.active_timers:
             task = self.active_timers.pop(user_id)
             if not task.done():
                 task.cancel()
                 logger.info(f"🌅 User {user_id} reconnected! REM Sleep cancelled. Session continues.")
             else:
-                # Task already finished naturally
                 pass
 
     async def _sleep_timer(self, user_id: str, delay: int):
@@ -60,6 +101,8 @@ class SleepManager:
             await asyncio.sleep(delay)
             # If we get here without cancellation, trigger consolidation
             await self._trigger_consolidation(user_id)
+            # Cleanup Redis
+            await cache.delete(f"sleep_intent:{user_id}")
         except asyncio.CancelledError:
             # Task was cancelled, do nothing
             pass

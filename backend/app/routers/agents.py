@@ -104,6 +104,7 @@ async def delete_agent(agent_id: str):
 async def conduct_ritual(
     history: List[RitualMessage],
     response: Response,
+    archetype: Optional[str] = None,
     accept_language: str = Header(default="en"),
     user_id: str = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
@@ -143,6 +144,22 @@ async def conduct_ritual(
                 native_language=data.get("native_language", "Unknown"),
                 known_languages=data.get("known_languages", [])
             )
+
+            # Ontology Phase 1: Link Archetype
+            if archetype:
+                try:
+                    # Check if archetype exists (or create stub)
+                    arc = await repository.get_archetype(archetype)
+                    if not arc:
+                        arc = await repository.create_archetype(
+                            name=archetype,
+                            description=f"Archetype: {archetype}",
+                            triggers={}
+                        )
+                    await repository.link_agent_archetype(new_agent.id, arc.id)
+                    logger.info(f"Linked Agent {new_agent.name} to Archetype {archetype}")
+                except Exception as e:
+                    logger.error(f"Failed to link archetype: {e}")
 
             # Sync with SoulRepository (In-Memory/DB) to prevent "Agent not found"
             # This is critical for the subsequent resonance update
