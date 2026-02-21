@@ -127,7 +127,7 @@ async def test_process_ritual_finalize_gemini_success():
 
 @pytest.mark.asyncio
 async def test_generate_with_retry_429():
-    """Verifies the retry mechanism specifically for 429 Rate Limit errors."""
+    """Verifies the waterfall mechanism specifically for 429 Rate Limit errors."""
     service = RitualService()
     service.client = MagicMock()
     service.client.aio.models.generate_content = AsyncMock()
@@ -140,12 +140,11 @@ async def test_generate_with_retry_429():
 
     service.client.aio.models.generate_content.side_effect = [error_429, mock_response]
 
-    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
-        result = await service._generate_with_retry("model", "contents")
+    # Pass a list of 2 models
+    result = await service._generate_with_retry(["model1", "model2"], "contents")
 
-        assert result == "Success after retry"
-        assert service.client.aio.models.generate_content.call_count == 2
-        mock_sleep.assert_called_once_with(4)
+    assert result == "Success after retry"
+    assert service.client.aio.models.generate_content.call_count == 2
 
 @pytest.mark.asyncio
 async def test_process_ritual_finalize_malformed_json():
@@ -208,7 +207,7 @@ async def test_process_ritual_finalize_valid_raw_json():
 
 @pytest.mark.asyncio
 async def test_generate_with_retry_failure():
-    """Verifies that if the retry also fails (e.g., second 429), it returns None."""
+    """Verifies that if all models fail (e.g., 429), it returns None."""
     service = RitualService()
     service.client = MagicMock()
     service.client.aio.models.generate_content = AsyncMock()
@@ -217,16 +216,14 @@ async def test_generate_with_retry_failure():
     error_429 = Exception("Resource has been exhausted (e.g. check quota). 429 Rate Limit")
     service.client.aio.models.generate_content.side_effect = [error_429, error_429]
 
-    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
-        result = await service._generate_with_retry("model", "contents")
+    result = await service._generate_with_retry(["model1", "model2"], "contents")
 
-        assert result is None
-        assert service.client.aio.models.generate_content.call_count == 2
-        mock_sleep.assert_called_once_with(4)
+    assert result is None
+    assert service.client.aio.models.generate_content.call_count == 2
 
 @pytest.mark.asyncio
 async def test_generate_with_retry_non_429():
-    """Verifies that a non-429 error (e.g., 500) returns None immediately without sleeping/retrying."""
+    """Verifies that a non-429 error (e.g., 500) allows trying the next model but eventually returns None."""
     service = RitualService()
     service.client = MagicMock()
     service.client.aio.models.generate_content = AsyncMock()
@@ -235,12 +232,11 @@ async def test_generate_with_retry_non_429():
     error_500 = Exception("Internal Server Error")
     service.client.aio.models.generate_content.side_effect = error_500
 
-    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
-        result = await service._generate_with_retry("model", "contents")
+    # Pass 1 model
+    result = await service._generate_with_retry(["model1"], "contents")
 
-        assert result is None
-        assert service.client.aio.models.generate_content.call_count == 1
-        mock_sleep.assert_not_called()
+    assert result is None
+    assert service.client.aio.models.generate_content.call_count == 1
 
 @pytest.mark.asyncio
 async def test_generate_with_retry_no_client():
