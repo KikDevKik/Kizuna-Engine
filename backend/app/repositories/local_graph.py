@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import datetime
 
 from .base import SoulRepository
-from ..models.graph import UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode
+from ..models.graph import UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode, DreamNode, ShadowEdge
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,11 @@ class LocalSoulRepository(SoulRepository):
         self.agents: Dict[str, AgentNode] = {}
         self.episodes: Dict[str, MemoryEpisodeNode] = {}
         self.facts: Dict[str, FactNode] = {}
+        self.dreams: Dict[str, DreamNode] = {}
         self.resonances: Dict[str, Dict[str, ResonanceEdge]] = {} # {user_id: {agent_id: Resonance}}
         self.experienced: Dict[str, List[str]] = {} # {user_id: [episode_ids]}
         self.knows: Dict[str, List[str]] = {} # {user_id: [fact_ids]}
+        self.shadows: Dict[str, List[ShadowEdge]] = {} # {user_id: [ShadowEdge]}
 
     async def initialize(self) -> None:
         """Load the graph from JSON."""
@@ -65,6 +67,10 @@ class LocalSoulRepository(SoulRepository):
                     node = FactNode(**f)
                     self.facts[node.id] = node
 
+                for d in data.get("dreams", []):
+                    node = DreamNode(**d)
+                    self.dreams[node.id] = node
+
                 # Hydrate Edges
                 for r in data.get("resonances", []):
                     edge = ResonanceEdge(**r)
@@ -74,6 +80,11 @@ class LocalSoulRepository(SoulRepository):
 
                 self.experienced = data.get("experienced", {})
                 self.knows = data.get("knows", {})
+
+                # Hydrate Shadows
+                self.shadows = {}
+                for uid, edges in data.get("shadows", {}).items():
+                    self.shadows[uid] = [ShadowEdge(**e) for e in edges]
 
                 logger.info(f"Graph Database loaded: {len(self.users)} Users, {len(self.agents)} Agents.")
 
@@ -120,13 +131,18 @@ class LocalSoulRepository(SoulRepository):
             "agents": to_dict_list(self.agents.values()),
             "episodes": to_dict_list(self.episodes.values()),
             "facts": to_dict_list(self.facts.values()),
+            "dreams": to_dict_list(self.dreams.values()),
             "resonances": [
                 r.model_dump(mode='json')
                 for u_dict in self.resonances.values()
                 for r in u_dict.values()
             ],
             "experienced": self.experienced,
-            "knows": self.knows
+            "knows": self.knows,
+            "shadows": {
+                uid: [e.model_dump(mode='json') for e in edges]
+                for uid, edges in self.shadows.items()
+            }
         }
 
         # Ensure directory exists
@@ -260,7 +276,20 @@ class LocalSoulRepository(SoulRepository):
             await self._save()
             return fact
 
-    async def consolidate_memories(self, user_id: str) -> None:
+    async def save_dream(self, user_id: str, dream: DreamNode) -> DreamNode:
+        async with self.lock:
+            self.dreams[dream.id] = dream
+
+            # Create Shadow Edge
+            edge = ShadowEdge(source_id=user_id, target_id=dream.id)
+            if user_id not in self.shadows:
+                self.shadows[user_id] = []
+            self.shadows[user_id].append(edge)
+
+            await self._save()
+            return dream
+
+    async def consolidate_memories(self, user_id: str, dream_generator=None) -> None:
         """
         Consolidate memories for the user (Event-Driven Debounce).
         Simulates compressing recent episodes.
@@ -285,16 +314,31 @@ class LocalSoulRepository(SoulRepository):
 
             logger.info(f"Compressing {len(raw_episodes)} raw episodes into Long-Term Memory...")
 
-            # 1. Create Summary Episode (The "Dream")
-            summary_text = f"User interaction summary: {len(raw_episodes)} events consolidated."
-            summary_node = MemoryEpisodeNode(
-                summary=summary_text,
-                emotional_valence=1.0 # Consolidated/Refined
-            )
-            self.episodes[summary_node.id] = summary_node
+            if dream_generator:
+                # Lucid Dreaming Protocol
+                try:
+                    dream_node = await dream_generator(raw_episodes)
+                    self.dreams[dream_node.id] = dream_node
 
-            # 2. Link Summary to User
-            self.experienced[user_id].append(summary_node.id)
+                    # Link Shadow Edge
+                    edge = ShadowEdge(source_id=user_id, target_id=dream_node.id)
+                    if user_id not in self.shadows:
+                        self.shadows[user_id] = []
+                    self.shadows[user_id].append(edge)
+                    logger.info(f"✨ Generated Dream: {dream_node.theme} (Intensity: {dream_node.intensity})")
+                except Exception as e:
+                    logger.error(f"Failed to generate dream: {e}")
+            else:
+                # Fallback: Create Summary Episode (The "Dream")
+                summary_text = f"User interaction summary: {len(raw_episodes)} events consolidated."
+                summary_node = MemoryEpisodeNode(
+                    summary=summary_text,
+                    emotional_valence=1.0 # Consolidated/Refined
+                )
+                self.episodes[summary_node.id] = summary_node
+
+                # 2. Link Summary to User
+                self.experienced[user_id].append(summary_node.id)
 
             # 3. Mark Raw Episodes as archived (or delete them to save space)
             # For demo, we just update valence to indicate processed

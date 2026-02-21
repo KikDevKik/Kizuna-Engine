@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import Dict
 from ..repositories.base import SoulRepository
+from .subconscious import subconscious_mind
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,11 @@ class SleepManager:
         """
         logger.info(f"🌙 Grace Period expired for {user_id}. Entering REM Sleep (Consolidation)...")
         try:
-            await self.repository.consolidate_memories(user_id)
+            # Use Subconscious Mind to generate dreams during consolidation
+            await self.repository.consolidate_memories(
+                user_id,
+                dream_generator=subconscious_mind.generate_dream
+            )
             logger.info(f"✨ Consolidation Complete for {user_id}.")
         except Exception as e:
             logger.error(f"❌ Consolidation Failed for {user_id}: {e}")

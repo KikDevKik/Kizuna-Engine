@@ -52,7 +52,7 @@ class SoulRepository(ABC):
         pass
 
     @abstractmethod
-    async def consolidate_memories(self, user_id: str) -> None:
+    async def consolidate_memories(self, user_id: str, dream_generator=None) -> None:
         """
         Consolidate memories for the user (Event-Driven Debounce).
         Compresses recent episodes and updates long-term resonance.
