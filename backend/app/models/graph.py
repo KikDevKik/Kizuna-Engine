@@ -34,6 +34,13 @@ class FactNode(BaseModel):
     category: str # e.g. "preference", "relationship", "biography"
     confidence: float = 1.0
 
+class DreamNode(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    theme: str
+    intensity: float = 0.5 # 0.0 to 1.0
+    surrealism_level: float = 0.5 # 0.0 to 1.0
+    timestamp: datetime = Field(default_factory=datetime.now)
+
 # --- Edges (Relationships) ---
 
 class ResonanceEdge(BaseModel):
@@ -52,3 +59,8 @@ class KnowsEdge(BaseModel):
     source_id: str # User or Agent ID
     target_id: str # Fact ID
     context: str = ""
+
+class ShadowEdge(BaseModel):
+    source_id: str # User ID
+    target_id: str # Dream ID
+    weight: float = 1.0

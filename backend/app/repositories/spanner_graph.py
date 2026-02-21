@@ -6,7 +6,7 @@ except ImportError:
     FixedSizePool = None
 
 from ..repositories.base import SoulRepository
-from ..models.graph import UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode
+from ..models.graph import UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode, DreamNode, ShadowEdge
 import logging
 from core.config import settings
 from datetime import datetime
@@ -209,7 +209,7 @@ class SpannerSoulRepository(SoulRepository):
     async def save_fact(self, user_id: str, content: str, category: str) -> FactNode:
         return FactNode(content=content, category=category) # Stub
 
-    async def consolidate_memories(self, user_id: str) -> None:
+    async def consolidate_memories(self, user_id: str, dream_generator=None) -> None:
         """
         GQL implementation for memory consolidation.
         """

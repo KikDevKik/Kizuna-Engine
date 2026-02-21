@@ -5,6 +5,7 @@ import os
 from asyncio import Queue
 from datetime import datetime
 from ..repositories.base import SoulRepository
+from ..models.graph import DreamNode, MemoryEpisodeNode
 from core.config import settings
 
 # Try import genai
@@ -27,8 +28,8 @@ class SubconsciousMind:
         self.last_process_time = datetime.now()
         self.repository: SoulRepository | None = None
 
-        # Mock thresholds for demonstration (Phase 2)
-        self.triggers = {
+        # Default fallback if agent traits are missing
+        self.default_triggers = {
             "sad": "The user seems down. Be extra gentle and supportive.",
             "angry": "The user is frustrated. Apologize and de-escalate calmly.",
             "happy": " The user is excited! Match their energy.",
@@ -64,7 +65,7 @@ class SubconsciousMind:
                     continue
 
                 # Analyze (Real or Mock)
-                hint = await self._analyze_sentiment(full_text)
+                hint = await self._analyze_sentiment(full_text, agent_id)
 
                 if hint:
                     logger.info(f"🧠 Insight detected: {hint}")
@@ -79,17 +80,21 @@ class SubconsciousMind:
                     # 2. Persist Insight (Phase 3)
                     if self.repository:
                         try:
-                            # For demo: if "happy", increase affinity.
+                            # Dynamic Resonance Update
                             delta = 0
-                            trigger_word = ""
-                            if "happy" in hint or "excited" in hint:
+                            trigger_word = "Emotion"
+
+                            # Simple heuristic for now, but could be trait-driven later
+                            hint_lower = hint.lower()
+                            if "happy" in hint_lower or "excited" in hint_lower:
                                 delta = 1
-                                trigger_word = "Happiness"
-                            elif "angry" in hint:
-                                delta = 0
-                                trigger_word = "Anger"
-                            elif "sad" in hint:
-                                trigger_word = "Sadness"
+                                trigger_word = "Positivity"
+                            elif "angry" in hint_lower:
+                                delta = 0 # No penalty, just neutral/handling
+                                trigger_word = "Conflict"
+                            elif "sad" in hint_lower:
+                                delta = 1 # Comforting is bonding
+                                trigger_word = "Vulnerability"
 
                             if delta != 0:
                                 await self.repository.update_resonance(user_id, agent_id, delta)
@@ -98,7 +103,7 @@ class SubconsciousMind:
                             await self.repository.save_episode(
                                 user_id=user_id,
                                 agent_id=agent_id,
-                                summary=f"User triggered emotional insight: {trigger_word} -> {hint}",
+                                summary=f"User triggered insight: {trigger_word} -> {hint}",
                                 valence=0.5
                             )
                         except Exception as e:
@@ -119,7 +124,7 @@ class SubconsciousMind:
             # Don't crash the whole app, just log
             pass
 
-    async def _analyze_sentiment(self, text: str) -> str | None:
+    async def _analyze_sentiment(self, text: str, agent_id: str = None) -> str | None:
         """
         Analyzes text for emotional cues.
         Uses Real Gemini Flash if configured, otherwise falls back to keyword matching.
@@ -150,11 +155,69 @@ class SubconsciousMind:
             except Exception as e:
                 logger.warning(f"Subconscious inference failed: {e}. Fallback to keywords.")
 
-        # 2. Fallback (Keyword Matching)
+        # 2. Fallback (Keyword Matching via Traits)
+        triggers = self.default_triggers
+        if agent_id and self.repository:
+            agent = await self.repository.get_agent(agent_id)
+            if agent and agent.traits and "emotional_triggers" in agent.traits:
+                triggers = agent.traits["emotional_triggers"]
+
         text_lower = text.lower()
-        for trigger, hint in self.triggers.items():
+        for trigger, hint in triggers.items():
             if trigger in text_lower:
+                # Handle structured dict in traits vs simple string in default
+                if isinstance(hint, dict):
+                     return hint.get("response", "Emotion detected.")
                 return hint
         return None
+
+    async def generate_dream(self, episodes: list[MemoryEpisodeNode]) -> DreamNode:
+        """
+        Generates a DreamNode from a list of memory episodes using Generative AI.
+        """
+        if not episodes:
+            return DreamNode(theme="Void", intensity=0.0, surrealism_level=0.0)
+
+        summary_text = "\n".join([f"- {ep.summary} (Valence: {ep.emotional_valence})" for ep in episodes])
+
+        # Default mock dream
+        theme = "Reflection"
+        intensity = 0.5
+        surrealism = 0.3
+
+        mock_mode = os.getenv("MOCK_GEMINI", "false").lower() == "true"
+        if self.client and not mock_mode:
+            try:
+                prompt = (
+                    f"Synthesize these memories into a surreal dream concept. "
+                    f"Return JSON with keys: theme (str), intensity (0.0-1.0), surrealism_level (0.0-1.0).\n\n"
+                    f"Memories:\n{summary_text}"
+                )
+
+                response = await self.client.aio.models.generate_content(
+                    model=settings.MODEL_DREAM, # Or SUBCONSCIOUS if DREAM model not defined
+                    contents=prompt
+                )
+
+                # Simple parsing (robust JSON parsing needed for production)
+                text_resp = response.text.strip()
+                if "```json" in text_resp:
+                    text_resp = text_resp.split("```json")[1].split("```")[0]
+                elif "```" in text_resp:
+                    text_resp = text_resp.split("```")[1].split("```")[0]
+
+                data = json.loads(text_resp)
+                theme = data.get("theme", theme)
+                intensity = float(data.get("intensity", intensity))
+                surrealism = float(data.get("surrealism_level", surrealism))
+
+            except Exception as e:
+                logger.error(f"Dream generation failed: {e}")
+
+        return DreamNode(
+            theme=theme,
+            intensity=intensity,
+            surrealism_level=surrealism
+        )
 
 subconscious_mind = SubconsciousMind()
