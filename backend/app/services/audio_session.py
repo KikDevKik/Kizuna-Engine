@@ -163,15 +163,28 @@ async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: a
                             if part.inline_data:
                                 # part.inline_data.data is bytes
                                 # Optimize: Send raw binary directly to avoid Base64 overhead
-                                await websocket.send_bytes(part.inline_data.data)
+                                try:
+                                    await websocket.send_bytes(part.inline_data.data)
+                                except RuntimeError as e:
+                                    # Handle ASGI Race Condition during Fast Shutdown
+                                    if "Unexpected ASGI message" in str(e) or "closed" in str(e).lower():
+                                        logger.debug("Socket closed before audio chunk could be sent. Breaking loop.")
+                                        raise asyncio.CancelledError() # Exit gracefully
+                                    raise e
 
                             # Handle Text (if interleaved or final transcript)
                             if part.text:
                                 logger.info(f"Gemini -> Client: Text: {part.text[:50]}...")
-                                await websocket.send_json({
-                                    "type": "text",
-                                    "data": part.text
-                                })
+                                try:
+                                    await websocket.send_json({
+                                        "type": "text",
+                                        "data": part.text
+                                    })
+                                except RuntimeError as e:
+                                    if "Unexpected ASGI message" in str(e) or "closed" in str(e).lower():
+                                        logger.debug("Socket closed before text could be sent. Breaking loop.")
+                                        raise asyncio.CancelledError()
+                                    raise e
 
                                 # Feed the Subconscious Mind
                                 if transcript_queue:
@@ -183,7 +196,13 @@ async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: a
                     # Handle turn completion
                     if server_content.turn_complete:
                         logger.info("Gemini -> Client: Turn complete signal.")
-                        await websocket.send_json({"type": "turn_complete"})
+                        try:
+                            await websocket.send_json({"type": "turn_complete"})
+                        except RuntimeError as e:
+                            if "Unexpected ASGI message" in str(e) or "closed" in str(e).lower():
+                                logger.debug("Socket closed before turn_complete could be sent.")
+                                raise asyncio.CancelledError()
+                            raise e
 
             except asyncio.CancelledError:
                 logger.info("Receive loop cancelled (Graceful Shutdown).")
