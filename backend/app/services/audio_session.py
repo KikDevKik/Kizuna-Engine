@@ -4,6 +4,12 @@ import logging
 import json
 from fastapi import WebSocket, WebSocketDisconnect
 
+# Try importing types for robust multimodal handling
+try:
+    from google.genai import types
+except ImportError:
+    types = None
+
 logger = logging.getLogger(__name__)
 
 # 16000 Hz * 2 bytes = 32000 bytes/sec
@@ -93,7 +99,21 @@ async def send_to_gemini(websocket: WebSocket, session):
                             logger.info("📷 Sending Video Frame to Gemini...")
                             # Decode base64 to bytes in a thread pool to avoid blocking the event loop
                             image_bytes = await asyncio.to_thread(base64.b64decode, b64_image)
-                            await session.send(input={"data": image_bytes, "mime_type": "image/jpeg"})
+
+                            if types:
+                                # Use official SDK types for robustness
+                                try:
+                                    # Construct a proper Content object with Blob
+                                    blob = types.Blob(data=image_bytes, mime_type="image/jpeg")
+                                    part = types.Part(inline_data=blob)
+                                    content = types.Content(parts=[part])
+                                    await session.send(input=content)
+                                except Exception as e:
+                                    logger.warning(f"Failed to send typed image content, falling back to dict: {e}")
+                                    await session.send(input={"data": image_bytes, "mime_type": "image/jpeg"})
+                            else:
+                                # Fallback for Mock or older SDK
+                                await session.send(input={"data": image_bytes, "mime_type": "image/jpeg"})
                 except json.JSONDecodeError:
                     logger.warning("Received invalid JSON text from client.")
                 except Exception as e:

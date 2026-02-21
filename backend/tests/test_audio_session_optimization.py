@@ -53,8 +53,22 @@ async def test_send_to_gemini_image_offloading():
             raise
 
         # Verify session.send was called with decoded bytes
-        mock_session.send.assert_called_with(input={"data": test_image_data, "mime_type": "image/jpeg"})
-        print("✅ Verification test passed: base64 decoding still works correctly after offloading.")
+        # Since we upgraded to use google.genai.types.Content, we need to check flexibly
+        call_args = mock_session.send.call_args
+        if call_args:
+            input_arg = call_args.kwargs.get('input')
+            if isinstance(input_arg, dict):
+                 assert input_arg == {"data": test_image_data, "mime_type": "image/jpeg"}
+            else:
+                 # Assume it's a Content object (we can't easily import types here without potentially failing if not installed)
+                 # Check if the blob data inside matches
+                 # Content -> parts[0] -> inline_data -> data
+                 assert input_arg.parts[0].inline_data.data == test_image_data
+                 assert input_arg.parts[0].inline_data.mime_type == "image/jpeg"
+        else:
+             raise AssertionError("session.send was not called")
+
+        print("✅ Verification test passed: Image sent successfully (Typed or Dict).")
 
 if __name__ == "__main__":
     asyncio.run(test_send_to_gemini_image_offloading())
