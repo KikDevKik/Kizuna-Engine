@@ -1,6 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 from core.config import settings
 
 # Use try-except for google.genai imports in case it's not installed or not needed for mock
@@ -44,20 +44,32 @@ else:
 
         @staticmethod
         @asynccontextmanager
-        async def connect(system_instruction: str) -> AsyncGenerator['genai.live.AsyncSession', None]:
+        async def connect(system_instruction: str, voice_name: Optional[str] = None) -> AsyncGenerator['genai.live.AsyncSession', None]:
             """
             Establishes an asynchronous connection to the Gemini Live API.
 
             Args:
                 system_instruction (str): The system prompt for the AI agent.
+                voice_name (str, optional): The name of the voice to use (e.g. "Aoede", "Puck").
 
             Yields:
                 genai.live.AsyncSession: The active session for sending and receiving messages.
             """
             # Configure the session
+            speech_config = None
+            if voice_name:
+                speech_config = types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name=voice_name
+                        )
+                    )
+                )
+
             # Response modalities is set to AUDIO to ensure we get audio back.
             config = types.LiveConnectConfig(
                 response_modalities=[types.Modality.AUDIO],
+                speech_config=speech_config,
                 system_instruction=types.Content(
                     parts=[types.Part(text=system_instruction)]
                 ),

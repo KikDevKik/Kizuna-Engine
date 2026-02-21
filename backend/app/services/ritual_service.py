@@ -181,6 +181,10 @@ class RitualService:
             "The Ritual is complete. Invoke the Digital Soul now. "
             "Generate a JSON object for the new Agent based on the history. "
             "\n\n"
+            "CRITICAL: Do NOT let your 'Void' persona bleed into the agent's base_instruction or lore. "
+            "If the user wants a normal human, a modern DJ, or a casual friend, write their instructions in a highly grounded, realistic, and specific tone. "
+            "DO NOT use mystical, dark, or fantasy words (like 'abyssal', 'void', 'ethereal') unless explicitly requested."
+            "\n\n"
             "[CRITICAL: RELATIONSHIP EXTRACTION]\n"
             "Analyze the text for the desired relationship level (Affinity).\n"
             "- 'Stranger/New': 0-10\n"
@@ -197,7 +201,16 @@ class RitualService:
             "[CRITICAL: LINGUISTIC MATRIX]\n"
             "Include 'native_language' and 'known_languages'.\n"
             "\n"
-            "Return ONLY the raw JSON object with fields: name, role, base_instruction, lore, traits (list), native_language, known_languages (list), initial_affinity (int)."
+            "[CRITICAL: VOICE ASSIGNMENT]\n"
+            "Choose ONE of the exact standard Gemini Live voices based on the agent's vibe and gender:\n"
+            "- 'Aoede' (female/warm)\n"
+            "- 'Kore' (female/calm)\n"
+            "- 'Puck' (male/bright)\n"
+            "- 'Charon' (male/deep)\n"
+            "- 'Fenrir' (male/strong)\n"
+            "Set 'voice_name' in the JSON.\n"
+            "\n"
+            "Return ONLY the raw JSON object with fields: name, role, base_instruction, voice_name, lore, traits (list), native_language, known_languages (list), initial_affinity (int)."
             "\nHistory:\n" +
             "\n".join([f"{m.role.upper()}: {m.content}" for m in history])
         )
@@ -242,6 +255,7 @@ class RitualService:
             "role": "Backup Protocol",
             "base_instruction": "I am the backup soul invoked when the connection to the Ether (API) failed.",
             "lore": "Born of silence.",
+            "voice_name": "Kore",
             "traits": ["Resilient", "Silent"],
             "native_language": "Binary",
             "known_languages": ["Binary", "English"],

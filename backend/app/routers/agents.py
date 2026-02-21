@@ -21,6 +21,7 @@ class CreateAgentRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Name of the agent (1-100 chars)")
     role: str = Field(..., min_length=1, max_length=100, description="Role of the agent (1-100 chars)")
     base_instruction: str = Field(..., min_length=1, max_length=5000, description="System prompt for the agent (1-5000 chars)")
+    voice_name: Optional[str] = Field(default=None, description="Voice name for Gemini Live (e.g. Aoede, Kore, Puck, Charon, Fenrir)")
     traits: dict = Field(default_factory=dict, description="Key-value traits")
     tags: List[str] = Field(default_factory=list, max_length=20, description="List of tags (max 20)")
     native_language: str = Field(default="Unknown", description="Native language of the agent")
@@ -72,6 +73,7 @@ async def create_agent(request: CreateAgentRequest):
             name=request.name,
             role=request.role,
             base_instruction=request.base_instruction,
+            voice_name=request.voice_name,
             traits=request.traits,
             tags=request.tags,
             native_language=request.native_language,
@@ -135,6 +137,7 @@ async def conduct_ritual(
                 name=data.get("name", "Unnamed"),
                 role=data.get("role", "Unknown"),
                 base_instruction=data.get("base_instruction", ""),
+                voice_name=data.get("voice_name"),
                 traits=traits,
                 tags=["ritual-born"],
                 native_language=data.get("native_language", "Unknown"),

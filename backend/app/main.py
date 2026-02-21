@@ -107,7 +107,15 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
     # Phase 4: Waking Up
     sleep_manager.cancel_sleep(user_id)
 
+    # Agent Voice Configuration
+    voice_name = None
+
     try:
+        # Fetch Agent to get Voice Config
+        agent = await soul_repo.get_agent(agent_id)
+        if agent:
+             voice_name = agent.voice_name
+
         # Phase 5: Neural Sync (Redis Check)
         cache_key = f"soul:{user_id}:{agent_id}"
         system_instruction = await cache.get(cache_key)
@@ -131,7 +139,7 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
     logger.info(f"WebSocket connection established from origin: {origin} for Agent: {agent_id}")
 
     try:
-        async with gemini_service.connect(system_instruction=system_instruction) as session:
+        async with gemini_service.connect(system_instruction=system_instruction, voice_name=voice_name) as session:
             logger.info(f"Gemini session started for {agent_id}.")
 
             # Phase 2: Initialize Subconscious Channels
