@@ -137,10 +137,12 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
           source.connect(analyser);
           analyserRef.current = analyser;
 
+          // Moved allocation outside the loop to reuse the buffer
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
           // Volume Analysis Loop
           const updateVolume = () => {
             if (!analyserRef.current) return;
-            const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
             analyserRef.current.getByteFrequencyData(dataArray);
 
             // Calculate average volume
