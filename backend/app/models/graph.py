@@ -21,6 +21,10 @@ class AgentNode(BaseModel):
     native_language: str = "Unknown"
     known_languages: List[str] = Field(default_factory=list)
 
+    # Dynamic Prompts (Zero Hardcoding)
+    memory_extraction_prompt: str = "Analyze the user's emotional state from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return nothing."
+    dream_prompt: str = "Synthesize these memories into a surreal dream concept. Return JSON with keys: theme (str), intensity (0.0-1.0), surrealism_level (0.0-1.0).\n\nMemories:\n{summary_text}"
+
 class MemoryEpisodeNode(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     summary: str
