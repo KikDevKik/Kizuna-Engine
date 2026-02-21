@@ -43,7 +43,7 @@ def test_kizuna_connection():
         # Test 3: Valid Agent (Kizuna)
         print("\n[Test 3] Connecting with valid agent_id 'kizuna'...")
         try:
-            with client.websocket_connect("/ws/live?agent_id=kizuna") as websocket:
+            with client.websocket_connect("/ws/live?agent_id=kizuna", headers={"Origin": "http://localhost:5173"}) as websocket:
                 print("✅ Connection established for Kizuna")
                 # Check if we can receive the 'Gemini session started' log indirectly or just hold connection
                 pass
