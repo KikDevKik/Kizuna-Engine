@@ -5,6 +5,13 @@
   --color-tartarus: #121a2f;
   --color-cyan-persona: #00e5ff;
   --color-pure-white: #ffffff;
+
+  /* ABYSSAL PALETTE */
+  --color-electric-blue: #00D1FF;
+  --color-vintage-navy: #112D54;
+  --color-abyssal-black: #05080F;
+  --color-translucent-cyan: rgba(125, 249, 255, 0.15);
+  --color-alert-red: #FF3366;
 }
 
 @layer utilities {

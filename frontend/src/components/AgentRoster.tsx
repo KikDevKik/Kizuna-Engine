@@ -187,68 +187,65 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
     }
   };
 
-  // Determine Card Style based on relative offset
+  // ------------------------------------------------------------------
+  // REVOLVER CYLINDER LOGIC (TRIGONOMETRIC)
+  // ------------------------------------------------------------------
+  const CYLINDER_RADIUS = 500;
+  const CARD_ANGLE = 25; // Degrees per card
+
+  // Container Rotation: Rotates opposite to index to keep active card front & center
+  // But wait, the previous code moved CARDS.
+  // To simulate a cylinder where the CAMERA stays fixed and the cylinder rotates:
+  // We calculate the *relative* angle of each card to the current view center.
+
   const getCardStyle = (index: number) => {
-    const offset = index - activeIndex;
-    const absOffset = Math.abs(offset);
-    const direction = offset > 0 ? 1 : -1;
+    const offsetIndex = index - activeIndex;
+    const angleDeg = offsetIndex * CARD_ANGLE;
+    const angleRad = (angleDeg * Math.PI) / 180;
 
-    // Base Transition Config
-    const transition = {
-      type: "spring" as const,
-      stiffness: 300,
-      damping: 30,
-      mass: 1
-    };
+    // Cylinder Math
+    // x = r * sin(theta)
+    // z = r * (cos(theta) - 1)  <-- Subtract radius to bring center to z=0 or push back?
+    // Let's keep it simple:
+    // We want active card at (0, 0, 0)
+    // Neighbors curve away in Z.
 
-    // 1. ACTIVE CENTER CARD (Focus)
-    if (offset === 0) {
-      return {
-        x: 0,
-        z: 0,
-        rotateY: 0,
-        scale: 1.1,
-        opacity: 1,
-        zIndex: 100,
-        filter: "blur(0px) brightness(1.2) drop-shadow(0 0 30px rgba(0,209,255,0.3))",
-        transition
-      };
-    }
+    const x = CYLINDER_RADIUS * Math.sin(angleRad);
+    const z = CYLINDER_RADIUS * Math.cos(angleRad) - CYLINDER_RADIUS; // At angle=0, z=0.
 
-    // 2. IMMEDIATE NEIGHBORS (Visible Side Cards)
-    if (absOffset === 1) {
-      return {
-        x: direction * 320, // Spread out to sides
-        z: -100,            // Push back slightly
-        rotateY: direction * -15, // Angle inward slightly to face camera
-        scale: 0.9,
-        opacity: 0.7,
-        zIndex: 90,
-        filter: "blur(0px) brightness(0.6)",
-        transition
-      };
-    }
+    // Rotation: Cards face the center of the cylinder? Or face the camera?
+    // "Revolver Cylinder" usually implies cards are tangent to the circle.
+    // So rotateY should be equal to angleDeg.
+    const rotateY = angleDeg;
 
-    // 3. DISTANT STACK (Deck Effect)
-    // Tightly stacked behind the neighbors
-    const baseStackX = direction * 380;
-    const stackSpacing = 20;
-    const stackZ = -200 - (absOffset * 40);
+    // Visibility Culling & Fading
+    const absOffset = Math.abs(offsetIndex);
+    const opacity = 1 - (absOffset * 0.25); // Fade out distant cards
+    const scale = absOffset === 0 ? 1.1 : 0.9;
+    const zIndex = 100 - absOffset;
 
     return {
-      x: baseStackX + (direction * (absOffset - 2) * stackSpacing),
-      z: stackZ,
-      rotateY: direction * -5, // Flatter angle for the stack
-      scale: 0.8,
-      opacity: 0.2, // Faded
-      zIndex: 80 - absOffset,
-      filter: "blur(4px) brightness(0.4)",
-      transition
+      x,
+      z,
+      rotateY,
+      rotateZ: absOffset === 0 ? "-2deg" : "-5deg", // Aggressive tilt
+      scale,
+      opacity: Math.max(opacity, 0),
+      zIndex,
+      filter: absOffset === 0
+        ? "blur(0px) brightness(1.2) drop-shadow(0 0 30px rgba(0,209,255,0.3))"
+        : `blur(${absOffset * 2}px) brightness(0.5)`,
+      transition: {
+        type: "spring" as const,
+        stiffness: 200,
+        damping: 30,
+        mass: 1
+      }
     };
   };
 
   if (isLoading && agents.length === 0) {
-      return <div className="text-cyan-500 font-technical text-center mt-20 animate-pulse">ESTABLISHING LINK...</div>;
+      return <div className="text-electric-blue font-technical text-center mt-20 animate-pulse">ESTABLISHING LINK...</div>;
   }
 
   const isFirst = activeIndex === 0;
@@ -272,16 +269,15 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         {/* 3D STAGE - Single Relative Container */}
         <div
           className="w-full h-[450px] flex items-center justify-center relative"
-          style={{ perspective: "1200px" }} // Perspective on container
+          style={{ perspective: "1000px" }} // Perspective on container
         >
             <AnimatePresence>
             {agents.map((agent, index) => {
               const isCreateCard = agent.id === 'create-new';
               const isFocused = activeIndex === index;
 
-              // Only render if within reasonable range to save DOM performance
-              // (Optional optimization, but good for large lists)
-              if (Math.abs(index - activeIndex) > 5) return null;
+              // Optimization: Only render visible arc
+              if (Math.abs(index - activeIndex) > 4) return null;
 
               return (
                 <motion.div
@@ -292,13 +288,15 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                   animate={getCardStyle(index)}
                   style={{
                     transformStyle: "preserve-3d",
-                    cursor: "pointer"
+                    cursor: "pointer",
+                    // Fix for backface visibility flickering
+                    backfaceVisibility: "hidden"
                   }}
                   onClick={() => setActiveIndex(index)}
                 >
                   {/* CARD CONTENT */}
                   <div
-                    className={`agent-card-glass w-full h-full ${isFocused ? 'border-cyan-400' : 'border-slate-700'}`}
+                    className={`agent-card-glass w-full h-full ${isFocused ? 'border-electric-blue' : 'border-vintage-navy'}`}
                   >
                     {/* DELETE BUTTON (Only on Focused & Real Agents) */}
                     {isFocused && !isCreateCard && (
@@ -308,7 +306,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                             e.stopPropagation();
                             setAgentToDelete(agent);
                           }}
-                          className="p-2 text-slate-600 hover:text-red-500 transition-colors opacity-50 hover:opacity-100"
+                          className="p-2 text-vintage-navy hover:text-alert-red transition-colors opacity-50 hover:opacity-100"
                           title="Terminate Soul"
                         >
                           <Trash2 size={20} />
@@ -318,8 +316,8 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
 
                     {isCreateCard ? (
                       // CREATE NEW CARD CONTENT
-                      <div className="flex flex-col items-center justify-center h-full gap-4 text-cyan-400">
-                        <div className="p-4 border border-dashed border-cyan-400/50 rounded-full">
+                      <div className="flex flex-col items-center justify-center h-full gap-4 text-electric-blue">
+                        <div className="p-4 border border-dashed border-electric-blue/50 rounded-full">
                           <Plus size={48} />
                         </div>
                         <h2 className="font-monumental text-xl tracking-widest text-center">FORGE NEW SOUL</h2>
@@ -328,14 +326,14 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                       // AGENT CARD CONTENT
                       <>
                         {/* Avatar / Visual Placeholder */}
-                        <div className="flex-1 flex items-center justify-center mb-4 relative overflow-hidden bg-black/20 rounded-sm">
+                        <div className="flex-1 flex items-center justify-center mb-4 relative overflow-hidden bg-abyssal-black/20 rounded-sm">
                            {agent.avatar_path ? (
                              <img src={agent.avatar_path} alt={agent.name} className="w-full h-full object-cover opacity-90" />
                            ) : (
                              // TYPOGRAPHIC FALLBACK
                              <div className="relative w-full h-full flex items-center justify-center">
-                               <div className="absolute inset-0 border border-cyan-400/10" />
-                               <span className="font-monumental text-6xl text-cyan-400/80 drop-shadow-[0_0_15px_rgba(0,209,255,0.5)]">
+                               <div className="absolute inset-0 border border-electric-blue/10" />
+                               <span className="font-monumental text-6xl text-electric-blue/80 drop-shadow-[0_0_15px_rgba(0,209,255,0.5)]">
                                  {agent.name.charAt(0).toUpperCase()}
                                </span>
                              </div>
@@ -344,13 +342,13 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
 
                         <div className="flex flex-col gap-1">
                           <h2 className="agent-card-title text-3xl truncate">{agent.name}</h2>
-                          <p className="agent-card-role text-xs tracking-widest text-cyan-200/70 uppercase">{agent.role}</p>
+                          <p className="agent-card-role text-xs tracking-widest text-electric-blue/70 uppercase">{agent.role}</p>
                         </div>
 
                         <div className="mt-4">
                           <div className="w-full h-[1px] bg-white/10 my-2" />
                           <div className="flex justify-between items-end">
-                             <span className="font-technical text-2xl text-cyan-300">
+                             <span className="font-technical text-2xl text-electric-blue">
                                 {agent.systemStatus === 'ONLINE' ? '100%' : '---'}
                              </span>
                              <span className="font-technical text-xs text-white/50">

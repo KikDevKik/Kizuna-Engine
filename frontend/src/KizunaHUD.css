@@ -311,3 +311,51 @@ body {
   background: var(--color-electric-blue);
   color: #000;
 }
+
+/* -------------------------------------------------------------------------- */
+/* 9. SHARD NAV BUTTONS                                                       */
+/* -------------------------------------------------------------------------- */
+
+.kizuna-shard-nav-btn {
+  position: relative;
+  display: inline-block;
+  padding: 1px; /* Thinner border for nav */
+  background: var(--color-electric-blue);
+  clip-path: polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%); /* Trapezoid */
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+  opacity: 0.6; /* Inactive state by default */
+}
+
+.kizuna-shard-nav-btn:hover {
+  opacity: 0.8;
+  transform: translateY(-2px);
+}
+
+.kizuna-shard-nav-btn.active {
+  opacity: 1;
+  filter: drop-shadow(0 0 8px rgba(0, 209, 255, 0.6));
+}
+
+.kizuna-shard-nav-inner {
+  background: var(--color-abyssal-black);
+  color: var(--color-electric-blue);
+  font-family: 'Teko', sans-serif;
+  font-weight: 500;
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
+  padding: 4px 24px;
+  clip-path: polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.kizuna-shard-nav-btn.active .kizuna-shard-nav-inner {
+  background: var(--color-electric-blue);
+  color: var(--color-abyssal-black);
+  font-weight: 700;
+}
