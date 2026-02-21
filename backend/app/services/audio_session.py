@@ -62,11 +62,11 @@ async def send_to_gemini(websocket: WebSocket, session):
             # We must detect if the message is bytes (audio) or text/json (video/control)
             message = await websocket.receive()
 
-            if "bytes" in message:
-                # --- AUDIO FLOW ---
-                data = message["bytes"]
-                if not data: continue
+            data = message.get("bytes")
+            text = message.get("text")
 
+            if data:
+                # --- AUDIO FLOW ---
                 # Prepend carry_over from previous iteration
                 if carry_over:
                     data = carry_over + data
@@ -87,10 +87,10 @@ async def send_to_gemini(websocket: WebSocket, session):
                     await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
                     audio_buffer.clear()
 
-            elif "text" in message:
+            elif text:
                 # --- VIDEO / CONTROL FLOW ---
                 try:
-                    payload = json.loads(message["text"])
+                    payload = json.loads(text)
                     if payload.get("type") == "image":
                         # Phase 5: Ojos Digitales
                         # Payload: {type: "image", data: "base64..."}
