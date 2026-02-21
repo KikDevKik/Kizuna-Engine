@@ -63,8 +63,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
           exit={{ opacity: 0, scale: 0.95 }}
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
         >
-          <div className="w-[800px] h-[600px] bg-abyssal-black border border-electric-blue/50 shadow-2xl shadow-electric-blue/20 flex flex-col overflow-hidden relative"
-               style={{ clipPath: "polygon(2% 0, 100% 0, 100% 95%, 98% 100%, 0 100%, 0 5%)" }}>
+          <div className="w-[800px] h-[600px] bg-abyssal-black border border-electric-blue/50 shadow-2xl shadow-electric-blue/20 flex flex-col overflow-hidden relative shape-modal-shard">
 
             {/* Header */}
             <div className="h-12 bg-vintage-navy/20 border-b border-electric-blue/30 flex items-center justify-between px-6">
@@ -102,15 +101,19 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
                   <button
                     onClick={handleCapture}
                     disabled={!isCameraReady || !api.connected}
-                    className="flex-1 bg-vintage-navy/30 border border-electric-blue/50 text-electric-blue py-2 font-technical text-sm hover:bg-electric-blue/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                    className="kizuna-shard-btn-wrapper flex-1"
                   >
-                    <Camera size={16} /> CAPTURE FRAME
+                    <div className="kizuna-shard-btn-inner gap-2">
+                      <Camera size={16} /> CAPTURE FRAME
+                    </div>
                   </button>
                   <button
                     onClick={() => setAutoSync(!autoSync)}
-                    className={`flex-1 border py-2 font-technical text-sm transition-colors flex items-center justify-center gap-2 ${autoSync ? 'bg-alert-red/20 border-alert-red text-alert-red' : 'bg-vintage-navy/30 border-electric-blue/50 text-electric-blue hover:bg-electric-blue/20'}`}
+                    className={`kizuna-shard-btn-wrapper flex-1 ${autoSync ? '!bg-alert-red' : ''}`}
                   >
-                    <Activity size={16} /> {autoSync ? 'STOP SYNC' : 'AUTO SYNC (2.5s)'}
+                    <div className={`kizuna-shard-btn-inner gap-2 ${autoSync ? '!text-alert-red bg-alert-red/10' : ''}`}>
+                      <Activity size={16} /> {autoSync ? 'STOP SYNC' : 'AUTO SYNC (2.5s)'}
+                    </div>
                   </button>
                 </div>
               </div>
