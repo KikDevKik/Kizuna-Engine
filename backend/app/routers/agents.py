@@ -22,6 +22,8 @@ class CreateAgentRequest(BaseModel):
     base_instruction: str = Field(..., min_length=1, max_length=5000, description="System prompt for the agent (1-5000 chars)")
     traits: dict = Field(default_factory=dict, description="Key-value traits")
     tags: List[str] = Field(default_factory=list, max_length=20, description="List of tags (max 20)")
+    native_language: str = Field(default="Unknown", description="Native language of the agent")
+    known_languages: List[str] = Field(default_factory=list, description="List of languages the agent knows")
 
     @field_validator('tags')
     @classmethod
@@ -70,7 +72,9 @@ async def create_agent(request: CreateAgentRequest):
             role=request.role,
             base_instruction=request.base_instruction,
             traits=request.traits,
-            tags=request.tags
+            tags=request.tags,
+            native_language=request.native_language,
+            known_languages=request.known_languages
         )
         return new_agent
     except Exception as e:
@@ -125,7 +129,9 @@ async def conduct_ritual(history: List[RitualMessage], response: Response, accep
                 role=data.get("role", "Unknown"),
                 base_instruction=data.get("base_instruction", ""),
                 traits=traits,
-                tags=["ritual-born"]
+                tags=["ritual-born"],
+                native_language=data.get("native_language", "Unknown"),
+                known_languages=data.get("known_languages", [])
             )
 
             response.status_code = status.HTTP_201_CREATED
