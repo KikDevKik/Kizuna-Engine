@@ -55,9 +55,10 @@ class LocalSoulRepository(SoulRepository):
                     node = UserNode(**u)
                     self.users[node.id] = node
 
-                for a in data.get("agents", []):
-                    node = AgentNode(**a)
-                    self.agents[node.id] = node
+                # NOTE: We intentionally DO NOT load agents from graph.json.
+                # The 'agents' directory is the single source of truth.
+                # This prevents "ghost agents" (deleted from disk but remaining in graph.json) from persisting.
+                # self.agents will be populated strictly from the filesystem below.
 
                 for e in data.get("episodes", []):
                     node = MemoryEpisodeNode(**e)
@@ -98,6 +99,11 @@ class LocalSoulRepository(SoulRepository):
         # Sync with Agents Directory (Source of Truth for Agents)
         # ---------------------------------------------------------
         # This must happen regardless of graph.json state
+
+        # Clear in-memory agents to ensure we strictly mirror the filesystem.
+        # This removes "ghost agents" that were deleted from disk.
+        self.agents = {}
+
         agents_dir = self.data_path.parent / "agents"
         if agents_dir.exists():
             loaded_count = 0
@@ -106,7 +112,7 @@ class LocalSoulRepository(SoulRepository):
                     with open(agent_file, "r", encoding="utf-8") as af:
                         agent_data = json.load(af)
                         agent_node = AgentNode(**agent_data)
-                        # Upsert: Filesystem overrides graph.json cache
+                        # Source of Truth: Filesystem
                         self.agents[agent_node.id] = agent_node
                         loaded_count += 1
                 except Exception as ae:

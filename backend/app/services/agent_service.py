@@ -78,7 +78,7 @@ class AgentService:
             logger.error(f"Failed to load agent {agent_id}: {e}")
             return None
 
-    async def create_agent(self, name: str, role: str, base_instruction: str, traits: dict = None, tags: list = None) -> AgentNode:
+    async def create_agent(self, name: str, role: str, base_instruction: str, traits: dict = None, tags: list = None, native_language: str = "Unknown", known_languages: list = None) -> AgentNode:
         """
         Creates a new agent file.
         Generates a UUID for the ID and filename.
@@ -91,7 +91,9 @@ class AgentService:
             role=role,
             base_instruction=base_instruction,
             traits=traits or {},
-            tags=tags or []
+            tags=tags or [],
+            native_language=native_language,
+            known_languages=known_languages or []
         )
 
         file_path = self.data_dir / f"{agent_id}.json"
