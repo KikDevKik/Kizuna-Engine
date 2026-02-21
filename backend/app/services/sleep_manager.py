@@ -20,12 +20,17 @@ class SleepManager:
         # Default grace period in seconds (e.g., 300s = 5 mins)
         # For demo purposes, we might use a shorter duration.
         self.grace_period = 300
+        self._is_shutting_down = False
 
     def schedule_sleep(self, user_id: str, delay: int = None):
         """
         Schedule consolidation after a grace period.
         Called on WebSocket Disconnect.
         """
+        if self._is_shutting_down:
+            logger.info(f"🛑 Shutdown in progress. Skipping sleep schedule for {user_id}.")
+            return
+
         if delay is None:
             delay = self.grace_period
 
@@ -88,7 +93,9 @@ class SleepManager:
         """
         Gracefully shutdown all pending sleep/consolidation tasks.
         """
+        self._is_shutting_down = True
         logger.info("🛑 SleepManager shutting down...")
+
         if not self.active_timers:
             return
 
