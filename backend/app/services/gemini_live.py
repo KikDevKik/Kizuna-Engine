@@ -1,10 +1,7 @@
-import os
-import json
-import asyncio
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
-from dotenv import load_dotenv
+from typing import AsyncGenerator
+from core.config import settings
 
 # Use try-except for google.genai imports in case it's not installed or not needed for mock
 try:
@@ -14,16 +11,11 @@ except ImportError:
     genai = None
     types = None
 
-from typing import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
-# 1. Buscamos el archivo .env a la fuerza
-env_path = Path(__file__).resolve().parent.parent.parent / '.env'
-load_dotenv(dotenv_path=env_path)
-
 # Check for Mock Mode
-MOCK_MODE = os.getenv("MOCK_GEMINI", "false").lower() == "true"
+MOCK_MODE = settings.MOCK_GEMINI
 
 if MOCK_MODE:
     logger.warning("⚠️ MOCK_GEMINI is enabled. Using MockGeminiService.")
@@ -36,7 +28,7 @@ if MOCK_MODE:
         raise
 else:
     # 2. Extraemos la llave de forma manual
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = settings.GEMINI_API_KEY
 
     # 3. Si no la encuentra, explota
     if not api_key:

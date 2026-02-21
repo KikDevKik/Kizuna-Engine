@@ -130,7 +130,7 @@ class SubconsciousMind:
         Uses Real Gemini Flash if configured, otherwise falls back to keyword matching.
         """
         # 1. Real Intelligence (The Guide Dog)
-        mock_mode = os.getenv("MOCK_GEMINI", "false").lower() == "true"
+        mock_mode = settings.MOCK_GEMINI
 
         if self.client and not mock_mode:
             try:
@@ -197,7 +197,7 @@ class SubconsciousMind:
         intensity = 0.5
         surrealism = 0.3
 
-        mock_mode = os.getenv("MOCK_GEMINI", "false").lower() == "true"
+        mock_mode = settings.MOCK_GEMINI
         if self.client and not mock_mode:
             try:
                 # Dynamic Prompt Loading
