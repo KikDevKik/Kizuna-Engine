@@ -147,12 +147,18 @@ class SubconsciousMind:
                     if agent and agent.memory_extraction_prompt:
                         prompt_template = agent.memory_extraction_prompt
 
-                prompt = prompt_template.replace("{text}", text)
+                # Use system_instruction to prevent prompt injection
+                system_instruction = prompt_template.replace("{text}", "[TRANSCRIPT]")
 
                 # Using 2.0 Flash Exp or configured model
                 response = await self.client.aio.models.generate_content(
                     model=settings.MODEL_SUBCONSCIOUS,
-                    contents=prompt
+                    contents=text,
+                    config=types.GenerateContentConfig(
+                        system_instruction=types.Content(
+                            parts=[types.Part(text=system_instruction)]
+                        )
+                    )
                 )
 
                 if not response.text:
@@ -212,11 +218,17 @@ class SubconsciousMind:
                     if agent and agent.dream_prompt:
                         prompt_template = agent.dream_prompt
 
-                prompt = prompt_template.replace("{summary_text}", summary_text)
+                # Use system_instruction to prevent prompt injection
+                system_instruction = prompt_template.replace("{summary_text}", "[MEMORIES]")
 
                 response = await self.client.aio.models.generate_content(
                     model=settings.MODEL_DREAM, # Or SUBCONSCIOUS if DREAM model not defined
-                    contents=prompt
+                    contents=summary_text,
+                    config=types.GenerateContentConfig(
+                        system_instruction=types.Content(
+                            parts=[types.Part(text=system_instruction)]
+                        )
+                    )
                 )
 
                 if not response.text:
