@@ -21,8 +21,8 @@ export const VisionPanel: React.FC<VisionPanelProps> = ({ connected, sendImage }
     if (!connected || !isCameraReady) return;
 
     // Argus: Muestreo Inteligente (2s heartbeat)
-    const interval = setInterval(() => {
-      const frame = captureFrame();
+    const interval = setInterval(async () => {
+      const frame = await captureFrame();
       if (frame) {
         sendImage(frame);
         // Visual Feedback (Pulse)

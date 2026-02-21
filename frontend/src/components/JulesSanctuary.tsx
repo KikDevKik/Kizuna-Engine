@@ -25,8 +25,8 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
   useEffect(() => {
     let interval: number;
     if (autoSync && isCameraReady && api.connected) {
-      interval = window.setInterval(() => {
-        const frame = captureFrame();
+      interval = window.setInterval(async () => {
+        const frame = await captureFrame();
         if (frame) {
           api.sendImage(frame);
           addLog("AUTO-SYNC: Frame sent");
@@ -37,8 +37,8 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
   }, [autoSync, isCameraReady, api.connected, captureFrame, api]);
 
   // Manual Capture
-  const handleCapture = () => {
-    const frame = captureFrame();
+  const handleCapture = async () => {
+    const frame = await captureFrame();
     if (frame) {
       api.sendImage(frame);
       addLog("MANUAL: Frame sent");

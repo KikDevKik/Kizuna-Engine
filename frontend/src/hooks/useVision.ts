@@ -55,7 +55,8 @@ export const useVision = (active: boolean = false) => {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const captureFrame = useCallback((): string | null => {
+  // Async capture to prevent UI freeze (Argus Optimization)
+  const captureFrame = useCallback(async (): Promise<string | null> => {
     if (!videoRef.current || !isCameraReady) return null;
 
     const video = videoRef.current;
@@ -76,10 +77,22 @@ export const useVision = (active: boolean = false) => {
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Convert to JPEG base64
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-    // Remove prefix "data:image/jpeg;base64,"
-    return dataUrl.split(',')[1];
+    // Convert to JPEG base64 via Blob (Async)
+    return new Promise((resolve) => {
+        canvas.toBlob((blob) => {
+            if (!blob) {
+                resolve(null);
+                return;
+            }
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64data = reader.result as string;
+                // Remove prefix "data:image/jpeg;base64,"
+                resolve(base64data.split(',')[1]);
+            };
+            reader.readAsDataURL(blob);
+        }, 'image/jpeg', 0.8);
+    });
   }, [isCameraReady]);
 
   return { videoRef, captureFrame, isCameraReady };
