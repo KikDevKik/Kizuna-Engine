@@ -17,40 +17,13 @@ from app.services.sleep_manager import SleepManager
 from app.services.cache import cache
 from app.services.seeder import seed_data
 from app.routers import warmup, agents
-from app.dependencies import soul_repo
+from app.dependencies import soul_repo, verify_user_logic
 from core.config import settings
 import os
 
 # Creamos la maldita libreta de Jules
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Lazy Auth Verification
-def verify_user(token: str | None) -> str:
-    # Phase 3.2: Secure Identity if Configured
-    if token and settings.FIREBASE_CREDENTIALS:
-        try:
-            from app.services.auth import FirebaseAuth
-            user_id = FirebaseAuth.verify_token(token)
-            logger.info(f"Authenticated User: {user_id}")
-            return user_id
-        except Exception as e:
-            logger.warning(f"Authentication Failed: {e}")
-            raise
-
-    # Enforce Auth in Prod (GCP)
-    if settings.GCP_PROJECT_ID:
-        if not token:
-            logger.warning("Connection rejected: No token provided in Production.")
-            raise ValueError("Authentication Required in Production")
-
-        # If we have a token but NO credentials in Prod -> CRITICAL ERROR
-        if not settings.FIREBASE_CREDENTIALS:
-            logger.critical("SECURITY ALERT: Production environment detected but FIREBASE_CREDENTIALS are missing. Cannot verify token.")
-            raise ValueError("Server Misconfiguration: Auth credentials missing in Production.")
-
-    # Lab Mode / Guest
-    return "guest_user"
 
 # Initialize Sleep Manager (Phase 4)
 sleep_manager = SleepManager(soul_repo)
@@ -123,7 +96,7 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
 
     # Phase 3.2: Secure Identity (Lazy)
     try:
-        user_id = verify_user(token)
+        user_id = verify_user_logic(token)
     except Exception as e:
         await websocket.close(code=1008, reason=str(e))
         return

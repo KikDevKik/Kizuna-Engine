@@ -40,7 +40,7 @@ else:
 
     # 3. Si no la encuentra, explota
     if not api_key:
-        raise ValueError(f"🚨 ERROR CRÍTICO: No se encontró la llave GEMINI_API_KEY en {env_path} 🚨")
+        raise ValueError("🚨 ERROR CRÍTICO: GEMINI_API_KEY environment variable is not set. 🚨")
 
     # 4. Inicializamos el cliente
     client = genai.Client(api_key=api_key)

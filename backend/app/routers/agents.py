@@ -1,12 +1,13 @@
-from fastapi import APIRouter, HTTPException, status, Response, Header
+from fastapi import APIRouter, HTTPException, status, Response, Header, Depends
 from typing import List, Optional, Any
 from pydantic import BaseModel
 
 from ..models.graph import AgentNode
 from ..services.agent_service import AgentService
 from ..services.ritual_service import RitualService, RitualMessage
+from ..dependencies import get_current_user
 
-router = APIRouter(prefix="/api/agents", tags=["agents"])
+router = APIRouter(prefix="/api/agents", tags=["agents"], dependencies=[Depends(get_current_user)])
 
 # Service initialization
 agent_service = AgentService()
