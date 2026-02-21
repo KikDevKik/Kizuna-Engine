@@ -51,78 +51,78 @@ class SubconsciousMind:
         logger.info(f"🧠 Subconscious Mind activated for User: {user_id}")
         try:
             while True:
-                # Wait for transcript segment
-                text_segment = await transcript_queue.get()
+                try:
+                    # Wait for transcript segment
+                    text_segment = await transcript_queue.get()
 
-                if not text_segment:
-                    continue
+                    if not text_segment:
+                        continue
 
-                self.buffer.append(text_segment)
+                    self.buffer.append(text_segment)
 
-                # Buffer accumulation logic (wait for ~10 words or sentence end)
-                full_text = " ".join(self.buffer)
-                if len(self.buffer) < 5 and not any(p in text_segment for p in ".!?"):
-                    continue
+                    # Buffer accumulation logic (wait for ~10 words or sentence end)
+                    full_text = " ".join(self.buffer)
+                    if len(self.buffer) < 5 and not any(p in text_segment for p in ".!?"):
+                        continue
 
-                # Analyze (Real or Mock)
-                hint = await self._analyze_sentiment(full_text, agent_id)
+                    # Analyze (Real or Mock)
+                    hint = await self._analyze_sentiment(full_text, agent_id)
 
-                if hint:
-                    logger.info(f"🧠 Insight detected: {hint}")
+                    if hint:
+                        logger.info(f"🧠 Insight detected: {hint}")
 
-                    # 1. Inject Context
-                    payload = {
-                        "text": f"SYSTEM_HINT: {hint}",
-                        "turn_complete": False
-                    }
-                    await injection_queue.put(payload)
+                        # 1. Inject Context
+                        payload = {
+                            "text": f"SYSTEM_HINT: {hint}",
+                            "turn_complete": False
+                        }
+                        await injection_queue.put(payload)
 
-                    # 2. Persist Insight (Phase 3)
-                    if self.repository:
-                        try:
-                            # Dynamic Resonance Update
-                            delta = 0
-                            trigger_word = "Emotion"
+                        # 2. Persist Insight (Phase 3)
+                        if self.repository:
+                            try:
+                                # Dynamic Resonance Update
+                                delta = 0
+                                trigger_word = "Emotion"
 
-                            # Simple heuristic for now, but could be trait-driven later
-                            hint_lower = hint.lower()
-                            if "happy" in hint_lower or "excited" in hint_lower:
-                                delta = 1
-                                trigger_word = "Positivity"
-                            elif "angry" in hint_lower:
-                                delta = 0 # No penalty, just neutral/handling
-                                trigger_word = "Conflict"
-                            elif "sad" in hint_lower:
-                                delta = 1 # Comforting is bonding
-                                trigger_word = "Vulnerability"
+                                # Simple heuristic for now, but could be trait-driven later
+                                hint_lower = hint.lower()
+                                if "happy" in hint_lower or "excited" in hint_lower:
+                                    delta = 1
+                                    trigger_word = "Positivity"
+                                elif "angry" in hint_lower:
+                                    delta = 0 # No penalty, just neutral/handling
+                                    trigger_word = "Conflict"
+                                elif "sad" in hint_lower:
+                                    delta = 1 # Comforting is bonding
+                                    trigger_word = "Vulnerability"
 
-                            if delta != 0:
-                                await self.repository.update_resonance(user_id, agent_id, delta)
+                                if delta != 0:
+                                    await self.repository.update_resonance(user_id, agent_id, delta)
 
-                            # Save Episode
-                            await self.repository.save_episode(
-                                user_id=user_id,
-                                agent_id=agent_id,
-                                summary=f"User triggered insight: {trigger_word} -> {hint}",
-                                valence=0.5
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to persist subconscious insight: {e}")
+                                # Save Episode
+                                await self.repository.save_episode(
+                                    user_id=user_id,
+                                    agent_id=agent_id,
+                                    summary=f"User triggered insight: {trigger_word} -> {hint}",
+                                    valence=0.5
+                                )
+                            except Exception:
+                                logger.exception("Failed to persist subconscious insight")
 
-                    # Clear buffer after successful insight to avoid repetition
-                    self.buffer = []
+                        # Clear buffer after successful insight to avoid repetition
+                        self.buffer = []
 
-                # Keep buffer manageable
-                if len(self.buffer) > 20:
-                    self.buffer.pop(0)
+                    # Keep buffer manageable
+                    if len(self.buffer) > 20:
+                        self.buffer.pop(0)
+                except Exception:
+                    logger.exception("🧠 Subconscious Mind iteration error. Recovering...")
+                    await asyncio.sleep(1) # Small delay to avoid error storm
 
         except asyncio.CancelledError:
             logger.info("🧠 Subconscious Mind deactivated.")
             raise
-        except Exception as e:
-            logger.error(f"🧠 Subconscious Error: {e}")
-            # Don't crash the whole app, just log
-            pass
 
     async def _analyze_sentiment(self, text: str, agent_id: str = None) -> str | None:
         """
@@ -147,12 +147,18 @@ class SubconsciousMind:
                     if agent and agent.memory_extraction_prompt:
                         prompt_template = agent.memory_extraction_prompt
 
-                prompt = prompt_template.replace("{text}", text)
+                # Use system_instruction to prevent prompt injection
+                system_instruction = prompt_template.replace("{text}", "[TRANSCRIPT]")
 
                 # Using 2.0 Flash Exp or configured model
                 response = await self.client.aio.models.generate_content(
                     model=settings.MODEL_SUBCONSCIOUS,
-                    contents=prompt
+                    contents=text,
+                    config=types.GenerateContentConfig(
+                        system_instruction=types.Content(
+                            parts=[types.Part(text=system_instruction)]
+                        )
+                    )
                 )
 
                 if not response.text:
@@ -164,8 +170,8 @@ class SubconsciousMind:
                     return result.replace("SYSTEM_HINT:", "").strip()
                 return None
 
-            except Exception as e:
-                logger.warning(f"Subconscious inference failed: {e}. Fallback to keywords.")
+            except Exception:
+                logger.warning("Subconscious inference failed. Fallback to keywords.", exc_info=True)
 
         # 2. Fallback (Keyword Matching via Traits)
         triggers = self.default_triggers
@@ -212,11 +218,17 @@ class SubconsciousMind:
                     if agent and agent.dream_prompt:
                         prompt_template = agent.dream_prompt
 
-                prompt = prompt_template.replace("{summary_text}", summary_text)
+                # Use system_instruction to prevent prompt injection
+                system_instruction = prompt_template.replace("{summary_text}", "[MEMORIES]")
 
                 response = await self.client.aio.models.generate_content(
                     model=settings.MODEL_DREAM, # Or SUBCONSCIOUS if DREAM model not defined
-                    contents=prompt
+                    contents=summary_text,
+                    config=types.GenerateContentConfig(
+                        system_instruction=types.Content(
+                            parts=[types.Part(text=system_instruction)]
+                        )
+                    )
                 )
 
                 if not response.text:
@@ -237,11 +249,11 @@ class SubconsciousMind:
                     surrealism = float(data.get("surrealism_level", surrealism))
                 except json.JSONDecodeError:
                     logger.warning(f"Dream generation returned invalid JSON: {text_resp[:50]}...")
-                except Exception as e:
-                    logger.warning(f"Error parsing dream data: {e}")
+                except Exception:
+                    logger.warning("Error parsing dream data", exc_info=True)
 
-            except Exception as e:
-                logger.error(f"Dream generation failed: {e}")
+            except Exception:
+                logger.exception("Dream generation failed")
 
         return DreamNode(
             theme=theme,
