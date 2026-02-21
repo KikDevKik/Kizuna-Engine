@@ -83,3 +83,23 @@ class SleepManager:
             logger.info(f"✨ Consolidation Complete for {user_id}.")
         except Exception as e:
             logger.error(f"❌ Consolidation Failed for {user_id}: {e}")
+
+    async def shutdown(self):
+        """
+        Gracefully shutdown all pending sleep/consolidation tasks.
+        """
+        logger.info("🛑 SleepManager shutting down...")
+        if not self.active_timers:
+            return
+
+        tasks = list(self.active_timers.values())
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+
+        # Await clean cancellation
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        self.active_timers.clear()
+        logger.info("🛑 SleepManager shutdown complete.")

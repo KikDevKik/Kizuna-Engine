@@ -4,7 +4,7 @@ import json
 import os
 import httpx
 from asyncio import Queue
-from datetime import datetime
+from datetime import datetime, timedelta
 from ..repositories.base import SoulRepository
 from ..models.graph import DreamNode, MemoryEpisodeNode, AgentNode
 from core.config import settings
@@ -13,8 +13,10 @@ from core.config import settings
 try:
     from google import genai
     from google.genai import types
+    from google.genai import errors as genai_errors
 except ImportError:
     genai = None
+    genai_errors = None
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,7 @@ class SubconsciousMind:
         self.buffer = []
         self.last_process_time = datetime.now()
         self.repository: SoulRepository | None = None
+        self.backoff_until: datetime | None = None
 
         # Default fallback if agent traits are missing
         self.default_triggers = {
@@ -135,6 +138,14 @@ class SubconsciousMind:
         mock_mode = settings.MOCK_GEMINI
 
         if self.client and not mock_mode:
+            # Check for active backoff
+            if self.backoff_until:
+                if datetime.now() < self.backoff_until:
+                    return None
+                else:
+                    self.backoff_until = None
+                    logger.info("🧠 Subconscious Mind resuming from backoff.")
+
             try:
                 # Run in executor to avoid blocking loop if sync
                 # SDK 0.x is sync, 1.x has aio? client.aio.models...
@@ -175,7 +186,13 @@ class SubconsciousMind:
             except (httpx.RemoteProtocolError, httpx.ConnectError) as e:
                 logger.debug(f"Subconscious inference network error: {e}")
                 return None
-            except Exception:
+            except Exception as e:
+                # Check for Google GenAI ClientError (Rate Limit)
+                if genai_errors and isinstance(e, genai_errors.ClientError) and e.code == 429:
+                    logger.warning("Subconscious paused: Rate limit exceeded (429). Backing off for 60s.")
+                    self.backoff_until = datetime.now() + timedelta(seconds=60)
+                    return None
+
                 logger.warning("Subconscious inference failed. Fallback to keywords.", exc_info=True)
 
         # 2. Fallback (Keyword Matching via Traits)
