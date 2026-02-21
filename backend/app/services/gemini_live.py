@@ -63,7 +63,7 @@ else:
                 ),
             )
 
-            model_id = "gemini-2.5-flash-native-audio-preview-12-2025"
+            model_id = settings.MODEL_LIVE_VOICE
             logger.info(f"Connecting to Gemini Live API with model: {model_id}")
 
             try:
