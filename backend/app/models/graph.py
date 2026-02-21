@@ -37,6 +37,7 @@ class FactNode(BaseModel):
     content: str
     category: str # e.g. "preference", "relationship", "biography"
     confidence: float = 1.0
+    embedding: Optional[List[float]] = None # Vector embedding
 
 class DreamNode(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))

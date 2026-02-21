@@ -11,6 +11,7 @@ import logging
 from core.config import settings
 from datetime import datetime
 import json
+from ..services.embedding import embedding_service
 
 logger = logging.getLogger(__name__)
 
@@ -241,32 +242,68 @@ class SpannerSoulRepository(SoulRepository):
             raise
 
     async def get_relevant_facts(self, user_id: str, query: str, limit: int = 5) -> list[FactNode]:
-        # Implementation depends on Vector Search in Spanner (using cosine distance)
-        # Assuming table Facts has 'embedding' column
-        # SELECT * FROM Facts WHERE COSINE_DISTANCE(embedding, @query_embedding) < 0.5 ...
-        return [] # Stub for now as we don't have embedding service set up yet
+        # Generate query embedding
+        query_embedding = await embedding_service.embed_text(query)
+        if not query_embedding:
+            logger.warning("Failed to generate embedding for query.")
+            return []
+
+        def query_tx(snapshot):
+            # GQL with Vector Search
+            # Uses COSINE_DISTANCE to find semantically similar facts
+            gql = """
+                GRAPH FinetuningGraph
+                MATCH (f:Fact)
+                WHERE COSINE_DISTANCE(f.embedding, @embedding) < 0.5
+                RETURN f.id, f.content, f.category, f.confidence
+                ORDER BY COSINE_DISTANCE(f.embedding, @embedding) ASC
+                LIMIT @limit
+            """
+            results = snapshot.execute_sql(gql, params={
+                "embedding": query_embedding,
+                "limit": limit
+            }, param_types={
+                "embedding": spanner.param_types.Array(spanner.param_types.FLOAT64),
+                "limit": spanner.param_types.INT64
+            })
+            facts = []
+            for row in results:
+                facts.append(FactNode(id=row[0], content=row[1], category=row[2], confidence=row[3]))
+            return facts
+
+        try:
+            with self.database.snapshot() as snapshot:
+                 return query_tx(snapshot)
+        except Exception as e:
+            logger.error(f"Spanner Vector Search Failed: {e}")
+            return []
 
     async def save_fact(self, user_id: str, content: str, category: str) -> FactNode:
         """
         GQL implementation for saving a fact and linking it to a user.
         """
+        # Generate embedding before transaction
+        embedding = await embedding_service.embed_text(content)
+
         def save_tx(transaction):
             # 1. Create Fact Node
             fact_id = f"fact-{datetime.now().timestamp()}"
             create_fact = """
                 GRAPH FinetuningGraph
-                CREATE (:Fact {id: @id, content: @content, category: @category, confidence: @confidence})
+                CREATE (:Fact {id: @id, content: @content, category: @category, confidence: @confidence, embedding: @embedding})
             """
             transaction.execute_update(create_fact, params={
                 "id": fact_id,
                 "content": content,
                 "category": category,
-                "confidence": 1.0
+                "confidence": 1.0,
+                "embedding": embedding if embedding else None
             }, param_types={
                 "id": spanner.param_types.STRING,
                 "content": spanner.param_types.STRING,
                 "category": spanner.param_types.STRING,
-                "confidence": spanner.param_types.FLOAT64
+                "confidence": spanner.param_types.FLOAT64,
+                "embedding": spanner.param_types.Array(spanner.param_types.FLOAT64)
             })
 
             # 2. Link User -> Fact (KNOWS)
@@ -286,7 +323,7 @@ class SpannerSoulRepository(SoulRepository):
 
         try:
             fact_id = self.database.run_in_transaction(save_tx)
-            return FactNode(id=str(fact_id), content=content, category=category)
+            return FactNode(id=str(fact_id), content=content, category=category, embedding=embedding)
         except Exception as e:
             logger.error(f"Spanner Save Fact Failed: {e}")
             raise

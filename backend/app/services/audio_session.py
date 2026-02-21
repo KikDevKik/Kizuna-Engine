@@ -91,8 +91,8 @@ async def send_to_gemini(websocket: WebSocket, session):
                         b64_image = payload.get("data")
                         if b64_image:
                             logger.info("📷 Sending Video Frame to Gemini...")
-                            # Decode base64 to bytes
-                            image_bytes = base64.b64decode(b64_image)
+                            # Decode base64 to bytes in a thread pool to avoid blocking the event loop
+                            image_bytes = await asyncio.to_thread(base64.b64decode, b64_image)
                             await session.send(input={"data": image_bytes, "mime_type": "image/jpeg"})
                 except json.JSONDecodeError:
                     logger.warning("Received invalid JSON text from client.")
