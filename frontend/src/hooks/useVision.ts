@@ -53,14 +53,20 @@ export const useVision = (active: boolean = false) => {
     };
   }, [active]);
 
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
   const captureFrame = useCallback((): string | null => {
     if (!videoRef.current || !isCameraReady) return null;
 
-    const canvas = document.createElement('canvas');
     const video = videoRef.current;
 
     // Ensure dimensions are valid
     if (video.videoWidth === 0 || video.videoHeight === 0) return null;
+
+    if (!canvasRef.current) {
+      canvasRef.current = document.createElement('canvas');
+    }
+    const canvas = canvasRef.current;
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
