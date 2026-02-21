@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from datetime import datetime
-from ..models.graph import UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode
+from ..models.graph import UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode, DreamNode
 
 class SoulRepository(ABC):
     """
@@ -57,4 +57,14 @@ class SoulRepository(ABC):
         Consolidate memories for the user (Event-Driven Debounce).
         Compresses recent episodes and updates long-term resonance.
         """
+        pass
+
+    @abstractmethod
+    async def get_last_dream(self, user_id: str) -> Optional[DreamNode]:
+        """Retrieve the most recent dream (long-term memory consolidation) for the user."""
+        pass
+
+    @abstractmethod
+    async def get_recent_episodes(self, user_id: str, limit: int = 10) -> List[MemoryEpisodeNode]:
+        """Retrieve the most recent short-term memory episodes."""
         pass

@@ -404,3 +404,33 @@ class LocalSoulRepository(SoulRepository):
                 ep.emotional_valence = 999.0 # Archived state
 
             await self._save()
+
+    async def get_last_dream(self, user_id: str) -> Optional[DreamNode]:
+        """Retrieve the last dream generated for this user."""
+        async with self.lock:
+            shadow_edges = self.shadows.get(user_id, [])
+            if not shadow_edges:
+                return None
+
+            # The edges are appended chronologically, so the last one is the most recent
+            last_edge = shadow_edges[-1]
+            return self.dreams.get(last_edge.target_id)
+
+    async def get_recent_episodes(self, user_id: str, limit: int = 10) -> List[MemoryEpisodeNode]:
+        """Retrieve recent episodes (short-term memory)."""
+        async with self.lock:
+            episode_ids = self.experienced.get(user_id, [])
+            if not episode_ids:
+                return []
+
+            # Get the last 'limit' IDs
+            recent_ids = episode_ids[-limit:]
+
+            # Fetch nodes
+            episodes = []
+            for eid in recent_ids:
+                ep = self.episodes.get(eid)
+                if ep:
+                    episodes.append(ep)
+
+            return episodes

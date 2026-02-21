@@ -6,6 +6,7 @@ export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [audioTrack, setAudioTrack] = useState<MediaStreamTrack | null>(null);
 
   useEffect(() => {
     let currentStream: MediaStream | null = null;
@@ -49,7 +50,7 @@ export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
             // Use generic video constraints for screen share to avoid TS issues
             stream = await navigator.mediaDevices.getDisplayMedia({
                 video: true,
-                audio: false
+                audio: true // Enable System Audio
             });
         } else {
             return;
@@ -62,6 +63,15 @@ export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
 
         currentStream = stream;
         streamRef.current = stream;
+
+        // Extract Audio Track if available (only in screen share mode typically)
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length > 0) {
+            console.log("[UseVision] System Audio Track detected.");
+            setAudioTrack(audioTracks[0]);
+        } else {
+            setAudioTrack(null);
+        }
 
         // Handle stream ending (e.g. user clicks "Stop sharing" on browser UI)
         stream.getVideoTracks()[0].onended = () => {
@@ -146,5 +156,5 @@ export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
     });
   }, [isReady]);
 
-  return { videoRef, captureFrame, isReady };
+  return { videoRef, captureFrame, isReady, audioTrack };
 };

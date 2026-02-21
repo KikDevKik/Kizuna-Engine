@@ -477,3 +477,52 @@ class SpannerSoulRepository(SoulRepository):
         except Exception as e:
             logger.error(f"Spanner Consolidation Transaction Failed: {e}")
             raise
+
+    async def get_last_dream(self, user_id: str) -> Optional[DreamNode]:
+        """GQL to find the most recent Dream."""
+        def query_tx(snapshot):
+            query = """
+                GRAPH FinetuningGraph
+                MATCH (u:User {id: @uid})-[:SHADOW]->(d:Dream)
+                RETURN d.id, d.theme, d.intensity, d.surrealism_level
+                ORDER BY d.timestamp DESC
+                LIMIT 1
+            """
+            results = snapshot.execute_sql(query, params={"uid": user_id},
+                                           param_types={"uid": spanner.param_types.STRING})
+            for row in results:
+                return DreamNode(id=row[0], theme=row[1], intensity=float(row[2]), surrealism_level=float(row[3]))
+            return None
+
+        try:
+            with self.database.snapshot() as snapshot:
+                return query_tx(snapshot)
+        except Exception as e:
+            logger.error(f"Failed to fetch last dream: {e}")
+            return None
+
+    async def get_recent_episodes(self, user_id: str, limit: int = 10) -> list[MemoryEpisodeNode]:
+        """GQL to find recent episodes."""
+        def query_tx(snapshot):
+            query = """
+                GRAPH FinetuningGraph
+                MATCH (u:User {id: @uid})-[:EXPERIENCED]->(e:Episode)
+                RETURN e.id, e.summary, e.valence
+                ORDER BY e.timestamp DESC
+                LIMIT @limit
+            """
+            results = snapshot.execute_sql(query, params={"uid": user_id, "limit": limit},
+                                           param_types={"uid": spanner.param_types.STRING, "limit": spanner.param_types.INT64})
+            episodes = []
+            for row in results:
+                episodes.append(MemoryEpisodeNode(id=row[0], summary=row[1], emotional_valence=float(row[2])))
+
+            # Since we ordered DESC to get the latest, we might want to reverse them to be chronological for the context window
+            return episodes[::-1]
+
+        try:
+            with self.database.snapshot() as snapshot:
+                return query_tx(snapshot)
+        except Exception as e:
+            logger.error(f"Failed to fetch recent episodes: {e}")
+            return []
