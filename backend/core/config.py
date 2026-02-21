@@ -17,6 +17,9 @@ class Settings:
     # 'production' = Enable Pro models for Architect/Dream (high quality)
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 
+    # MOCK_GEMINI (Code Health)
+    MOCK_GEMINI: bool = os.getenv("MOCK_GEMINI", "false").lower() == "true"
+
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
     # Model Configuration (The Gemini Triad)
