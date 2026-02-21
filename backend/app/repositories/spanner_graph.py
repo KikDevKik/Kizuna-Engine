@@ -123,23 +123,42 @@ class SpannerSoulRepository(SoulRepository):
             return ResonanceEdge(source_id=user_id, target_id=agent_id, affinity_level=50.0)
 
     async def update_resonance(self, user_id: str, agent_id: str, delta: float) -> ResonanceEdge:
-        def update_tx(transaction):
-            # Upsert edge logic in GQL? Or MERGE logic.
-            # Assuming basic CREATE if not exists, SET if exists.
-            query = """
-                GRAPH FinetuningGraph
-                MATCH (u:User {id: @uid})-[r:HAS_RESONANCE]->(a:Agent {id: @aid})
-                SET r.affinity_level = r.affinity_level + @delta, r.last_interaction = @now
-            """
-            # This fails if edge doesn't exist. We need MERGE (or equivalent in Spanner GQL).
-            # If Spanner GQL doesn't support MERGE yet, we check existence first (in transaction) and create.
+        def merge_tx(transaction):
+            # Calculate clamped initial level for creation
+            initial_level = 50.0 + delta
+            initial_level = max(0.0, min(100.0, initial_level))
+            now_iso = datetime.now().isoformat()
 
-            check_query = "GRAPH FinetuningGraph MATCH (u:User {id: @uid})-[r:HAS_RESONANCE]->(a:Agent {id: @aid}) RETURN r"
-            exists = list(transaction.execute_sql(check_query, params={"uid": user_id, "aid": agent_id},
+            merge_query = """
+                GRAPH FinetuningGraph
+                MERGE (u:User {id: @uid})-[r:HAS_RESONANCE]->(a:Agent {id: @aid})
+                ON CREATE SET r.affinity_level = @initial_level, r.last_interaction = @now
+                ON MATCH SET r.affinity_level = CASE
+                    WHEN r.affinity_level + @delta > 100.0 THEN 100.0
+                    WHEN r.affinity_level + @delta < 0.0 THEN 0.0
+                    ELSE r.affinity_level + @delta
+                END, r.last_interaction = @now
+            """
+            transaction.execute_update(merge_query, params={
+                "uid": user_id, "aid": agent_id,
+                "delta": delta, "initial_level": initial_level,
+                "now": now_iso
+            }, param_types={
+                "uid": spanner.param_types.STRING, "aid": spanner.param_types.STRING,
+                "delta": spanner.param_types.FLOAT64, "initial_level": spanner.param_types.FLOAT64,
+                "now": spanner.param_types.STRING
+            })
+
+        def fallback_tx(transaction):
+            # Fallback: Check-Then-Act
+            now_iso = datetime.now().isoformat()
+
+            check_query = "GRAPH FinetuningGraph MATCH (u:User {id: @uid})-[r:HAS_RESONANCE]->(a:Agent {id: @aid}) RETURN r.affinity_level"
+            results = list(transaction.execute_sql(check_query, params={"uid": user_id, "aid": agent_id},
                                            param_types={"uid": spanner.param_types.STRING, "aid": spanner.param_types.STRING}))
 
-            if not exists:
-                # Start at 50.0 (neutral) + delta
+            if not results:
+                # Create with Initial Level (already clamped)
                 initial_level = 50.0 + delta
                 initial_level = max(0.0, min(100.0, initial_level))
 
@@ -149,26 +168,43 @@ class SpannerSoulRepository(SoulRepository):
                     CREATE (u)-[:HAS_RESONANCE {affinity_level: @initial_level, last_interaction: @now}]->(a)
                 """
                 transaction.execute_update(create_query, params={
-                    "uid": user_id, "aid": agent_id, "initial_level": initial_level, "now": datetime.now().isoformat()
+                    "uid": user_id, "aid": agent_id, "initial_level": initial_level, "now": now_iso
                 }, param_types={
                     "uid": spanner.param_types.STRING, "aid": spanner.param_types.STRING,
                     "initial_level": spanner.param_types.FLOAT64, "now": spanner.param_types.STRING
                 })
             else:
-                transaction.execute_update(query, params={
-                    "uid": user_id, "aid": agent_id, "delta": delta, "now": datetime.now().isoformat()
+                # Update with manual clamping
+                current_level = float(results[0][0])
+                new_level = current_level + delta
+                new_level = max(0.0, min(100.0, new_level))
+
+                update_query = """
+                    GRAPH FinetuningGraph
+                    MATCH (u:User {id: @uid})-[r:HAS_RESONANCE]->(a:Agent {id: @aid})
+                    SET r.affinity_level = @new_level, r.last_interaction = @now
+                """
+                transaction.execute_update(update_query, params={
+                    "uid": user_id, "aid": agent_id, "new_level": new_level, "now": now_iso
                 }, param_types={
                     "uid": spanner.param_types.STRING, "aid": spanner.param_types.STRING,
-                    "delta": spanner.param_types.FLOAT64, "now": spanner.param_types.STRING
+                    "new_level": spanner.param_types.FLOAT64, "now": spanner.param_types.STRING
                 })
 
         try:
-            self.database.run_in_transaction(update_tx)
-            # Return updated object (re-fetch)
-            return await self.get_resonance(user_id, agent_id)
+            # Try MERGE Logic first
+            self.database.run_in_transaction(merge_tx)
         except Exception as e:
-            logger.error(f"Spanner Update Resonance Failed: {e}")
-            raise
+            logger.error(f"MERGE failed, attempting Fallback (Check-Then-Act). Error: {e}")
+            try:
+                # Retry with Fallback logic in a NEW transaction attempt
+                self.database.run_in_transaction(fallback_tx)
+            except Exception as e_fallback:
+                logger.error(f"Spanner Update Resonance Failed (Fallback also failed): {e_fallback}")
+                raise
+
+        # Return updated object (re-fetch)
+        return await self.get_resonance(user_id, agent_id)
 
     async def save_episode(self, user_id: str, agent_id: str, summary: str, valence: float) -> MemoryEpisodeNode:
         def save_tx(transaction):
@@ -257,13 +293,150 @@ class SpannerSoulRepository(SoulRepository):
 
     async def consolidate_memories(self, user_id: str, dream_generator=None) -> None:
         """
-        GQL implementation for memory consolidation.
+        Phase 3.2 Spanner Implementation: Lucid Dreaming Protocol.
+        1. Fetch all active episodes (valence != 999.0).
+        2. Generate DreamNode via Gemini (dream_generator).
+        3. Calculate EMA affinity updates for agents involved in those episodes.
+        4. Run Transaction: Create Dream, Link Shadow, Update Affinities, Archive Episodes.
         """
-        # Stub for now.
-        # In Production Spanner, this would involve complex GQL:
-        # 1. MATCH (u:User {id: @uid})-[:EXPERIENCED]->(e:Episode) WHERE e.valence = 0.5
-        # 2. Extract texts -> Send to Gemini -> Get Summary
-        # 3. CREATE (new_e:Episode)
-        # 4. DELETE old edges or mark e.valence = 0.0
-        logger.info(f"Spanner Consolidation triggered for {user_id} (Stub).")
-        return
+        logger.info(f"Spanner Consolidation triggered for {user_id}.")
+
+        # 1. Fetch Active Episodes
+        active_episodes = []
+        try:
+            with self.database.snapshot() as snapshot:
+                query = """
+                    GRAPH FinetuningGraph
+                    MATCH (u:User {id: @uid})-[:EXPERIENCED]->(e:Episode)
+                    WHERE e.valence != 999.0
+                    RETURN e.id, e.summary, e.valence
+                """
+                results = snapshot.execute_sql(query, params={"uid": user_id},
+                                               param_types={"uid": spanner.param_types.STRING})
+                for row in results:
+                    active_episodes.append(MemoryEpisodeNode(id=row[0], summary=row[1], emotional_valence=row[2]))
+        except Exception as e:
+            logger.error(f"Failed to fetch active episodes: {e}")
+            return
+
+        if not active_episodes:
+            logger.info("No active episodes to consolidate.")
+            return
+
+        logger.info(f"Consolidating {len(active_episodes)} episodes...")
+
+        # 2. Generate Dream (External API Call - outside transaction)
+        dream_node = None
+        if dream_generator:
+            try:
+                dream_node = await dream_generator(active_episodes)
+            except Exception as e:
+                logger.error(f"Dream generation failed: {e}")
+
+        # Fallback Dream if generator fails or not provided (though local logic implies generator always there)
+        if not dream_node:
+             dream_node = DreamNode(theme="Void", intensity=0.0, surrealism_level=0.0)
+
+        # 3. Calculate EMA Affinity Updates
+        # We need to know which agents share these episodes.
+        # Fetch User's Resonances
+        agent_updates = {} # {agent_id: new_affinity}
+        ALPHA = 0.15
+
+        try:
+            with self.database.snapshot() as snapshot:
+                query = """
+                    GRAPH FinetuningGraph
+                    MATCH (u:User {id: @uid})-[r:HAS_RESONANCE]->(a:Agent)
+                    RETURN a.id, r.affinity_level, r.shared_memories
+                """
+                results = snapshot.execute_sql(query, params={"uid": user_id},
+                                               param_types={"uid": spanner.param_types.STRING})
+
+                for row in results:
+                    agent_id = row[0]
+                    current_affinity = float(row[1])
+                    shared_memories = row[2] if row[2] else [] # List[str]
+
+                    # Filter episodes relevant to this agent
+                    relevant_eps = [ep for ep in active_episodes if ep.id in shared_memories]
+
+                    if relevant_eps:
+                        # Calculate Average Valence (-1.0 to 1.0)
+                        avg_valence = sum(ep.emotional_valence for ep in relevant_eps) / len(relevant_eps)
+
+                        # Map to Target Signal (0-100)
+                        target = 50.0 + (avg_valence * 50.0)
+
+                        # EMA Update
+                        new_affinity = (target * ALPHA) + (current_affinity * (1.0 - ALPHA))
+                        new_affinity = max(0.0, min(100.0, new_affinity))
+
+                        agent_updates[agent_id] = new_affinity
+                        logger.info(f"Calculated Affinity Update for {agent_id}: {current_affinity:.2f} -> {new_affinity:.2f}")
+
+        except Exception as e:
+            logger.error(f"Failed to calculate EMA updates: {e}")
+            # Continue without updating affinity is risky, but better than crashing?
+            # We'll log and proceed with just dream consolidation.
+
+        # 4. Write Transaction
+        def consolidation_tx(transaction):
+            # A. Create Dream Node
+            create_dream = """
+                GRAPH FinetuningGraph
+                CREATE (:Dream {id: @did, theme: @theme, intensity: @intensity, surrealism_level: @surrealism, timestamp: @now})
+            """
+            transaction.execute_update(create_dream, params={
+                "did": dream_node.id,
+                "theme": dream_node.theme,
+                "intensity": float(dream_node.intensity),
+                "surrealism": float(dream_node.surrealism_level),
+                "now": datetime.now().isoformat()
+            }, param_types={
+                "did": spanner.param_types.STRING, "theme": spanner.param_types.STRING,
+                "intensity": spanner.param_types.FLOAT64, "surrealism": spanner.param_types.FLOAT64,
+                "now": spanner.param_types.STRING
+            })
+
+            # B. Link User -> Dream (SHADOW)
+            link_dream = """
+                GRAPH FinetuningGraph
+                MATCH (u:User {id: @uid}), (d:Dream {id: @did})
+                CREATE (u)-[:SHADOW {weight: 1.0}]->(d)
+            """
+            transaction.execute_update(link_dream, params={"uid": user_id, "did": dream_node.id},
+                                       param_types={"uid": spanner.param_types.STRING, "did": spanner.param_types.STRING})
+
+            # C. Update Affinities
+            for aid, new_aff in agent_updates.items():
+                update_aff = """
+                    GRAPH FinetuningGraph
+                    MATCH (u:User {id: @uid})-[r:HAS_RESONANCE]->(a:Agent {id: @aid})
+                    SET r.affinity_level = @new_aff, r.last_interaction = @now
+                """
+                transaction.execute_update(update_aff, params={
+                    "uid": user_id, "aid": aid, "new_aff": float(new_aff), "now": datetime.now().isoformat()
+                }, param_types={
+                    "uid": spanner.param_types.STRING, "aid": spanner.param_types.STRING,
+                    "new_aff": spanner.param_types.FLOAT64, "now": spanner.param_types.STRING
+                })
+
+            # D. Archive Episodes
+            # We must iterate or use IN clause. Spanner Graph GQL support for IN with nodes might be tricky in Update.
+            # Iterating is safer for now given uncertain GQL `IN` support for node filtering in update.
+            for ep in active_episodes:
+                archive_ep = """
+                    GRAPH FinetuningGraph
+                    MATCH (e:Episode {id: @eid})
+                    SET e.valence = 999.0
+                """
+                transaction.execute_update(archive_ep, params={"eid": ep.id},
+                                           param_types={"eid": spanner.param_types.STRING})
+
+        try:
+            self.database.run_in_transaction(consolidation_tx)
+            logger.info("✅ Spanner Consolidation Complete.")
+        except Exception as e:
+            logger.error(f"Spanner Consolidation Transaction Failed: {e}")
+            raise
