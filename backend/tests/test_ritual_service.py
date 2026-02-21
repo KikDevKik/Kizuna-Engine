@@ -33,8 +33,17 @@ async def test_process_ritual_next_question_no_client_fallback():
     history = [RitualMessage(role="user", content="I want to create a protector")]
     resp = await service.process_ritual(history)
     assert resp.is_complete is False
-    # Fallback message logic changed in implementation
+# Fallback message
     assert resp.message == "The connection flickers. Tell me more of your intent."
+
+    # Two user answers
+    history.append(RitualMessage(role="assistant", content=resp.message))
+    history.append(RitualMessage(role="user", content="To guard the gates"))
+    resp = await service.process_ritual(history)
+    assert resp.is_complete is False
+    # Still fallback
+    assert resp.message == "The connection flickers. Tell me more of your intent."
+
 
 @pytest.mark.asyncio
 async def test_process_ritual_next_question_gemini_success():

@@ -63,7 +63,8 @@ export class AudioStreamManager {
     if (!this.ctx) throw new Error("AudioContext failed to initialize");
 
     try {
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+      // 10s Timeout for Microphone Access
+      const getUserMediaPromise = navigator.mediaDevices.getUserMedia({
         audio: {
           sampleRate: 16000,
           channelCount: 1,
@@ -72,6 +73,12 @@ export class AudioStreamManager {
           noiseSuppression: true
         }
       });
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Microphone access timed out (10s).")), 10000)
+      );
+
+      this.mediaStream = await Promise.race([getUserMediaPromise, timeoutPromise]) as MediaStream;
 
       this.sourceNode = this.ctx.createMediaStreamSource(this.mediaStream);
       this.workletNode = new AudioWorkletNode(this.ctx, 'pcm-processor');

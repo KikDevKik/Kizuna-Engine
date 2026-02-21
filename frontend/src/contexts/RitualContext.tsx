@@ -20,6 +20,8 @@ interface RitualContextType extends RitualState {
 
 const RitualContext = createContext<RitualContextType | undefined>(undefined);
 
+const RITUAL_TIMEOUT_MS = 45000; // 45s Timeout
+
 export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [messages, setMessages] = useState<RitualMessage[]>([]);
   const [status, setStatus] = useState<'idle' | 'active' | 'complete' | 'error'>('idle');
@@ -41,6 +43,9 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setStatus('active');
     setError(null);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), RITUAL_TIMEOUT_MS);
+
     try {
       // Empty history triggers initial question from backend
       // Using absolute URL to avoid Proxy method stripping or 404s
@@ -51,8 +56,11 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             'Content-Type': 'application/json',
             'Accept-Language': locale
         },
-        body: JSON.stringify([])
+        body: JSON.stringify([]),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
           if (response.status === 405) {
@@ -68,9 +76,14 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setMessages([{ role: 'system', content: data.message }]);
       }
     } catch (err: any) {
-      setError(err.message || 'Connection to the Void failed.');
+      if (err.name === 'AbortError') {
+          setError('The Void is silent (Timeout). Check the roster, the soul may have been forged properly.');
+      } else {
+          setError(err.message || 'Connection to the Void failed.');
+      }
       setStatus('error');
     } finally {
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   }, [messages.length]);
@@ -86,6 +99,9 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setIsLoading(true);
     setError(null);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), RITUAL_TIMEOUT_MS);
+
     try {
       const locale = navigator.language || 'en';
       const response = await fetch('http://localhost:8000/api/agents/ritual', {
@@ -94,8 +110,11 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             'Content-Type': 'application/json',
             'Accept-Language': locale
         },
-        body: JSON.stringify(newHistory)
+        body: JSON.stringify(newHistory),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) throw new Error('The Void is silent.');
 
@@ -107,9 +126,14 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setMessages(prev => [...prev, { role: 'system', content: data.message }]);
       }
     } catch (err: any) {
-      setError(err.message || 'Ritual interrupted.');
+        if (err.name === 'AbortError') {
+            setError('The Void is silent (Timeout). Check the roster, the soul may have been forged properly.');
+        } else {
+            setError(err.message || 'Ritual interrupted.');
+        }
       setStatus('error');
     } finally {
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   }, [messages]);
