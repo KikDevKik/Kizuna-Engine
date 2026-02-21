@@ -207,7 +207,49 @@ class SpannerSoulRepository(SoulRepository):
         return [] # Stub for now as we don't have embedding service set up yet
 
     async def save_fact(self, user_id: str, content: str, category: str) -> FactNode:
-        return FactNode(content=content, category=category) # Stub
+        """
+        GQL implementation for saving a fact and linking it to a user.
+        """
+        def save_tx(transaction):
+            # 1. Create Fact Node
+            fact_id = f"fact-{datetime.now().timestamp()}"
+            create_fact = """
+                GRAPH FinetuningGraph
+                CREATE (:Fact {id: @id, content: @content, category: @category, confidence: @confidence})
+            """
+            transaction.execute_update(create_fact, params={
+                "id": fact_id,
+                "content": content,
+                "category": category,
+                "confidence": 1.0
+            }, param_types={
+                "id": spanner.param_types.STRING,
+                "content": spanner.param_types.STRING,
+                "category": spanner.param_types.STRING,
+                "confidence": spanner.param_types.FLOAT64
+            })
+
+            # 2. Link User -> Fact (KNOWS)
+            link_fact = """
+                GRAPH FinetuningGraph
+                MATCH (u:User {id: @uid}), (f:Fact {id: @fid})
+                CREATE (u)-[:KNOWS]->(f)
+            """
+            transaction.execute_update(link_fact, params={
+                "uid": user_id,
+                "fid": fact_id
+            }, param_types={
+                "uid": spanner.param_types.STRING,
+                "fid": spanner.param_types.STRING
+            })
+            return fact_id
+
+        try:
+            fact_id = self.database.run_in_transaction(save_tx)
+            return FactNode(id=str(fact_id), content=content, category=category)
+        except Exception as e:
+            logger.error(f"Spanner Save Fact Failed: {e}")
+            raise
 
     async def consolidate_memories(self, user_id: str, dream_generator=None) -> None:
         """
