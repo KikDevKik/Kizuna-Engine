@@ -9,3 +9,8 @@
 **Vulnerability:** The WebSocket endpoint in `backend/app/main.py` skipped origin verification if the `Origin` header was missing (`if origin and origin not in settings.CORS_ORIGINS:`). This allowed non-browser clients and potential attackers using techniques to omit the header to bypass the whitelist.
 **Learning:** Checking for truthiness of a header before validating its value creates a bypass for requests that simply omit that header. For WebSockets, which are susceptible to Cross-Site WebSocket Hijacking (CSWH), the `Origin` header must be strictly enforced.
 **Prevention:** Use a "Deny by Default" strategy for security headers. Ensure that the absence of a required header results in rejection unless explicitly permitted (e.g., via a wildcard `*`).
+
+## 2025-05-23 - [MEDIUM] Error Masking in API Endpoints
+**Vulnerability:** Several endpoints in `backend/app/routers/agents.py` were catching generic `Exception` and returning `str(e)` in the 500 response, potentially leaking stack traces or internal paths.
+**Learning:** Defaulting to `detail=str(e)` is convenient for debugging but dangerous in production.
+**Prevention:** Always use a generic "Internal Server Error" message for 500 responses. Log the actual exception with `logger.exception` (which includes stack trace) for internal observability.
