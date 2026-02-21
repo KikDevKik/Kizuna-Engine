@@ -152,28 +152,40 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
             # Phase 3: Inject Repository into Subconscious
             subconscious_mind.set_repository(soul_repo)
 
-            async with asyncio.TaskGroup() as tg:
-                # 1. Audio Upstream (Client -> Gemini)
-                tg.create_task(send_to_gemini(websocket, session))
+            try:
+                async with asyncio.TaskGroup() as tg:
+                    # 1. Audio Upstream (Client -> Gemini)
+                    tg.create_task(send_to_gemini(websocket, session))
 
-                # 2. Audio/Text Downstream (Gemini -> Client) + Transcript Feed
-                tg.create_task(receive_from_gemini(websocket, session, transcript_queue))
+                    # 2. Audio/Text Downstream (Gemini -> Client) + Transcript Feed
+                    tg.create_task(receive_from_gemini(websocket, session, transcript_queue))
 
-                # 3. Subconscious Mind (Transcripts -> Analysis -> Injection Queue -> Persistence)
-                tg.create_task(subconscious_mind.start(transcript_queue, injection_queue, user_id, agent_id))
+                    # 3. Subconscious Mind (Transcripts -> Analysis -> Injection Queue -> Persistence)
+                    tg.create_task(subconscious_mind.start(transcript_queue, injection_queue, user_id, agent_id))
 
-                # 4. Injection Upstream (Injection Queue -> Gemini)
-                tg.create_task(send_injections_to_gemini(session, injection_queue))
+                    # 4. Injection Upstream (Injection Queue -> Gemini)
+                    tg.create_task(send_injections_to_gemini(session, injection_queue))
+            except WebSocketDisconnect:
+                logger.info("WebSocket disconnected by client.")
+            except Exception as e:
+                logger.error(f"Error in WebSocket session: {e}")
+                # Try to close the websocket if it's still open and we had an internal error
+                try:
+                    await websocket.close()
+                except Exception:
+                    pass
+            finally:
+                # CRITICAL: Async Shutdown
+                # Close the websocket IMMEDIATELY to free the frontend proxy,
+                # while the Gemini session cleans up in the background (context exit).
+                try:
+                    await websocket.close()
+                except Exception:
+                    # Ignore if already closed
+                    pass
 
-    except WebSocketDisconnect:
-        logger.info("WebSocket disconnected by client.")
     except Exception as e:
-        logger.error(f"Error in WebSocket session: {e}")
-        # Try to close the websocket if it's still open and we had an internal error
-        try:
-            await websocket.close()
-        except Exception:
-            pass
+        logger.error(f"Unexpected error managing Gemini Session: {e}")
     finally:
         logger.info("WebSocket session closed.")
         # Phase 4: Entering REM Sleep (Debounced Consolidation)
