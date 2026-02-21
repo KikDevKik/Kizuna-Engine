@@ -27,15 +27,6 @@ function App() {
     console.log(`Agent Selected: ${agentId}`);
     setSelectedAgentId(agentId);
     setViewMode('core');
-    // Optional: Auto-connect?
-    // connect(agentId);
-    // Better to let user manually initiate via the big button in Core view,
-    // or initiate immediately if that's the UX.
-    // The Roster button says "INITIATE LINK", so maybe auto-connect is expected?
-    // Let's stick to the manual "SYNCING..." button in Core view for safety,
-    // but the user might expect the Roster button to start it.
-    // Given the "INITIATE LINK" text in Roster, let's just set the ID and switch view.
-    // The Core view has the Power button.
   }, []);
 
   const handleToggleConnection = () => {
