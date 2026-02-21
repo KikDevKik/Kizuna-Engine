@@ -12,7 +12,8 @@ const MOCK_LOGS = [
   "ECHO CANCELLATION: ACTIVE",
 ];
 
-export const SystemLogs: React.FC = () => {
+// Optimization: Prevent re-renders when parent re-renders. Component has internal state but no props.
+export const SystemLogs = React.memo(() => {
   const [logs, setLogs] = useState<string[]>([]);
 
   useEffect(() => {
@@ -50,4 +51,4 @@ export const SystemLogs: React.FC = () => {
       </div>
     </div>
   );
-};
+});

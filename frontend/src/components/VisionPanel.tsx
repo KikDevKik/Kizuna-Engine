@@ -9,7 +9,8 @@ interface VisionPanelProps {
   sendImage: (base64: string) => void;
 }
 
-export const VisionPanel: React.FC<VisionPanelProps> = ({ connected, sendImage }) => {
+// Optimization: Prevent re-renders when parent re-renders (e.g. audio loop) but props are stable.
+export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [visionMode, setVisionMode] = useState<VisionMode>('off');
   const [pulse, setPulse] = useState(false);
@@ -147,7 +148,7 @@ export const VisionPanel: React.FC<VisionPanelProps> = ({ connected, sendImage }
       </AnimatePresence>
     </div>
   );
-};
+});
 
 // Helper Component for Buttons
 const VisionButton = ({ active, onClick, icon, label, disabled, isDestructive = false }: any) => (
