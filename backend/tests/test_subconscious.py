@@ -254,7 +254,7 @@ async def test_generate_dream_malformed_json():
 
         dream = await service.generate_dream(episodes)
 
-        # Should fall back to defaults defined in the method
+# Should fall back to defaults defined in the method
         assert dream.theme == "Reflection"
         assert dream.intensity == 0.5
         assert dream.surrealism_level == 0.3
@@ -284,3 +284,34 @@ async def test_generate_dream_empty_response():
         assert dream.theme == "Void"
         assert dream.intensity == 0.0
         assert dream.surrealism_level == 0.0
+
+@pytest.mark.asyncio
+async def test_subconscious_start_resilience():
+    """Verifies that the start loop recovers from an unexpected error in one iteration."""
+    service = SubconsciousMind()
+    transcript_queue = asyncio.Queue()
+    injection_queue = asyncio.Queue()
+
+    # Mock _analyze_sentiment to raise an exception on the first call, then succeed
+    with patch.object(service, "_analyze_sentiment", side_effect=[Exception("Boom!"), "Happy Hint"]):
+        # Start the loop in a task
+        task = asyncio.create_task(service.start(transcript_queue, injection_queue, "test_user", "test_agent"))
+
+        # We need to trigger the logic.
+        await transcript_queue.put("segment 1.") # triggers 1st call -> Exception
+
+        # We need to wait a bit for the 1s sleep in the error handler
+        await asyncio.sleep(1.1)
+
+        await transcript_queue.put("segment 2.") # triggers 2nd call -> "Happy Hint"
+
+        try:
+            # Wait for the injection queue to get the "Happy Hint"
+            hint_payload = await asyncio.wait_for(injection_queue.get(), timeout=2.0)
+            assert hint_payload["text"] == "SYSTEM_HINT: Happy Hint"
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
