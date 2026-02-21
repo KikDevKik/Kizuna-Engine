@@ -337,7 +337,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                     {isCreateCard ? (
                       // CREATE NEW CARD CONTENT
                       <div className="flex flex-col items-center justify-center h-full gap-4 text-electric-blue">
-                        <div className="p-4 border border-dashed border-electric-blue/50 rounded-full">
+                        <div className="shape-shard-create p-6 bg-electric-blue/10 flex items-center justify-center hover:bg-electric-blue/20 transition-colors duration-300">
                           <Plus size={48} />
                         </div>
                         <h2 className="font-monumental text-xl tracking-widest text-center">FORGE NEW SOUL</h2>
@@ -346,7 +346,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                       // AGENT CARD CONTENT
                       <>
                         {/* Avatar / Visual Placeholder */}
-                        <div className="flex-1 flex items-center justify-center mb-4 relative overflow-hidden bg-abyssal-black/20 rounded-sm">
+                        <div className="shape-shard-avatar flex-1 flex items-center justify-center mb-4 relative overflow-hidden bg-abyssal-black/20">
                            {agent.avatar_path ? (
                              <img src={agent.avatar_path} alt={agent.name} className="w-full h-full object-cover opacity-90" />
                            ) : (

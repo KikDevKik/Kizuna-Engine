@@ -30,11 +30,11 @@ export const SystemLogs = React.memo(() => {
   }, []);
 
   return (
-    <div className="fixed bottom-4 left-4 z-0 pointer-events-none opacity-60">
-      <div className="font-technical text-xs text-cyan-800 tracking-widest mb-1 border-b border-cyan-900/30 w-32">
+    <div className="fixed bottom-4 left-4 z-0 pointer-events-none opacity-80">
+      <div className="font-log font-technical text-xs text-electric-blue tracking-widest mb-1 border-b border-electric-blue/30 w-32 drop-shadow-[0_0_5px_rgba(0,209,255,0.5)]">
         SYS.LOG //
       </div>
-      <div className="flex flex-col-reverse h-32 w-64 overflow-hidden font-mono text-[10px] text-cyan-600/70">
+      <div className="flex flex-col-reverse h-32 w-64 overflow-hidden font-mono text-[10px] text-electric-blue/70">
         <AnimatePresence>
           {logs.map((log, index) => (
             <motion.div
@@ -43,7 +43,7 @@ export const SystemLogs = React.memo(() => {
               animate={{ opacity: 1, x: 0 }}
               className="whitespace-nowrap"
             >
-              <span className="text-cyan-800 mr-2">{`>`}</span>
+              <span className="text-electric-blue mr-2">{`>`}</span>
               {log}
             </motion.div>
           ))}
