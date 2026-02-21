@@ -141,3 +141,48 @@ async def test_generate_with_retry_429():
         assert result == "Success after retry"
         assert service.client.aio.models.generate_content.call_count == 2
         mock_sleep.assert_called_once_with(4)
+
+@pytest.mark.asyncio
+async def test_generate_with_retry_failure():
+    """Verifies that if the retry also fails (e.g., second 429), it returns None."""
+    service = RitualService()
+    service.client = MagicMock()
+    service.client.aio.models.generate_content = AsyncMock()
+
+    # Both calls raise 429 error
+    error_429 = Exception("Resource has been exhausted (e.g. check quota). 429 Rate Limit")
+    service.client.aio.models.generate_content.side_effect = [error_429, error_429]
+
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        result = await service._generate_with_retry("model", "contents")
+
+        assert result is None
+        assert service.client.aio.models.generate_content.call_count == 2
+        mock_sleep.assert_called_once_with(4)
+
+@pytest.mark.asyncio
+async def test_generate_with_retry_non_429():
+    """Verifies that a non-429 error (e.g., 500) returns None immediately without sleeping/retrying."""
+    service = RitualService()
+    service.client = MagicMock()
+    service.client.aio.models.generate_content = AsyncMock()
+
+    # Call raises 500 error
+    error_500 = Exception("Internal Server Error")
+    service.client.aio.models.generate_content.side_effect = error_500
+
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        result = await service._generate_with_retry("model", "contents")
+
+        assert result is None
+        assert service.client.aio.models.generate_content.call_count == 1
+        mock_sleep.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_generate_with_retry_no_client():
+    """Verifies that if self.client is None, it returns None."""
+    service = RitualService()
+    service.client = None
+
+    result = await service._generate_with_retry("model", "contents")
+    assert result is None
