@@ -37,20 +37,14 @@ const containerVariants = {
 
 const shardVariants = {
   hidden: {
-    y: 100,
+    y: 50,
     opacity: 0,
-    scale: 0.6,
-    rotateX: -45,
-    rotateZ: 10,
-    filter: "blur(10px)"
+    scale: 0.9
   },
   visible: {
     y: 0,
     opacity: 1,
     scale: 1,
-    rotateX: 0,
-    rotateZ: 0,
-    filter: "blur(0px)",
     transition: {
       type: "spring" as const,
       stiffness: 200,
@@ -59,9 +53,8 @@ const shardVariants = {
     }
   },
   exit: {
-    y: -50,
+    y: 20,
     opacity: 0,
-    filter: "blur(10px)",
     transition: { duration: 0.2 }
   }
 };
@@ -370,7 +363,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
           <button
             onClick={() => rotateCarousel(-1)}
             disabled={isFirst}
-            className={`kizuna-shard-btn-wrapper transition-opacity duration-300 ${isFirst ? 'opacity-30 cursor-not-allowed' : 'opacity-100'}`}
+            className={`kizuna-shard-btn-wrapper transition-opacity duration-300 ${isFirst ? 'opacity-50 cursor-not-allowed' : 'opacity-100'}`}
           >
             <div className="kizuna-shard-btn-inner">
                &lt; PREV
@@ -389,7 +382,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
           <button
             onClick={() => rotateCarousel(1)}
             disabled={isLast}
-            className={`kizuna-shard-btn-wrapper transition-opacity duration-300 ${isLast ? 'opacity-30 cursor-not-allowed' : 'opacity-100'}`}
+            className={`kizuna-shard-btn-wrapper transition-opacity duration-300 ${isLast ? 'opacity-50 cursor-not-allowed' : 'opacity-100'}`}
           >
             <div className="kizuna-shard-btn-inner">
               NEXT &gt;
