@@ -32,49 +32,45 @@ class RitualService:
         else:
             logger.warning("Gemini API Key not found or SDK missing. Ritual will run in Mock Mode.")
 
-    async def _generate_with_retry(self, model: str, contents: str, config=None) -> Optional[str]:
+    async def _generate_with_retry(self, models: List[str] | str, contents: str, config=None) -> Optional[str]:
         """
-        Wraps Gemini generation with a retry mechanism for 429 Rate Limit errors.
-        Sleeps 4s then retries once.
-        Enforces a 30s timeout on each attempt.
+        Wraps Gemini generation with a waterfall strategy for 429 Rate Limit errors.
+        Iterates through the provided list of models.
         """
         if not self.client:
              return None
 
-        async def _call_gemini():
-             return await self.client.aio.models.generate_content(
-                model=model,
-                contents=contents,
-                config=config
-            )
+        if isinstance(models, str):
+            models = [models]
 
-        try:
-            response = await asyncio.wait_for(_call_gemini(), timeout=30)
-            return response.text.strip()
-        except asyncio.TimeoutError:
-            logger.error(f"Ritual: Timeout (30s) on model {model}.")
-            return None
-        except Exception as e:
-            # Check for 429 (Rate Limit)
-            error_str = str(e)
-            is_429 = "429" in error_str or getattr(e, "code", 0) == 429 or getattr(e, "status_code", 0) == 429
+        for model in models:
+            async def _call_gemini():
+                return await self.client.aio.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=config
+                )
 
-            if is_429:
-                logger.warning(f"Ritual: 429 Rate Limit on model {model}. Engaging Sleep Protocol (4s)...")
-                await asyncio.sleep(4)
-                try:
-                    logger.info("Ritual: Retrying generation...")
-                    response = await asyncio.wait_for(_call_gemini(), timeout=30)
+            try:
+                response = await asyncio.wait_for(_call_gemini(), timeout=30)
+                if response and response.text:
                     return response.text.strip()
-                except asyncio.TimeoutError:
-                    logger.error(f"Ritual: Retry Timeout (30s) on model {model}.")
-                    return None
-                except Exception as retry_e:
-                    logger.error(f"Ritual: Retry Failed: {retry_e}")
-                    return None
-            else:
-                logger.error(f"Ritual: Generation Error: {e}")
-                return None
+            except asyncio.TimeoutError:
+                logger.error(f"Ritual: Timeout (30s) on model {model}.")
+                continue
+            except Exception as e:
+                # Check for 429 (Rate Limit)
+                error_str = str(e)
+                is_429 = "429" in error_str or getattr(e, "code", 0) == 429 or getattr(e, "status_code", 0) == 429
+
+                if is_429:
+                    logger.warning(f"Ritual: 429 Rate Limit on model {model}. Falling back...")
+                    continue
+                else:
+                    logger.error(f"Ritual: Generation Error on {model}: {e}")
+                    continue
+
+        return None
 
     async def process_ritual(self, history: List[RitualMessage], locale: str = "en") -> RitualResponse:
         """
@@ -163,7 +159,7 @@ class RitualService:
         question = None
         if self.client:
             question = await self._generate_with_retry(
-                model=settings.MODEL_SUBCONSCIOUS,
+                models=settings.MODEL_SUBCONSCIOUS,
                 contents=prompt
             )
 
@@ -229,7 +225,7 @@ class RitualService:
         if self.client:
             config = types.GenerateContentConfig(response_mime_type="application/json")
             text = await self._generate_with_retry(
-                model=settings.MODEL_DREAM,
+                models=settings.MODEL_DREAM,
                 contents=prompt,
                 config=config
             )

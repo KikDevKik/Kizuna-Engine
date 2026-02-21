@@ -31,15 +31,15 @@ class Settings:
 
     # 2. Subconscious Worker (Fast Text Analysis - Scout)
     # Always Flash for speed and cost.
-    MODEL_SUBCONSCIOUS: str = os.getenv("MODEL_SUBCONSCIOUS", "gemini-2.5-flash")
+    MODEL_SUBCONSCIOUS: list[str] = json.loads(os.getenv("MODEL_SUBCONSCIOUS", '["gemini-3.0-flash", "gemini-2.5-flash"]'))
 
     # 3. Dream Cycle (Deep Reasoning / Consolidation - Architect)
     # In Production: Uses Pro (e.g. gemini-3.0-pro-exp) for maximum narrative quality.
     # In Development: Forces Flash to avoid 429 errors.
-    _MODEL_DREAM_PROD: str = os.getenv("MODEL_DREAM", "gemini-3.0-pro-exp")
+    _MODEL_DREAM_PROD: list[str] = json.loads(os.getenv("MODEL_DREAM", '["gemini-3.0-pro-exp", "gemini-3.0-flash", "gemini-2.5-flash"]'))
 
     @property
-    def MODEL_DREAM(self) -> str:
+    def MODEL_DREAM(self) -> list[str]:
         if self.ENVIRONMENT == "development":
             return self.MODEL_SUBCONSCIOUS
         return self._MODEL_DREAM_PROD
