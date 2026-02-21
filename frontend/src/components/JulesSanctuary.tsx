@@ -16,6 +16,11 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
   const [autoSync, setAutoSync] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
+  // Log Helper
+  const addLog = (msg: string) => {
+    setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 20));
+  };
+
   // Auto-Sync Logic
   useEffect(() => {
     let interval: number;
@@ -40,11 +45,6 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
     } else {
       addLog("ERROR: Camera not ready");
     }
-  };
-
-  // Log Helper
-  const addLog = (msg: string) => {
-    setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 20));
   };
 
   // Monitor AI Messages
