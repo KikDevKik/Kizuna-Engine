@@ -49,6 +49,18 @@ class DreamNode(BaseModel):
     surrealism_level: float = 0.5 # 0.0 to 1.0
     timestamp: datetime = Field(default_factory=datetime.now)
 
+class ArchetypeNode(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    name: str  # e.g., "The Guardian", "The Jester"
+    description: str
+    triggers: dict = Field(default_factory=dict) # e.g., {"sad": {"response": "...", "valence_delta": 1.0}}
+
+class GlobalDreamNode(BaseModel):
+    id: str = "global-dream"
+    themes: List[str] = Field(default_factory=list)
+    intensity: float = 0.5
+    last_updated: datetime = Field(default_factory=datetime.now)
+
 # --- Edges (Relationships) ---
 
 class ResonanceEdge(BaseModel):
@@ -72,3 +84,8 @@ class ShadowEdge(BaseModel):
     source_id: str # User ID
     target_id: str # Dream ID
     weight: float = 1.0
+
+class EmbodiesEdge(BaseModel):
+    source_id: str # Agent ID
+    target_id: str # Archetype ID
+    strength: float = 1.0 # 0.0 to 1.0 (How strongly they embody it)

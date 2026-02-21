@@ -15,8 +15,9 @@ from app.repositories.local_graph import LocalSoulRepository
 from app.models.graph import AgentNode
 from app.services.sleep_manager import SleepManager
 from app.services.cache import cache
+from app.services.agent_service import agent_service
 from app.services.seeder import seed_data
-from app.routers import warmup, agents
+from app.routers import warmup, agents, bio
 from app.dependencies import soul_repo, verify_user_logic
 from core.config import settings
 import os
@@ -33,12 +34,19 @@ app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 # Register Routers (Phase 5)
 app.include_router(warmup.router)
 app.include_router(agents.router)
+app.include_router(bio.router)
 
 # Lifecycle Event to load Graph
 @app.on_event("startup")
 async def startup_event():
     logger.info("Initializing Cache...")
     await cache.initialize()
+
+    # Neural Sync: Warm up agents
+    await agent_service.warm_up_agents()
+
+    # Neural Sync: Restore pending sleep cycles
+    await sleep_manager.restore_state()
 
     # Ensure Data Integrity (Seeding)
     await seed_data()
@@ -105,7 +113,7 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
     await soul_repo.get_or_create_user(user_id)
 
     # Phase 4: Waking Up
-    sleep_manager.cancel_sleep(user_id)
+    await sleep_manager.cancel_sleep(user_id)
 
     # Agent Voice Configuration
     voice_name = None
@@ -190,4 +198,4 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
         logger.info("WebSocket session closed.")
         # Phase 4: Entering REM Sleep (Debounced Consolidation)
         # Schedule consolidation after grace period.
-        sleep_manager.schedule_sleep(user_id)
+        await sleep_manager.schedule_sleep(user_id)

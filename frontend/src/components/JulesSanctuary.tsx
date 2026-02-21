@@ -15,6 +15,29 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
   const { videoRef, captureFrame, isReady: isCameraReady } = useVision(isOpen ? 'camera' : 'off');
   const [autoSync, setAutoSync] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
+  const [bpm, setBpm] = useState(80);
+
+  // Bio-Link Transmit
+  const handleBioTransmit = async () => {
+    try {
+        const token = localStorage.getItem("token") || "guest-token";
+        const res = await fetch("http://localhost:8000/api/bio/submit", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify({ bpm })
+        });
+        if (res.ok) {
+            addLog(`BIO: Pulse transmitted (${bpm} BPM)`);
+        } else {
+            addLog("BIO: Error transmitting");
+        }
+    } catch (e) {
+        addLog(`BIO: Network Error`);
+    }
+  };
 
   // Log Helper
   const addLog = (msg: string) => {
@@ -138,6 +161,23 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* Bio-Link Simulation (Phase 3) */}
+                <div className="p-3 bg-vintage-navy/10 border border-electric-blue/30">
+                    <h3 className="text-xs font-technical text-electric-blue/60 mb-2">BIO-LINK SIMULATION</h3>
+                    <div className="flex items-center gap-2 mb-2">
+                        <Activity size={16} className="text-alert-red animate-pulse" />
+                        <span className="text-sm font-mono text-electric-blue">{bpm} BPM</span>
+                    </div>
+                    <input
+                        type="range" min="40" max="160" value={bpm}
+                        onChange={(e) => setBpm(Number(e.target.value))}
+                        className="w-full h-2 bg-vintage-navy rounded-lg appearance-none cursor-pointer mb-2 accent-electric-blue"
+                    />
+                    <button onClick={handleBioTransmit} className="w-full bg-electric-blue/20 hover:bg-electric-blue/40 text-electric-blue font-technical py-1 text-xs border border-electric-blue/50">
+                        INJECT SIGNAL
+                    </button>
                 </div>
 
                 {/* Logs */}

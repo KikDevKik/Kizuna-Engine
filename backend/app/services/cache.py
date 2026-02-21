@@ -66,8 +66,6 @@ class RedisCache:
             self.local_cache[key] = value
             if len(self.local_cache) > self.MAX_LOCAL_CACHE_SIZE:
                 self.local_cache.popitem(last=False)
-            # Simple fallback doesn't handle TTL expiration automatically,
-            # but suffices for "Warm-up then Connect" flow.
             return
 
         try:
@@ -81,8 +79,6 @@ class RedisCache:
             # Fallback
             val = self.local_cache.get(key)
             if val:
-                # Invalidate immediately? No, keep it simple.
-                # Ideally we check timestamp if we implemented TTL logic.
                 self.local_cache.move_to_end(key)
                 logger.info(f"⚡ Local Cache Hit: {key}")
             return val
@@ -92,6 +88,35 @@ class RedisCache:
         except Exception as e:
             logger.error(f"Redis Get Error: {e}")
             return None
+
+    async def delete(self, key: str):
+        """Delete key."""
+        if not self.connected or not self.client:
+            if key in self.local_cache:
+                del self.local_cache[key]
+            return
+
+        try:
+            await self.client.delete(key)
+        except Exception as e:
+            logger.error(f"Redis Delete Error: {e}")
+
+    async def scan_match(self, pattern: str) -> list[str]:
+        """Scan keys matching pattern."""
+        if not self.connected or not self.client:
+            # Simple list comp for local cache
+            # pattern usually ends with *
+            prefix = pattern.replace("*", "")
+            return [k for k in self.local_cache.keys() if k.startswith(prefix)]
+
+        try:
+            keys = []
+            async for key in self.client.scan_iter(match=pattern):
+                keys.append(key)
+            return keys
+        except Exception as e:
+            logger.error(f"Redis Scan Error: {e}")
+            return []
 
     async def close(self):
         if self.client:

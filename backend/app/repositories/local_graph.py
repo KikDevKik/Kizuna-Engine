@@ -8,7 +8,10 @@ from pathlib import Path
 from datetime import datetime
 
 from .base import SoulRepository
-from ..models.graph import UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode, DreamNode, ShadowEdge
+from ..models.graph import (
+    UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode,
+    DreamNode, ShadowEdge, ArchetypeNode, GlobalDreamNode, EmbodiesEdge
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,11 @@ class LocalSoulRepository(SoulRepository):
         self.experienced: Dict[str, List[str]] = {} # {user_id: [episode_ids]}
         self.knows: Dict[str, List[str]] = {} # {user_id: [fact_ids]}
         self.shadows: Dict[str, List[ShadowEdge]] = {} # {user_id: [ShadowEdge]}
+
+        # Evolution Phase 1
+        self.archetypes: Dict[str, ArchetypeNode] = {}
+        self.embodies: Dict[str, List[EmbodiesEdge]] = {} # {agent_id: [EmbodiesEdge]}
+        self.global_dream: GlobalDreamNode = GlobalDreamNode()
 
     async def initialize(self) -> None:
         """Load the graph from JSON."""
@@ -86,6 +94,19 @@ class LocalSoulRepository(SoulRepository):
                 self.shadows = {}
                 for uid, edges in data.get("shadows", {}).items():
                     self.shadows[uid] = [ShadowEdge(**e) for e in edges]
+
+                # Hydrate Archetypes (Phase 1)
+                for a in data.get("archetypes", []):
+                    node = ArchetypeNode(**a)
+                    self.archetypes[node.id] = node
+
+                if "global_dream" in data:
+                    self.global_dream = GlobalDreamNode(**data["global_dream"])
+
+                # Hydrate Embodies
+                self.embodies = {}
+                for aid, edges in data.get("embodies", {}).items():
+                    self.embodies[aid] = [EmbodiesEdge(**e) for e in edges]
 
                 logger.info(f"Graph Database loaded: {len(self.users)} Users, {len(self.agents)} Agents.")
 
@@ -148,6 +169,12 @@ class LocalSoulRepository(SoulRepository):
             "shadows": {
                 uid: [e.model_dump(mode='json') for e in edges]
                 for uid, edges in self.shadows.items()
+            },
+            "archetypes": to_dict_list(self.archetypes.values()),
+            "global_dream": self.global_dream.model_dump(mode='json'),
+            "embodies": {
+                aid: [e.model_dump(mode='json') for e in edges]
+                for aid, edges in self.embodies.items()
             }
         }
 
@@ -445,3 +472,48 @@ class LocalSoulRepository(SoulRepository):
                     episodes.append(ep)
 
             return episodes
+
+    # --- Evolution Phase 1: Ontology & Archetypes (Mock for Local) ---
+
+    async def create_archetype(self, name: str, description: str, triggers: Dict) -> ArchetypeNode:
+        async with self.lock:
+            arc = ArchetypeNode(name=name, description=description, triggers=triggers)
+            self.archetypes[arc.id] = arc
+            await self._save()
+            return arc
+
+    async def get_archetype(self, name: str) -> Optional[ArchetypeNode]:
+        async with self.lock:
+            for arc in self.archetypes.values():
+                if arc.name == name:
+                    return arc
+            return None
+
+    async def link_agent_archetype(self, agent_id: str, archetype_id: str, strength: float = 1.0) -> None:
+        async with self.lock:
+            edge = EmbodiesEdge(source_id=agent_id, target_id=archetype_id, strength=strength)
+            if agent_id not in self.embodies:
+                self.embodies[agent_id] = []
+            self.embodies[agent_id].append(edge)
+            await self._save()
+
+    async def get_agent_archetype(self, agent_id: str) -> Optional[ArchetypeNode]:
+        async with self.lock:
+            edges = self.embodies.get(agent_id, [])
+            if not edges:
+                return None
+            # Return first one
+            edge = edges[0]
+            return self.archetypes.get(edge.target_id)
+
+    # --- Evolution Phase 1: Global Dream (Mock for Local) ---
+
+    async def get_global_dream(self) -> GlobalDreamNode:
+        return self.global_dream
+
+    async def update_global_dream(self, themes: List[str], intensity: float) -> None:
+        async with self.lock:
+            self.global_dream.themes = themes
+            self.global_dream.intensity = intensity
+            self.global_dream.last_updated = datetime.now()
+            await self._save()

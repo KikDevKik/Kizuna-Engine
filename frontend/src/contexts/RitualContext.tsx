@@ -16,6 +16,8 @@ interface RitualContextType extends RitualState {
   sendMessage: (content: string) => Promise<void>;
   startRitual: () => Promise<void>;
   resetRitual: () => void;
+  setArchetype: (arc: string | null) => void;
+  archetype: string | null;
 }
 
 const RitualContext = createContext<RitualContextType | undefined>(undefined);
@@ -27,16 +29,17 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [status, setStatus] = useState<'idle' | 'active' | 'complete' | 'error'>('idle');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [archetype, setArchetype] = useState<string | null>(null);
 
   const resetRitual = useCallback(() => {
     setMessages([]);
     setStatus('idle');
     setIsLoading(false);
     setError(null);
+    setArchetype(null);
   }, []);
 
   const startRitual = useCallback(async () => {
-    // Only start if idle or empty to avoid overwriting existing state
     if (messages.length > 0) return;
 
     setIsLoading(true);
@@ -47,10 +50,13 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const timeoutId = setTimeout(() => controller.abort(), RITUAL_TIMEOUT_MS);
 
     try {
-      // Empty history triggers initial question from backend
-      // Using absolute URL to avoid Proxy method stripping or 404s
       const locale = navigator.language || 'en';
-      const response = await fetch('http://localhost:8000/api/agents/ritual', {
+      const url = new URL('http://localhost:8000/api/agents/ritual');
+      if (archetype) {
+          url.searchParams.append('archetype', archetype);
+      }
+
+      const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -71,7 +77,6 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
       const data = await response.json();
 
-      // Backend returns { is_complete, message, agent }
       if (data.message) {
         setMessages([{ role: 'system', content: data.message }]);
       }
@@ -86,12 +91,11 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       clearTimeout(timeoutId);
       setIsLoading(false);
     }
-  }, [messages.length]);
+  }, [messages.length, archetype]);
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim()) return;
 
-    // Optimistically add user message
     const userMsg: RitualMessage = { role: 'user', content };
     const newHistory = [...messages, userMsg];
 
@@ -104,7 +108,12 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     try {
       const locale = navigator.language || 'en';
-      const response = await fetch('http://localhost:8000/api/agents/ritual', {
+      const url = new URL('http://localhost:8000/api/agents/ritual');
+      if (archetype) {
+          url.searchParams.append('archetype', archetype);
+      }
+
+      const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -136,7 +145,7 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       clearTimeout(timeoutId);
       setIsLoading(false);
     }
-  }, [messages]);
+  }, [messages, archetype]);
 
   return (
     <RitualContext.Provider value={{
@@ -146,7 +155,9 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       error,
       sendMessage,
       startRitual,
-      resetRitual
+      resetRitual,
+      setArchetype,
+      archetype
     }}>
       {children}
     </RitualContext.Provider>

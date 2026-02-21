@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
-from ..models.graph import UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode, DreamNode
+from ..models.graph import (
+    UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode,
+    DreamNode, ArchetypeNode, GlobalDreamNode
+)
 
 class SoulRepository(ABC):
     """
@@ -67,4 +70,38 @@ class SoulRepository(ABC):
     @abstractmethod
     async def get_recent_episodes(self, user_id: str, limit: int = 10) -> List[MemoryEpisodeNode]:
         """Retrieve the most recent short-term memory episodes."""
+        pass
+
+    # --- Evolution Phase 1: Ontology & Archetypes ---
+
+    @abstractmethod
+    async def create_archetype(self, name: str, description: str, triggers: Dict) -> ArchetypeNode:
+        """Creates a new Archetype Node."""
+        pass
+
+    @abstractmethod
+    async def get_archetype(self, name: str) -> Optional[ArchetypeNode]:
+        """Fetch Archetype by Name."""
+        pass
+
+    @abstractmethod
+    async def link_agent_archetype(self, agent_id: str, archetype_id: str, strength: float = 1.0) -> None:
+        """Creates EMBODIES edge."""
+        pass
+
+    @abstractmethod
+    async def get_agent_archetype(self, agent_id: str) -> Optional[ArchetypeNode]:
+        """Get the Archetype an agent embodies."""
+        pass
+
+    # --- Evolution Phase 1: Global Dream ---
+
+    @abstractmethod
+    async def get_global_dream(self) -> GlobalDreamNode:
+        """Fetch Singleton Global Dream."""
+        pass
+
+    @abstractmethod
+    async def update_global_dream(self, themes: List[str], intensity: float) -> None:
+        """Update Singleton Global Dream."""
         pass
