@@ -135,7 +135,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   // ------------------------------------------------------------------
 
   // Strict Linear Navigation (No Wrapping)
-  const rotateCarousel = (direction: number) => {
+  const rotateCarousel = useCallback((direction: number) => {
     if (agents.length === 0) return;
     setActiveIndex((prev) => {
       const next = prev + direction;
@@ -144,7 +144,33 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
       if (next >= agents.length) return agents.length - 1;
       return next;
     });
-  };
+  }, [agents.length]);
+
+  // Keyboard Navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input or textarea
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      if (isModalOpen || agentToDelete || agents.length === 0) return;
+
+      if (e.key === 'ArrowLeft') {
+        rotateCarousel(-1);
+      } else if (e.key === 'ArrowRight') {
+        rotateCarousel(1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, agentToDelete, rotateCarousel, agents.length]);
 
   const handleSelect = () => {
     const selected = agents[activeIndex];
@@ -301,6 +327,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                           }}
                           className="p-2 text-vintage-navy hover:text-alert-red transition-colors opacity-50 hover:opacity-100"
                           title="Terminate Soul"
+                          aria-label={`Delete agent ${agent.name}`}
                         >
                           <Trash2 size={20} />
                         </button>
@@ -364,6 +391,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
             onClick={() => rotateCarousel(-1)}
             disabled={isFirst}
             className={`kizuna-shard-btn-wrapper transition-opacity duration-300 ${isFirst ? 'opacity-50 cursor-not-allowed' : 'opacity-100'}`}
+            aria-label="Previous Agent"
           >
             <div className="kizuna-shard-btn-inner">
                &lt; PREV
@@ -373,6 +401,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
           <button
             onClick={handleSelect}
             className="kizuna-shard-btn-wrapper"
+            aria-label={agents[activeIndex]?.id === 'create-new' ? 'Create new agent' : `Initiate link with ${agents[activeIndex]?.name}`}
           >
              <span className="kizuna-shard-btn-inner">
                {agents[activeIndex]?.id === 'create-new' ? 'INITIALIZE' : 'INITIATE LINK'}
@@ -383,6 +412,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
             onClick={() => rotateCarousel(1)}
             disabled={isLast}
             className={`kizuna-shard-btn-wrapper transition-opacity duration-300 ${isLast ? 'opacity-50 cursor-not-allowed' : 'opacity-100'}`}
+            aria-label="Next Agent"
           >
             <div className="kizuna-shard-btn-inner">
               NEXT &gt;
