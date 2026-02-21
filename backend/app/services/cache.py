@@ -6,6 +6,7 @@ except ImportError:
 import logging
 from core.config import settings
 import asyncio
+from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
@@ -15,11 +16,12 @@ class RedisCache:
     Handles ephemeral storage for Warm-up and Session State.
     """
     _instance = None
+    MAX_LOCAL_CACHE_SIZE = 1000
 
     def __init__(self):
         self.client = None
         self.connected = False
-        self.local_cache = {} # Fallback for Local Mode
+        self.local_cache = OrderedDict() # Fallback for Local Mode
 
     @classmethod
     def get_instance(cls):
@@ -33,7 +35,7 @@ class RedisCache:
             logger.warning("⚠️ redis library missing. Using Local Memory Cache.")
             self.connected = False
             self.client = None
-            self.local_cache = {}
+            self.local_cache = OrderedDict()
             return
 
         try:
@@ -53,13 +55,17 @@ class RedisCache:
             logger.warning(f"⚠️ Redis Connection Failed: {e}. Switching to Local Memory Cache (Fallback Mode).")
             self.connected = False
             self.client = None
-            self.local_cache = {}
+            self.local_cache = OrderedDict()
 
     async def set(self, key: str, value: str, ttl: int = 60):
         """Set key with TTL (seconds)."""
         if not self.connected or not self.client:
             # Fallback
+            if key in self.local_cache:
+                self.local_cache.move_to_end(key)
             self.local_cache[key] = value
+            if len(self.local_cache) > self.MAX_LOCAL_CACHE_SIZE:
+                self.local_cache.popitem(last=False)
             # Simple fallback doesn't handle TTL expiration automatically,
             # but suffices for "Warm-up then Connect" flow.
             return
@@ -77,6 +83,7 @@ class RedisCache:
             if val:
                 # Invalidate immediately? No, keep it simple.
                 # Ideally we check timestamp if we implemented TTL logic.
+                self.local_cache.move_to_end(key)
                 logger.info(f"⚡ Local Cache Hit: {key}")
             return val
 
