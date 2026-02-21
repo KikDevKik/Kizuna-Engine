@@ -5,7 +5,7 @@ import os
 from asyncio import Queue
 from datetime import datetime
 from ..repositories.base import SoulRepository
-from ..models.graph import DreamNode, MemoryEpisodeNode
+from ..models.graph import DreamNode, MemoryEpisodeNode, AgentNode
 from core.config import settings
 
 # Try import genai
@@ -139,7 +139,15 @@ class SubconsciousMind:
                 # Assuming unified SDK supports async or we wrap it.
                 # For safety, let's wrap the generate call.
 
-                prompt = f"Analyze the user's emotional state from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return nothing."
+                # Dynamic Prompt Loading
+                prompt_template = "Analyze the user's emotional state from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return nothing."
+
+                if agent_id and self.repository:
+                    agent = await self.repository.get_agent(agent_id)
+                    if agent and agent.memory_extraction_prompt:
+                        prompt_template = agent.memory_extraction_prompt
+
+                prompt = prompt_template.replace("{text}", text)
 
                 # Using 2.0 Flash Exp or configured model
                 response = await self.client.aio.models.generate_content(
@@ -171,7 +179,7 @@ class SubconsciousMind:
                 return hint
         return None
 
-    async def generate_dream(self, episodes: list[MemoryEpisodeNode]) -> DreamNode:
+    async def generate_dream(self, episodes: list[MemoryEpisodeNode], agent_id: str = None) -> DreamNode:
         """
         Generates a DreamNode from a list of memory episodes using Generative AI.
         """
@@ -188,11 +196,19 @@ class SubconsciousMind:
         mock_mode = os.getenv("MOCK_GEMINI", "false").lower() == "true"
         if self.client and not mock_mode:
             try:
-                prompt = (
-                    f"Synthesize these memories into a surreal dream concept. "
-                    f"Return JSON with keys: theme (str), intensity (0.0-1.0), surrealism_level (0.0-1.0).\n\n"
-                    f"Memories:\n{summary_text}"
+                # Dynamic Prompt Loading
+                prompt_template = (
+                    "Synthesize these memories into a surreal dream concept. "
+                    "Return JSON with keys: theme (str), intensity (0.0-1.0), surrealism_level (0.0-1.0).\n\n"
+                    "Memories:\n{summary_text}"
                 )
+
+                if agent_id and self.repository:
+                    agent = await self.repository.get_agent(agent_id)
+                    if agent and agent.dream_prompt:
+                        prompt_template = agent.dream_prompt
+
+                prompt = prompt_template.replace("{summary_text}", summary_text)
 
                 response = await self.client.aio.models.generate_content(
                     model=settings.MODEL_DREAM, # Or SUBCONSCIOUS if DREAM model not defined

@@ -19,39 +19,39 @@ except ImportError as e:
 
 def test_kizuna_connection():
     print("Starting Soul Verification Tests...")
-    client = TestClient(app)
 
-    # Test 1: No Agent ID -> Should Fail
-    print("\n[Test 1] Connecting without agent_id...")
-    try:
-        with client.websocket_connect("/ws/live") as websocket:
-            print("❌ Failed: Connection accepted without agent_id")
+    with TestClient(app) as client:
+        # Test 1: No Agent ID -> Should Fail
+        print("\n[Test 1] Connecting without agent_id...")
+        try:
+            with client.websocket_connect("/ws/live") as websocket:
+                print("❌ Failed: Connection accepted without agent_id")
+                sys.exit(1)
+        except Exception:
+            # TestClient raises generic exception or WebSocketDisconnect on rejection during handshake
+            print("✅ Correctly rejected without agent_id")
+
+        # Test 2: Invalid Agent ID
+        print("\n[Test 2] Connecting with invalid agent_id 'ghost'...")
+        try:
+            with client.websocket_connect("/ws/live?agent_id=ghost") as websocket:
+                print("❌ Failed: Connection accepted for invalid agent")
+                sys.exit(1)
+        except Exception:
+             print("✅ Correctly rejected invalid agent")
+
+        # Test 3: Valid Agent (Kizuna)
+        print("\n[Test 3] Connecting with valid agent_id 'kizuna'...")
+        try:
+            with client.websocket_connect("/ws/live?agent_id=kizuna") as websocket:
+                print("✅ Connection established for Kizuna")
+                # Check if we can receive the 'Gemini session started' log indirectly or just hold connection
+                pass
+        except Exception as e:
+            print(f"❌ Failed to connect with Kizuna: {e}")
+            import traceback
+            traceback.print_exc()
             sys.exit(1)
-    except Exception:
-        # TestClient raises generic exception or WebSocketDisconnect on rejection during handshake
-        print("✅ Correctly rejected without agent_id")
-
-    # Test 2: Invalid Agent ID
-    print("\n[Test 2] Connecting with invalid agent_id 'ghost'...")
-    try:
-        with client.websocket_connect("/ws/live?agent_id=ghost") as websocket:
-            print("❌ Failed: Connection accepted for invalid agent")
-            sys.exit(1)
-    except Exception:
-         print("✅ Correctly rejected invalid agent")
-
-    # Test 3: Valid Agent (Kizuna)
-    print("\n[Test 3] Connecting with valid agent_id 'kizuna'...")
-    try:
-        with client.websocket_connect("/ws/live?agent_id=kizuna") as websocket:
-            print("✅ Connection established for Kizuna")
-            # Check if we can receive the 'Gemini session started' log indirectly or just hold connection
-            pass
-    except Exception as e:
-        print(f"❌ Failed to connect with Kizuna: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
 
     print("\n🎉 All Soul Verification Tests Passed!")
 
