@@ -15,7 +15,7 @@ os.environ["FIREBASE_CREDENTIALS"] = ""
 
 # Patch gemini_service to avoid real connection attempts
 with patch("app.services.gemini_live.gemini_service") as mock_gemini:
-    from app import main
+    from app import dependencies
 
 class TestSecurityAuth(unittest.TestCase):
 
@@ -26,9 +26,9 @@ class TestSecurityAuth(unittest.TestCase):
         providing a token must result in a rejection (ValueError), NOT guest access.
         """
 
-        # Mock settings in main to reflect the vulnerable configuration
-        with patch.object(main.settings, 'GCP_PROJECT_ID', "prod-project"), \
-             patch.object(main.settings, 'FIREBASE_CREDENTIALS', ""), \
+        # Mock settings in dependencies to reflect the vulnerable configuration
+        with patch.object(dependencies.settings, 'GCP_PROJECT_ID', "prod-project"), \
+             patch.object(dependencies.settings, 'FIREBASE_CREDENTIALS', ""), \
              patch("app.services.auth.FirebaseAuth", create=True):
 
             print("\n--- Testing Security: Auth Enforcement in Production ---")
@@ -37,7 +37,7 @@ class TestSecurityAuth(unittest.TestCase):
             # This should RAISE ValueError due to misconfiguration
             # It should NOT return "guest_user"
             with self.assertRaises(ValueError) as cm:
-                main.verify_user(token)
+                dependencies.verify_user_logic(token)
 
             self.assertIn("Server Misconfiguration", str(cm.exception))
             print("✅ CORRECT BEHAVIOR: Server rejected insecure configuration.")
@@ -46,11 +46,11 @@ class TestSecurityAuth(unittest.TestCase):
         """
         Verify that Development environment (No GCP_PROJECT_ID) allows guest access.
         """
-        with patch.object(main.settings, 'GCP_PROJECT_ID', ""), \
-             patch.object(main.settings, 'FIREBASE_CREDENTIALS', ""):
+        with patch.object(dependencies.settings, 'GCP_PROJECT_ID', ""), \
+             patch.object(dependencies.settings, 'FIREBASE_CREDENTIALS', ""):
 
             print("\n--- Testing Security: Dev Mode Fallback ---")
-            user = main.verify_user(None)
+            user = dependencies.verify_user_logic(None)
             self.assertEqual(user, "guest_user")
             print("✅ CORRECT BEHAVIOR: Dev mode allowed guest access.")
 
