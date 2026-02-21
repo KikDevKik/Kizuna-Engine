@@ -31,9 +31,9 @@ class SubconsciousMind:
         self.buffer = []
         self.last_process_time = datetime.now()
         self.repository: SoulRepository | None = None
-          
-          self.active_sessions: dict[str, Queue] = {} # user_id -> injection_queue
-          self.backoff_until: datetime | None = None
+
+        self.active_sessions: dict[str, Queue] = {} # user_id -> injection_queue
+        self.backoff_until: datetime | None = None
 
         # Default fallback if agent traits are missing
         self.default_triggers = {

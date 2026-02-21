@@ -14,7 +14,7 @@ async def test_shutdown_prevents_scheduling():
     assert len(sleep_manager.active_timers) == 0
 
     # 1. Schedule sleep normally
-    sleep_manager.schedule_sleep("user_1")
+    await sleep_manager.schedule_sleep("user_1")
     assert "user_1" in sleep_manager.active_timers
     assert len(sleep_manager.active_timers) == 1
 
@@ -30,7 +30,7 @@ async def test_shutdown_prevents_scheduling():
     assert len(sleep_manager.active_timers) == 0  # Tasks should be cleared
 
     # 3. Try to schedule sleep AFTER shutdown
-    sleep_manager.schedule_sleep("user_2")
+    await sleep_manager.schedule_sleep("user_2")
 
     # Verify NO new task was created
     assert "user_2" not in sleep_manager.active_timers
@@ -43,7 +43,7 @@ async def test_shutdown_cancels_existing_tasks():
     sleep_manager = SleepManager(repo_mock)
 
     # Schedule a task
-    sleep_manager.schedule_sleep("user_3", delay=10) # 10s delay
+    await sleep_manager.schedule_sleep("user_3", delay=10) # 10s delay
     task = sleep_manager.active_timers["user_3"]
 
     assert not task.done()
