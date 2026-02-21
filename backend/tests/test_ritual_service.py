@@ -141,3 +141,102 @@ async def test_generate_with_retry_429():
         assert result == "Success after retry"
         assert service.client.aio.models.generate_content.call_count == 2
         mock_sleep.assert_called_once_with(4)
+
+@pytest.mark.asyncio
+async def test_process_ritual_finalize_malformed_json():
+    """Verifies fallback to KIZUNA-FAILSAFE when LLM returns malformed JSON."""
+    service = RitualService()
+    service.client = MagicMock()
+
+    # Mock invalid JSON
+    with patch.object(RitualService, '_generate_with_retry', new_callable=AsyncMock, return_value="{ incomplete json"):
+        history = [
+            RitualMessage(role="user", content="1"),
+            RitualMessage(role="user", content="2"),
+            RitualMessage(role="user", content="3")
+        ]
+        resp = await service.process_ritual(history)
+
+        assert resp.is_complete is True
+        assert resp.agent_data["name"] == "KIZUNA-FAILSAFE"
+
+@pytest.mark.asyncio
+async def test_process_ritual_finalize_empty_string():
+    """Verifies fallback to KIZUNA-FAILSAFE when LLM returns an empty string."""
+    service = RitualService()
+    service.client = MagicMock()
+
+    # Mock empty string
+    with patch.object(RitualService, '_generate_with_retry', new_callable=AsyncMock, return_value=""):
+        history = [
+            RitualMessage(role="user", content="1"),
+            RitualMessage(role="user", content="2"),
+            RitualMessage(role="user", content="3")
+        ]
+        resp = await service.process_ritual(history)
+
+        assert resp.is_complete is True
+        assert resp.agent_data["name"] == "KIZUNA-FAILSAFE"
+
+@pytest.mark.asyncio
+async def test_process_ritual_finalize_valid_raw_json():
+    """Verifies correct parsing when LLM returns valid JSON without markdown wrappers."""
+    service = RitualService()
+    service.client = MagicMock()
+
+    raw_json = '{"name": "Raw Soul", "role": "Raw", "base_instruction": "Raw", "lore": "Raw", "traits": [], "native_language": "Raw", "known_languages": []}'
+
+    with patch.object(RitualService, '_generate_with_retry', new_callable=AsyncMock, return_value=raw_json):
+        history = [
+            RitualMessage(role="user", content="1"),
+            RitualMessage(role="user", content="2"),
+            RitualMessage(role="user", content="3")
+        ]
+        resp = await service.process_ritual(history)
+
+        assert resp.is_complete is True
+        assert resp.agent_data["name"] == "Raw Soul"
+        assert resp.agent_data["role"] == "Raw"
+async def test_generate_with_retry_failure():
+    """Verifies that if the retry also fails (e.g., second 429), it returns None."""
+    service = RitualService()
+    service.client = MagicMock()
+    service.client.aio.models.generate_content = AsyncMock()
+
+    # Both calls raise 429 error
+    error_429 = Exception("Resource has been exhausted (e.g. check quota). 429 Rate Limit")
+    service.client.aio.models.generate_content.side_effect = [error_429, error_429]
+
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        result = await service._generate_with_retry("model", "contents")
+
+        assert result is None
+        assert service.client.aio.models.generate_content.call_count == 2
+        mock_sleep.assert_called_once_with(4)
+
+@pytest.mark.asyncio
+async def test_generate_with_retry_non_429():
+    """Verifies that a non-429 error (e.g., 500) returns None immediately without sleeping/retrying."""
+    service = RitualService()
+    service.client = MagicMock()
+    service.client.aio.models.generate_content = AsyncMock()
+
+    # Call raises 500 error
+    error_500 = Exception("Internal Server Error")
+    service.client.aio.models.generate_content.side_effect = error_500
+
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        result = await service._generate_with_retry("model", "contents")
+
+        assert result is None
+        assert service.client.aio.models.generate_content.call_count == 1
+        mock_sleep.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_generate_with_retry_no_client():
+    """Verifies that if self.client is None, it returns None."""
+    service = RitualService()
+    service.client = None
+
+    result = await service._generate_with_retry("model", "contents")
+    assert result is None
