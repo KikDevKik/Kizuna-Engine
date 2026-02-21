@@ -36,17 +36,18 @@ class TestTotalShielding(unittest.TestCase):
             try:
                 # Force reload of main and deps
                 modules_to_unload = [
-                    'app.main', 'app.services.auth', 'app.services.cache',
+                    'app.main', 'app.dependencies', 'app.services.auth', 'app.services.cache',
                     'app.repositories.spanner_graph', 'app.routers.warmup'
                 ]
                 for m in modules_to_unload:
                     if m in sys.modules:
                         del sys.modules[m]
 
-                from app.main import app, get_soul_repository
+                from app.main import app
+                from app.dependencies import get_repository
 
                 # Check Repo
-                repo = get_soul_repository()
+                repo = get_repository()
                 print(f"✅ Boot Success. Repo: {type(repo).__name__}")
                 self.assertTrue("LocalSoulRepository" in type(repo).__name__)
 

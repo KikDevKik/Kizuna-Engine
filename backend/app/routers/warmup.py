@@ -3,7 +3,8 @@ from pydantic import BaseModel
 import logging
 from app.services.soul_assembler import assemble_soul
 from app.services.cache import cache
-from app.repositories.local_graph import LocalSoulRepository
+from app.repositories.base import SoulRepository
+from app.dependencies import get_repository
 from core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -13,26 +14,12 @@ router = APIRouter(prefix="/api/warmup", tags=["Neural Sync"])
 class WarmupRequest(BaseModel):
     agent_id: str
 
-# Dependency to inject the correct repository
-def get_repository():
-    # Lazy Factory Logic duplicated from main (allows router isolation)
-    if settings.GCP_PROJECT_ID and settings.SPANNER_INSTANCE_ID:
-        try:
-            from app.repositories.spanner_graph import SpannerSoulRepository
-            return SpannerSoulRepository()
-        except ImportError:
-            return LocalSoulRepository()
-    return LocalSoulRepository()
-
-async def perform_warmup(user_id: str, agent_id: str):
+async def perform_warmup(user_id: str, agent_id: str, repo: SoulRepository):
     """
     Background Task: Assemble Soul and Cache it.
+    Uses the injected singleton repository to avoid redundant I/O.
     """
     try:
-        repo = get_repository()
-        # Initialize repo if needed (Local might need init, Spanner usually stateless client)
-        await repo.initialize()
-
         # Heavy computation: GQL + Logic
         system_instruction = await assemble_soul(agent_id, user_id, repo)
 
@@ -48,7 +35,8 @@ async def perform_warmup(user_id: str, agent_id: str):
 async def warmup_soul(
     request: WarmupRequest,
     background_tasks: BackgroundTasks,
-    authorization: str = Header(None) # Bearer Token
+    authorization: str = Header(None), # Bearer Token
+    repo: SoulRepository = Depends(get_repository)
 ):
     """
     Pre-calculates the Agent's Soul (System Instruction) based on User History.
@@ -72,6 +60,6 @@ async def warmup_soul(
         raise HTTPException(status_code=401, detail="Authentication Required")
 
     # 2. Trigger Background Warm-up (Non-blocking response)
-    background_tasks.add_task(perform_warmup, user_id, request.agent_id)
+    background_tasks.add_task(perform_warmup, user_id, request.agent_id, repo)
 
     return {"status": "warming_up", "agent_id": request.agent_id, "user_id": user_id}

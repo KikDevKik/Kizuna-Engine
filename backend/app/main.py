@@ -17,6 +17,7 @@ from app.services.sleep_manager import SleepManager
 from app.services.cache import cache
 from app.services.seeder import seed_data
 from app.routers import warmup, agents
+from app.dependencies import soul_repo
 from core.config import settings
 import os
 
@@ -50,25 +51,6 @@ def verify_user(token: str | None) -> str:
 
     # Lab Mode / Guest
     return "guest_user"
-
-# Lazy Factory for Repository
-def get_soul_repository():
-    # Phase 3.2: Check if Spanner Config is present
-    if settings.GCP_PROJECT_ID and settings.SPANNER_INSTANCE_ID:
-        try:
-            # Lazy import to prevent crash in Local Mode if deps are missing
-            from app.repositories.spanner_graph import SpannerSoulRepository
-            logger.info("🌐 Using Spanner Soul Repository (Production Mode)")
-            return SpannerSoulRepository()
-        except ImportError as e:
-            logger.warning(f"⚠️ Failed to import Spanner Repository: {e}. Falling back to Local.")
-            return LocalSoulRepository()
-    else:
-        logger.info("🏠 Using Local Soul Repository (Development Mode)")
-        return LocalSoulRepository()
-
-# Initialize Repository
-soul_repo = get_soul_repository()
 
 # Initialize Sleep Manager (Phase 4)
 sleep_manager = SleepManager(soul_repo)
