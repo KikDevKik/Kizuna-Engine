@@ -72,10 +72,10 @@ function App() {
       <header className="fixed top-0 left-0 w-full p-6 flex justify-between items-start z-50 pointer-events-none">
         <div className="flex flex-col pointer-events-auto">
           <h1 className="font-monumental text-5xl skew-x-[-10deg] tracking-tighter leading-none">
-            KIZUNA<span className="text-cyan-400">ENGINE</span>
+            KIZUNA<span className="text-electric-blue">ENGINE</span>
           </h1>
-          <div className="h-1 w-32 bg-cyan-500 skew-x-[-10deg] mt-1" />
-          <div className="font-technical text-xs mt-1 opacity-70">
+          <div className="h-1 w-32 bg-electric-blue skew-x-[-10deg] mt-1" />
+          <div className="font-technical text-xs mt-1 opacity-70 text-electric-blue">
             MULTIMODAL INTERFACE V4.0 // AGENT: {selectedAgentId || 'NONE'}
           </div>
         </div>
@@ -83,19 +83,19 @@ function App() {
         <div className="flex gap-4 pointer-events-auto">
           <button
             onClick={() => setViewMode('core')}
-            className={`px-4 py-1 font-technical border skew-x-[-10deg] transition-all ${
-              viewMode === 'core' ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-transparent text-cyan-400 border-cyan-900/50'
-            }`}
+            className={`kizuna-shard-nav-btn ${viewMode === 'core' ? 'active' : ''}`}
           >
-            CORE VIEW
+            <div className="kizuna-shard-nav-inner">
+              CORE VIEW
+            </div>
           </button>
           <button
             onClick={() => setViewMode('roster')}
-            className={`px-4 py-1 font-technical border skew-x-[-10deg] transition-all ${
-              viewMode === 'roster' ? 'bg-cyan-500 text-black border-cyan-400' : 'bg-transparent text-cyan-400 border-cyan-900/50'
-            }`}
+            className={`kizuna-shard-nav-btn ${viewMode === 'roster' ? 'active' : ''}`}
           >
-            AGENT ROSTER
+            <div className="kizuna-shard-nav-inner">
+              AGENT ROSTER
+            </div>
           </button>
         </div>
       </header>
@@ -165,7 +165,7 @@ function App() {
       />
 
       {/* FOOTER STATUS */}
-      <footer className="fixed bottom-0 left-0 w-full p-4 flex justify-between items-end z-40 pointer-events-none opacity-80 text-[10px] font-technical text-cyan-700">
+      <footer className="fixed bottom-0 left-0 w-full p-4 flex justify-between items-end z-40 pointer-events-none opacity-80 text-[10px] font-technical text-vintage-navy">
         <div>
            MEMORY_USAGE: 64TB // LATENCY: 12ms
         </div>

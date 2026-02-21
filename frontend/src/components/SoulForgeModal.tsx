@@ -148,7 +148,7 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
 
   const getLastMessageStyle = (isLast: boolean) => {
     if (isLast && animationPhase === 'resonance') {
-       return "text-cyan-300 drop-shadow-[0_0_10px_rgba(0,255,255,0.8)] animate-pulse";
+       return "text-electric-blue drop-shadow-[0_0_10px_rgba(0,255,255,0.8)] animate-pulse";
     }
     return "";
   };
@@ -160,7 +160,7 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-abyssal-black/90 backdrop-blur-md"
           onClick={onClose}
           onKeyDown={handleKeyDown}
         >
@@ -173,7 +173,7 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
           >
             {/* TERMINAL CONTAINER */}
             <div
-              className="kizuna-liquid-glass w-full h-full flex flex-col p-8 text-white relative overflow-hidden border border-cyan-900/30"
+              className="kizuna-liquid-glass w-full h-full flex flex-col p-8 text-white relative overflow-hidden border border-vintage-navy/30"
               style={{
                 clipPath: 'polygon(2% 0, 100% 0, 100% 98%, 98% 100%, 0 100%, 0 2%)',
               }}
@@ -181,14 +181,14 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
               {/* HEADER */}
               <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4 shrink-0">
                 <div>
-                  <h2 className="font-monumental text-2xl tracking-widest text-cyan-400 flex items-center gap-3">
+                  <h2 className="font-monumental text-2xl tracking-widest text-electric-blue flex items-center gap-3">
                     <Terminal size={24} />
                     SOUL FORGE <span className="text-white/20 text-sm align-top">TERMINAL_LINK</span>
                   </h2>
                 </div>
                 <button
                   onClick={onClose}
-                  className="text-white/30 hover:text-red-500 transition-colors"
+                  className="text-white/30 hover:text-alert-red transition-colors"
                 >
                   <X size={24} />
                 </button>
@@ -201,7 +201,7 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
               >
                 {/* Empty State / Loader */}
                 {messages.length === 0 && isLoading && (
-                   <div className="text-cyan-500/50 font-mono animate-pulse">CONNECTING TO THE VOID...</div>
+                   <div className="text-electric-blue/50 font-mono animate-pulse">CONNECTING TO THE VOID...</div>
                 )}
 
                 {messages.map((msg, idx) => {
@@ -220,7 +220,7 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
                       <div
                         className={`max-w-[80%] font-mono text-sm leading-relaxed p-3 border border-white/5
                           ${isSystem
-                            ? `text-cyan-100/90 bg-black/40 ${getLastMessageStyle(isLast && isSystem)}`
+                            ? `text-electric-blue/90 bg-abyssal-black/40 ${getLastMessageStyle(isLast && isSystem)}`
                             : 'text-white/80 bg-white/5'
                           }
                         `}
@@ -245,14 +245,14 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
 
                 {/* Loading Indicator for Reply */}
                 {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
-                   <div className="text-cyan-500/30 text-xs font-technical animate-pulse mt-2">
+                   <div className="text-electric-blue/30 text-xs font-technical animate-pulse mt-2">
                      ANALYZING RESONANCE...
                    </div>
                 )}
 
                 {/* Error Display */}
                 {error && (
-                   <div className="text-red-500/80 font-mono text-sm border border-red-900/50 p-2 bg-red-900/10">
+                   <div className="text-alert-red/80 font-mono text-sm border border-red-900/50 p-2 bg-red-900/10">
                      ERROR: {error}
                    </div>
                 )}
@@ -260,7 +260,7 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
                 {/* Completion Message Placeholder (Visually handled by Resonance) */}
                 {status === 'complete' && animationPhase !== 'dissipation' && (
                    <div className="text-center mt-8">
-                      <h3 className="font-monumental text-xl text-cyan-400 animate-pulse tracking-[0.5em]">INVOCATION COMPLETE</h3>
+                      <h3 className="font-monumental text-xl text-electric-blue animate-pulse tracking-[0.5em]">INVOCATION COMPLETE</h3>
                    </div>
                 )}
               </div>
@@ -273,21 +273,21 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
                   onChange={(e) => setInputValue(e.target.value)}
                   disabled={isLoading || status === 'complete'}
                   placeholder={status === 'complete' ? "SOUL CRYSTALLIZED" : "Enter your response..."}
-                  className="w-full bg-black/60 border border-white/20 p-4 pr-12 text-white font-mono focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-abyssal-black/60 border border-white/20 p-4 pr-12 text-white font-mono focus:border-electric-blue focus:outline-none focus:ring-1 focus:ring-electric-blue/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ clipPath: 'polygon(0 0, 100% 0, 100% 80%, 98% 100%, 0 100%)' }}
                   autoFocus
                 />
                 <button
                   type="submit"
                   disabled={!inputValue.trim() || isLoading || status === 'complete'}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-400 hover:text-white disabled:opacity-30 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-electric-blue hover:text-white disabled:opacity-30 transition-colors"
                 >
                   <Send size={20} />
                 </button>
               </form>
 
               {/* DECORATIVE BG */}
-              <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/5 blur-[80px] rounded-full pointer-events-none" />
+              <div className="absolute top-0 right-0 w-64 h-64 bg-electric-blue/5 blur-[80px] rounded-full pointer-events-none" />
               <div className="absolute bottom-0 left-0 w-48 h-48 bg-purple-600/5 blur-[60px] rounded-full pointer-events-none" />
             </div>
           </motion.div>

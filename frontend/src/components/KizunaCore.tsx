@@ -8,8 +8,34 @@ interface KizunaCoreProps {
   status: string;
 }
 
-export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isListening, isAiSpeaking, status }) => {
+export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isListening: _ignoredIsListening, isAiSpeaking, status }) => {
   const coreRef = useRef<HTMLDivElement>(null);
+  const [isUserSpeaking, setIsUserSpeaking] = React.useState(false);
+
+  // VAD Simulation (Volume Threshold)
+  useEffect(() => {
+    let animationFrameId: number;
+    // Debounce state changes slightly to prevent flickering
+    let silenceCounter = 0;
+    const SILENCE_THRESHOLD = 10; // Frames
+
+    const checkVolume = () => {
+      const vol = volumeRef.current;
+      // Threshold 0.02 chosen empirically for background noise filtering
+      if (vol > 0.02) {
+        setIsUserSpeaking(true);
+        silenceCounter = 0;
+      } else {
+        silenceCounter++;
+        if (silenceCounter > SILENCE_THRESHOLD) {
+          setIsUserSpeaking(false);
+        }
+      }
+      animationFrameId = requestAnimationFrame(checkVolume);
+    };
+    checkVolume();
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [volumeRef]);
 
   // LEY 4: EL NÚCLEO REACTIVO (Optimized Animation Loop)
   useEffect(() => {
@@ -17,28 +43,21 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isListening, 
 
     const animate = () => {
       if (coreRef.current) {
-        // Calculate volume scale based on status
-        // If speaking, volume drives scale. If listening, volume drives scale (maybe less).
-        // If idle, scale is minimal.
-
-        const vol = volumeRef.current; // Assuming 0.0 to 1.0+
+        const vol = volumeRef.current;
         let scale = 1.0;
 
         if (isAiSpeaking) {
            // AI Speaking: heavy pulsing
            scale = 1.0 + (vol * 0.8);
-        } else if (isListening) {
+        } else if (isUserSpeaking) {
            // User Speaking: sharp reaction
            scale = 1.0 + (vol * 0.4);
         } else {
-           // Idle: subtle breathing handled by CSS keyframes mostly, but we can add noise
+           // Idle: subtle breathing
            scale = 1.0 + (vol * 0.1);
         }
 
-        // Clamp scale to reasonable limits
         scale = Math.min(Math.max(scale, 0.8), 2.5);
-
-        // Update CSS variable directly to avoid React re-renders
         coreRef.current.style.setProperty('--vol-scale', scale.toFixed(3));
       }
       animationFrameId = requestAnimationFrame(animate);
@@ -46,38 +65,18 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isListening, 
 
     animate();
 
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [volumeRef, isAiSpeaking, isListening]);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [volumeRef, isAiSpeaking, isUserSpeaking]);
 
   // Determine visual state for CSS
   let visualState = 'idle';
   if (status === 'connected') {
-    if (isAiSpeaking) visualState = 'speaking';
-    else if (isListening) visualState = 'listening'; // User is speaking or silence
-    else visualState = 'idle'; // Fallback
-  } else {
-    visualState = 'idle';
-  }
-
-  // Override "idle" with "listening" if connected and not speaking, as per memory logic
-  // Memory says: isListening = connected && !isAiSpeaking
-  // But purely visual:
-  // - "idle" = slow breathing (maybe waiting for connection or silence)
-  // - "listening" = sharp geometric shape (user input)
-  // - "speaking" = volumetric expansion (AI output)
-
-  // Refined Logic:
-  // If AI is speaking -> "speaking"
-  // If Connected & Not AI Speaking -> "listening" (Active state)
-  // If Not Connected -> "idle" (Dormant)
-
-  if (status === 'connected') {
     if (isAiSpeaking) {
-      visualState = 'speaking';
+      visualState = 'speaking'; // Volumetric Expansion
+    } else if (isUserSpeaking) {
+      visualState = 'listening'; // Crystalline Aggression (Only when VAD active)
     } else {
-      visualState = 'listening';
+      visualState = 'idle'; // Liquid Breathing (Silence)
     }
   } else {
     visualState = 'idle';
@@ -86,8 +85,8 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isListening, 
   return (
     <div className="kizuna-core-container">
       {/* Outer Rings (Decorative) */}
-      <div className="absolute inset-0 border border-cyan-500/20 rounded-full scale-150 animate-pulse" />
-      <div className="absolute inset-0 border border-cyan-500/10 rounded-full scale-125" />
+      <div className="absolute inset-0 border border-electric-blue/20 rounded-full scale-150 animate-pulse" />
+      <div className="absolute inset-0 border border-electric-blue/10 rounded-full scale-125" />
 
       {/* The Core */}
       <div
@@ -104,7 +103,7 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isListening, 
         <div className="font-technical text-xs tracking-widest opacity-60">
            STATUS: {status.toUpperCase()}
         </div>
-        <div className="font-monumental text-xl tracking-tighter text-cyan-400">
+        <div className="font-monumental text-xl tracking-tighter text-electric-blue">
            {visualState.toUpperCase()}
         </div>
       </div>
