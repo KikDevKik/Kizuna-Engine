@@ -202,8 +202,9 @@ class LocalSoulRepository(SoulRepository):
             if agent_id in user_resonances:
                 return user_resonances[agent_id]
 
-            # Default Resonance (Starts at 50.0 - Neutral)
-            new_resonance = ResonanceEdge(source_id=user_id, target_id=agent_id, affinity_level=50.0)
+            # Default Resonance (Starts at 10.0 - Stranger/Warm)
+            # Was 50.0 (Friend/Neutral), but we want procedural growth starting from stranger.
+            new_resonance = ResonanceEdge(source_id=user_id, target_id=agent_id, affinity_level=10.0)
             if user_id not in self.resonances:
                 self.resonances[user_id] = {}
             self.resonances[user_id][agent_id] = new_resonance

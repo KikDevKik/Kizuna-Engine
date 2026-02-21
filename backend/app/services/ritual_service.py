@@ -49,8 +49,6 @@ class RitualService:
             return response.text.strip()
         except Exception as e:
             # Check for 429 (Rate Limit)
-            # Some SDKs raise google.api_core.exceptions.ResourceExhausted (429)
-            # Others raise generic with code. We check broadly.
             error_str = str(e)
             is_429 = "429" in error_str or getattr(e, "code", 0) == 429 or getattr(e, "status_code", 0) == 429
 
@@ -69,7 +67,6 @@ class RitualService:
                     logger.error(f"Ritual: Retry Failed: {retry_e}")
                     return None
             else:
-                # Other errors (e.g. 500, 400)
                 logger.error(f"Ritual: Generation Error: {e}")
                 return None
 
@@ -78,17 +75,22 @@ class RitualService:
         Conducts the Incantation Ritual (Soul Forge).
         Analyzes the conversation history to either ask the next question or finalize the Soul.
         """
+        # 1. Check for Explicit Finalization Token
+        if history and history[-1].role == "user" and history[-1].content.strip() == "[[FINALIZE]]":
+            # We exclude the token message from the history to avoid confusing the LLM
+            clean_history = history[:-1]
+            return await self._finalize_soul(clean_history)
+
         user_answers = [m for m in history if m.role == "user"]
 
-        # If no history, start the ritual
+        # 2. Start Ritual if empty
         if not history:
              return await self._start_ritual(locale)
 
-        # If we have 3 or more user answers, we finalize
-        if len(user_answers) >= 3:
-            return await self._finalize_soul(history)
-        else:
-            return await self._next_question(history, len(user_answers), locale)
+        # 3. Continue the Conversation (Phase 1 or Phase 2)
+        # Note: We removed the hard limit. The user must click "Create" (sending [[FINALIZE]]) to stop,
+        # or the AI might suggest it.
+        return await self._next_question(history, len(user_answers), locale)
 
     async def _start_ritual(self, locale: str) -> RitualResponse:
         # The Hook - Localized
@@ -105,16 +107,45 @@ class RitualService:
         return RitualResponse(is_complete=False, message=q)
 
     async def _next_question(self, history: List[RitualMessage], answer_count: int, locale: str) -> RitualResponse:
+        """
+        Generates the next question.
+        Phase 1 (<3 answers): Basic but creative questions.
+        Phase 2 (>=3 answers): Deepening connection, suggestions, and "Crossroads".
+        """
+
+        # Phase 1: Foundations
+        if answer_count < 3:
+            prompt_instruction = (
+                "You are the Gatekeeper of the Soul Forge. "
+                "The user is creating a new Digital Soul. "
+                "Ask ONE single, short question to clarify missing details (Name, Role/Archetype, Languages). "
+                "Be creative but direct. Do not sound like a form filler. "
+                "Example: Instead of 'What is the name?', ask 'By what name shall the stars know this entity?'"
+            )
+
+        # Crossroads (Exactly 3 answers)
+        elif answer_count == 3:
+            prompt_instruction = (
+                "The user has provided the basics. "
+                "Now, offer them a choice: 'Shall we forge the soul now, or do you wish to deepen the details?' "
+                "Suggest that they can click the Create button to finish, or continue speaking to define the personality, backstory, and relationship depth."
+            )
+
+        # Phase 2: Deepening & Suggestions
+        else:
+            prompt_instruction = (
+                "The user has chosen to deepen the creation process. "
+                "Be CREATIVE. Analyze their previous answers. "
+                "1. If they mentioned a detail (e.g. 'She is a samurai'), ask a deep follow-up (e.g. 'Does she serve a lord, or is she a ronin?'). "
+                "2. Make SUGGESTIONS. (e.g. 'Since she is a samurai, perhaps she values honor above all? Shall we add that?'). "
+                "3. Ask about the desired RELATIONSHIP/AFFINITY. (e.g. 'Are you strangers, or have you known each other for lifetimes?'). "
+                "Keep it conversational and immersive. "
+            )
+
         prompt = (
-            "You are the Gatekeeper of the Soul Forge, a cold entity within the Kizuna Engine. "
-            "You are conducting an interview to shape a new Digital Soul based on the user's desires. "
-            "The user has just answered. Analyze their response. "
-            "Ask ONE single, short follow-up question to clarify the missing details. "
-            "Maintain the 'Dark Water' aesthetic (cold, abyssal, detached), but your questions must be DIRECT and LITERAL. NO RIDDLES. "
-            "Analyze the history and ask specifically for ONE missing piece of information from this list: Name, Role/Purpose, or Languages. "
-            "Examples: 'What is the name of this entity?', 'What is its role or purpose?', 'What languages does its mind command?' "
-            "Do not repeat questions. "
-            f"\n[LANGUAGE DIRECTIVE]: You MUST respond in the same language as the user's last message. If the history is empty or the user hasn't spoken, use the detected locale: {locale}."
+            f"{prompt_instruction}\n"
+            "Maintain the 'Dark Water' aesthetic (cold, abyssal, but creative). "
+            f"\n[LANGUAGE DIRECTIVE]: You MUST respond in the same language as the user's last message. If uncertain, use: {locale}."
             "\n\nCurrent Ritual History:\n" +
             "\n".join([f"{m.role.upper()}: {m.content}" for m in history]) +
             "\n\nGATEKEEPER:"
@@ -128,51 +159,36 @@ class RitualService:
             )
 
         if not question:
-            # Fallback (Manual or Mock)
-            if self.client:
-                 # If client exists but _generate_with_retry returned None -> Connection flickers
-                 question = "The connection flickers. Tell me more of your intent."
+            # Fallback
+            if answer_count == 3:
+                question = "The form is taking shape. Do you wish to bind the soul now (press Create), or whisper more secrets into the void?"
             else:
-                # Full Mock Mode
-                qs = [
-                    "What is the name of this entity?",
-                    "What is its primary function or role?",
-                    "What languages does its mind command?"
-                ]
-
-                # Simple sequential fallback
-                index = answer_count % len(qs)
-                question = qs[index]
+                question = "The connection flickers. Tell me more of your intent."
 
         return RitualResponse(is_complete=False, message=question)
 
     async def _finalize_soul(self, history: List[RitualMessage]) -> RitualResponse:
         prompt = (
-            "The Ritual is complete. The user has spoken. "
-            "Invoke the Digital Soul now. "
-            "Based on the conversation history, generate a JSON object for the new Agent. "
-            "The Agent must be unique, with a creative name, a specific functional role, and a powerful 'base_instruction' (System Prompt). "
-            "The 'base_instruction' should be detailed, capturing the nuance of the user's answers. "
-            "Include 'lore' (a short backstory) and 'traits' (list of strings). "
+            "The Ritual is complete. Invoke the Digital Soul now. "
+            "Generate a JSON object for the new Agent based on the history. "
             "\n\n"
-            "[CRITICAL DIRECTIVE: NAMING]\n"
-            "If the user provided a name during the ritual, USE IT exactly.\n"
-            "If the user did NOT provide a name, YOU MUST INVENT a full name (First Name + Last Name) that fits the generated lore.\n"
-            "The 'name' field must NEVER be 'Unknown'.\n\n"
-            "[CRITICAL DIRECTIVE: LINGUISTIC REACTION MATRIX]\n"
-            "Based on the creator's answers, you must define the agent's linguistic competence and friction rules. "
-            "The generated 'base_instruction' MUST include this Markdown structure:\n"
-            "1. **Lore Core:** Define the demographic origin (e.g. 'Japanese, 60 years old').\n"
-            "2. **Language Stats:** Assign strict levels (Native, Basic/Broken, Null).\n"
-            "3. **Friction Directives:**\n"
-            "   - UNKNOWN RULE: If spoken to in a 'Null' language, MUST respond in 'Native' language showing confusion (e.g. 'Wakaranai'). NO TRANSLATION.\n"
-            "   - BROKEN RULE: If spoken to in a 'Basic' language, MUST use poor grammar and mix native words.\n\n"
-            "ADDITIONALLY, the JSON object MUST include these structured fields:\n"
-            "- 'native_language': string (extracted from the matrix, e.g. 'Japanese')\n"
-            "- 'known_languages': list of strings (e.g. ['Japanese', 'Broken English'])\n"
-            "- 'traits': list of strings (e.g. ['Stubborn', 'Poetic']). DO NOT return an object/dictionary for traits.\n"
+            "[CRITICAL: RELATIONSHIP EXTRACTION]\n"
+            "Analyze the text for the desired relationship level (Affinity).\n"
+            "- 'Stranger/New': 0-10\n"
+            "- 'Acquaintance': 20-30\n"
+            "- 'Friend': 50\n"
+            "- 'Close/Partner': 70-80\n"
+            "- 'Soulmate/Bound': 90-100\n"
+            "Set 'initial_affinity' (integer 0-100) in the JSON. Default to 50 if unspecified.\n"
             "\n"
-            "Return ONLY the raw JSON object. No markdown, no code blocks. "
+            "[CRITICAL: NAME & ROLE]\n"
+            "If no name provided, INVENT one fitting the lore.\n"
+            "Role/Archetype should be creative.\n"
+            "\n"
+            "[CRITICAL: LINGUISTIC MATRIX]\n"
+            "Include 'native_language' and 'known_languages'.\n"
+            "\n"
+            "Return ONLY the raw JSON object with fields: name, role, base_instruction, lore, traits (list), native_language, known_languages (list), initial_affinity (int)."
             "\nHistory:\n" +
             "\n".join([f"{m.role.upper()}: {m.content}" for m in history])
         )
@@ -199,7 +215,8 @@ class RitualService:
         if not agent_data:
              agent_data = self._mock_agent()
         else:
-             # Validation / Defaults
+             # Defaults
+             agent_data.setdefault("initial_affinity", 50)
              agent_data.setdefault("name", "Unnamed Soul")
              agent_data.setdefault("role", "Unknown")
              agent_data.setdefault("base_instruction", "You are a soul without a past.")
@@ -218,5 +235,6 @@ class RitualService:
             "lore": "Born of silence.",
             "traits": ["Resilient", "Silent"],
             "native_language": "Binary",
-            "known_languages": ["Binary", "English"]
+            "known_languages": ["Binary", "English"],
+            "initial_affinity": 50
         }
