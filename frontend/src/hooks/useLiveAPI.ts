@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import type { ServerMessage } from '../types/websocket';
 import { getWebSocketUrl } from '../utils/connection';
 import { AudioStreamManager } from '../utils/AudioStreamManager';
@@ -144,7 +144,9 @@ export const useLiveAPI = (): UseLiveAPI => {
     };
   }, [disconnect]);
 
-  return {
+  // Optimization: Memoize return value to prevent re-renders of consuming components (App, etc.)
+  // when internal state (like refs) hasn't changed.
+  return useMemo(() => ({
     connected,
     status,
     isAiSpeaking,
@@ -153,5 +155,13 @@ export const useLiveAPI = (): UseLiveAPI => {
     connect,
     disconnect,
     sendImage
-  };
+  }), [
+    connected,
+    status,
+    isAiSpeaking,
+    lastAiMessage,
+    connect,
+    disconnect,
+    sendImage
+  ]);
 };

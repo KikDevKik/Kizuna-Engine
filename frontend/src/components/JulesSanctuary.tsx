@@ -12,7 +12,7 @@ interface JulesSanctuaryProps {
 }
 
 export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose, api }) => {
-  const { videoRef, captureFrame, isCameraReady } = useVision(isOpen);
+  const { videoRef, captureFrame, isReady: isCameraReady } = useVision(isOpen ? 'camera' : 'off');
   const [autoSync, setAutoSync] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
