@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { createAudioBuffer } from '../utils/audioUtils';
 import type { ServerMessage } from '../types/websocket';
+import { getWebSocketUrl } from '../utils/connection';
+import { AudioStreamManager } from '../utils/AudioStreamManager';
 
 export interface UseLiveAPI {
   connected: boolean;
@@ -20,14 +21,8 @@ export const useLiveAPI = (): UseLiveAPI => {
   const [lastAiMessage, setLastAiMessage] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
-  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const nextStartTimeRef = useRef<number>(0);
+  const audioManagerRef = useRef<AudioStreamManager | null>(null);
   const volumeRef = useRef<number>(0);
-  const animationFrameRef = useRef<number | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
 
   const disconnect = useCallback(() => {
     console.log('Disconnecting Live API...');
@@ -37,33 +32,10 @@ export const useLiveAPI = (): UseLiveAPI => {
       wsRef.current = null;
     }
 
-    if (sourceNodeRef.current) {
-      sourceNodeRef.current.disconnect();
-      sourceNodeRef.current = null;
+    if (audioManagerRef.current) {
+      audioManagerRef.current.cleanup();
+      audioManagerRef.current = null;
     }
-
-    if (workletNodeRef.current) {
-      workletNodeRef.current.disconnect();
-      workletNodeRef.current = null;
-    }
-
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
-    }
-
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-
-    // Reset volume
-    volumeRef.current = 0;
 
     setStatus('disconnected');
     setConnected(false);
@@ -80,9 +52,7 @@ export const useLiveAPI = (): UseLiveAPI => {
 
     try {
       // Initialize WebSocket
-      // Connect to the same host/port as the frontend, letting Vite proxy to backend
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/live?agent_id=${agentId}`;
+      const wsUrl = getWebSocketUrl(agentId);
       const ws = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
@@ -91,76 +61,20 @@ export const useLiveAPI = (): UseLiveAPI => {
         console.log('WebSocket Connected');
 
         try {
-          // Initialize Audio Context
-          const ctx = new AudioContext({ sampleRate: 16000 });
-          audioContextRef.current = ctx;
-          await ctx.resume();
+            // Initialize Audio Manager
+            audioManagerRef.current = new AudioStreamManager(
+                volumeRef,
+                (data: ArrayBuffer) => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(data);
+                    }
+                }
+            );
 
-          // Load Audio Worklet
-          await ctx.audioWorklet.addModule('/pcm-processor.js');
+            await audioManagerRef.current.start();
 
-          // Get User Media
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              sampleRate: 16000,
-              channelCount: 1,
-              echoCancellation: true,
-              autoGainControl: true,
-              noiseSuppression: true
-            }
-          });
-          mediaStreamRef.current = stream;
-
-          // Create Source
-          const source = ctx.createMediaStreamSource(stream);
-          sourceNodeRef.current = source;
-
-          // Create Worklet
-          const worklet = new AudioWorkletNode(ctx, 'pcm-processor');
-          workletNodeRef.current = worklet;
-
-          // Connect Source -> Worklet
-          // Note: Worklet does NOT connect to destination to prevent feedback loop
-          source.connect(worklet);
-
-          // Worklet -> WebSocket
-          worklet.port.onmessage = (event) => {
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(event.data);
-            }
-          };
-
-          // Analyzer for Volume Visualization
-          const analyser = ctx.createAnalyser();
-          analyser.fftSize = 256;
-          source.connect(analyser);
-          analyserRef.current = analyser;
-
-          // Moved allocation outside the loop to reuse the buffer
-          const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-          // Volume Analysis Loop
-          const updateVolume = () => {
-            if (!analyserRef.current) return;
-            analyserRef.current.getByteFrequencyData(dataArray);
-
-            // Calculate average volume
-            let sum = 0;
-            for (let i = 0; i < dataArray.length; i++) {
-              sum += dataArray[i];
-            }
-            const average = sum / dataArray.length;
-
-            // Normalize to 0-1 range (approximate)
-            volumeRef.current = Math.min(1, average / 128);
-
-            animationFrameRef.current = requestAnimationFrame(updateVolume);
-          };
-          updateVolume();
-
-          setStatus('connected');
-          setConnected(true);
-          nextStartTimeRef.current = ctx.currentTime;
+            setStatus('connected');
+            setConnected(true);
 
         } catch (err) {
           console.error('Error initializing audio:', err);
@@ -173,31 +87,11 @@ export const useLiveAPI = (): UseLiveAPI => {
         try {
           // 1. Binary Audio Data
           if (event.data instanceof ArrayBuffer) {
-            if (!audioContextRef.current) return;
-
             setIsAiSpeaking(true);
 
-            // Vista directa en memoria, sin el peso del Base64
-            const int16Data = new Int16Array(event.data);
-            const float32Data = new Float32Array(int16Data.length);
-
-            // Normalización matemática directa
-            for (let i = 0; i < int16Data.length; i++) {
-              float32Data[i] = int16Data[i] / 32768.0;
+            if (audioManagerRef.current) {
+                audioManagerRef.current.playAudioChunk(event.data);
             }
-
-            // Inyección al AudioContext
-            // createAudioBuffer defaults to 24000Hz which matches Gemini output
-            const buffer = createAudioBuffer(audioContextRef.current, float32Data);
-            const source = audioContextRef.current.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioContextRef.current.destination);
-
-            const currentTime = audioContextRef.current.currentTime;
-            const startTime = Math.max(currentTime, nextStartTimeRef.current);
-            source.start(startTime);
-            nextStartTimeRef.current = startTime + buffer.duration;
-
             return;
           }
 
