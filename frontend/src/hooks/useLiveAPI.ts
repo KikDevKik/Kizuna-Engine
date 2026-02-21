@@ -25,9 +25,15 @@ export const useLiveAPI = (): UseLiveAPI => {
   const wsRef = useRef<WebSocket | null>(null);
   const audioManagerRef = useRef<AudioStreamManager | null>(null);
   const volumeRef = useRef<number>(0);
+  const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const disconnect = useCallback(() => {
     console.log('Disconnecting Live API...');
+
+    if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
+    }
 
     if (wsRef.current) {
       wsRef.current.close();
@@ -52,6 +58,15 @@ export const useLiveAPI = (): UseLiveAPI => {
 
     setStatus('connecting');
 
+    // 15s Connection Timeout
+    connectionTimeoutRef.current = setTimeout(() => {
+        console.error("Connection timed out (15s). Backend may be slow or unresponsive.");
+        if (wsRef.current && wsRef.current.readyState !== WebSocket.OPEN) {
+            wsRef.current.close();
+        }
+        setStatus('error');
+    }, 15000);
+
     try {
       // Initialize WebSocket
       const wsUrl = getWebSocketUrl(agentId);
@@ -61,6 +76,10 @@ export const useLiveAPI = (): UseLiveAPI => {
 
       ws.onopen = async () => {
         console.log('WebSocket Connected');
+        if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+        }
 
         try {
             // Initialize Audio Manager
@@ -115,16 +134,28 @@ export const useLiveAPI = (): UseLiveAPI => {
 
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
+        if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+        }
         setStatus('error');
       };
 
       ws.onclose = () => {
         console.log('WebSocket closed');
+        if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+        }
         disconnect();
       };
 
     } catch (err) {
       console.error('Connection failed:', err);
+      if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+          connectionTimeoutRef.current = null;
+      }
       setStatus('error');
     }
   }, [disconnect]);

@@ -423,7 +423,10 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
 
       <SoulForgeModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+            setIsModalOpen(false);
+            fetchAgents();
+        }}
         onCreated={handleAgentCreated}
       />
 

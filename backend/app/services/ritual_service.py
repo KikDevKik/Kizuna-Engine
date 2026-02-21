@@ -36,17 +36,24 @@ class RitualService:
         """
         Wraps Gemini generation with a retry mechanism for 429 Rate Limit errors.
         Sleeps 4s then retries once.
+        Enforces a 30s timeout on each attempt.
         """
         if not self.client:
              return None
 
-        try:
-            response = await self.client.aio.models.generate_content(
+        async def _call_gemini():
+             return await self.client.aio.models.generate_content(
                 model=model,
                 contents=contents,
                 config=config
             )
+
+        try:
+            response = await asyncio.wait_for(_call_gemini(), timeout=30)
             return response.text.strip()
+        except asyncio.TimeoutError:
+            logger.error(f"Ritual: Timeout (30s) on model {model}.")
+            return None
         except Exception as e:
             # Check for 429 (Rate Limit)
             error_str = str(e)
@@ -57,12 +64,11 @@ class RitualService:
                 await asyncio.sleep(4)
                 try:
                     logger.info("Ritual: Retrying generation...")
-                    response = await self.client.aio.models.generate_content(
-                        model=model,
-                        contents=contents,
-                        config=config
-                    )
+                    response = await asyncio.wait_for(_call_gemini(), timeout=30)
                     return response.text.strip()
+                except asyncio.TimeoutError:
+                    logger.error(f"Ritual: Retry Timeout (30s) on model {model}.")
+                    return None
                 except Exception as retry_e:
                     logger.error(f"Ritual: Retry Failed: {retry_e}")
                     return None

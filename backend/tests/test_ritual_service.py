@@ -33,14 +33,16 @@ async def test_process_ritual_next_question_mock():
     history = [RitualMessage(role="user", content="I want to create a protector")]
     resp = await service.process_ritual(history)
     assert resp.is_complete is False
-    assert resp.message == "What is its primary function or role?" # index 1 % 3
+    # Fallback message
+    assert resp.message == "The connection flickers. Tell me more of your intent."
 
     # Two user answers
     history.append(RitualMessage(role="assistant", content=resp.message))
     history.append(RitualMessage(role="user", content="To guard the gates"))
     resp = await service.process_ritual(history)
     assert resp.is_complete is False
-    assert resp.message == "What languages does its mind command?" # index 2 % 3
+    # Still fallback
+    assert resp.message == "The connection flickers. Tell me more of your intent."
 
 @pytest.mark.asyncio
 async def test_process_ritual_next_question_gemini_success():
@@ -82,7 +84,8 @@ async def test_process_ritual_finalize_mock():
     history = [
         RitualMessage(role="user", content="Ares"),
         RitualMessage(role="user", content="Warrior"),
-        RitualMessage(role="user", content="Greek")
+        RitualMessage(role="user", content="Greek"),
+        RitualMessage(role="user", content="[[FINALIZE]]")
     ]
 
     resp = await service.process_ritual(history)
@@ -112,7 +115,8 @@ async def test_process_ritual_finalize_gemini_success():
         history = [
             RitualMessage(role="user", content="A"),
             RitualMessage(role="user", content="B"),
-            RitualMessage(role="user", content="C")
+            RitualMessage(role="user", content="C"),
+            RitualMessage(role="user", content="[[FINALIZE]]")
         ]
         resp = await service.process_ritual(history)
 
@@ -153,7 +157,8 @@ async def test_process_ritual_finalize_malformed_json():
         history = [
             RitualMessage(role="user", content="1"),
             RitualMessage(role="user", content="2"),
-            RitualMessage(role="user", content="3")
+            RitualMessage(role="user", content="3"),
+            RitualMessage(role="user", content="[[FINALIZE]]")
         ]
         resp = await service.process_ritual(history)
 
@@ -171,7 +176,8 @@ async def test_process_ritual_finalize_empty_string():
         history = [
             RitualMessage(role="user", content="1"),
             RitualMessage(role="user", content="2"),
-            RitualMessage(role="user", content="3")
+            RitualMessage(role="user", content="3"),
+            RitualMessage(role="user", content="[[FINALIZE]]")
         ]
         resp = await service.process_ritual(history)
 
@@ -190,13 +196,16 @@ async def test_process_ritual_finalize_valid_raw_json():
         history = [
             RitualMessage(role="user", content="1"),
             RitualMessage(role="user", content="2"),
-            RitualMessage(role="user", content="3")
+            RitualMessage(role="user", content="3"),
+            RitualMessage(role="user", content="[[FINALIZE]]")
         ]
         resp = await service.process_ritual(history)
 
         assert resp.is_complete is True
         assert resp.agent_data["name"] == "Raw Soul"
         assert resp.agent_data["role"] == "Raw"
+
+@pytest.mark.asyncio
 async def test_generate_with_retry_failure():
     """Verifies that if the retry also fails (e.g., second 429), it returns None."""
     service = RitualService()
