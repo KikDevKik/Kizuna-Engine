@@ -4,9 +4,10 @@ from pydantic import BaseModel, Field, field_validator
 import logging
 
 from ..models.graph import AgentNode
+from ..repositories.base import SoulRepository
 from ..services.agent_service import AgentService
 from ..services.ritual_service import RitualService, RitualMessage
-from ..dependencies import get_current_user
+from ..dependencies import get_current_user, get_repository
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,13 @@ async def delete_agent(agent_id: str):
          raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @router.post("/ritual", response_model=RitualFlowResponse, status_code=status.HTTP_200_OK)
-async def conduct_ritual(history: List[RitualMessage], response: Response, accept_language: str = Header(default="en")):
+async def conduct_ritual(
+    history: List[RitualMessage],
+    response: Response,
+    accept_language: str = Header(default="en"),
+    user_id: str = Depends(get_current_user),
+    repository: SoulRepository = Depends(get_repository)
+):
     """
     The Incantation Ritual:
     A conversation with the Soul Forge to design a new agent.
@@ -109,7 +116,7 @@ async def conduct_ritual(history: List[RitualMessage], response: Response, accep
         ritual_result = await ritual_service.process_ritual(history, locale=accept_language)
 
         if ritual_result.is_complete and ritual_result.agent_data:
-            # Auto-save the agent
+            # Auto-save the agent (Filesystem)
             data = ritual_result.agent_data
 
             # Extract traits which might be list or dict
@@ -133,6 +140,34 @@ async def conduct_ritual(history: List[RitualMessage], response: Response, accep
                 native_language=data.get("native_language", "Unknown"),
                 known_languages=data.get("known_languages", [])
             )
+
+            # Sync with SoulRepository (In-Memory/DB) to prevent "Agent not found"
+            # This is critical for the subsequent resonance update
+            try:
+                # We assume the repository can handle 'create_agent' to update its internal cache
+                # For LocalSoulRepository, this updates self.agents
+                if hasattr(repository, 'create_agent'):
+                    await repository.create_agent(new_agent)
+            except Exception as e:
+                logger.warning(f"Failed to sync new agent to SoulRepository: {e}")
+
+            # Initial Affinity Injection
+            initial_affinity = data.get("initial_affinity", 50)
+            if initial_affinity is not None:
+                try:
+                    # Calculate delta dynamically to reach target (Robust to default changes)
+                    # We first fetch the resonance (which creates it if missing)
+                    resonance = await repository.get_resonance(user_id, new_agent.id)
+                    current_affinity = resonance.affinity_level
+                    target_affinity = float(initial_affinity)
+
+                    # Only update if there is a significant difference
+                    if abs(target_affinity - current_affinity) > 0.1:
+                        delta = target_affinity - current_affinity
+                        await repository.update_resonance(user_id, new_agent.id, delta)
+                        logger.info(f"Initialized affinity for {new_agent.name} to {initial_affinity} (Delta: {delta})")
+                except Exception as e:
+                    logger.error(f"Failed to set initial affinity: {e}")
 
             response.status_code = status.HTTP_201_CREATED
             return RitualFlowResponse(

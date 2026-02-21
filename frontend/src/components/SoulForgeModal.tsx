@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, Terminal } from 'lucide-react';
+import { X, Send, Terminal, Sparkles } from 'lucide-react';
 import { useRitual } from '../contexts/RitualContext';
 import '../KizunaHUD.css';
+
+const FINALIZE_TOKEN = "[[FINALIZE]]";
 
 // ------------------------------------------------------------------
 // TYPEWRITER COMPONENT (Shizuku Effect)
@@ -153,6 +155,11 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
     return "";
   };
 
+  // Determine if we show the "Create Now" button
+  // Show if we have at least 3 user messages (excluding the hidden finalize token) and not yet complete
+  const validUserMessages = messages.filter(m => m.role === 'user' && m.content !== FINALIZE_TOKEN);
+  const showCreateButton = validUserMessages.length >= 3 && status !== 'complete';
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -179,13 +186,31 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
               }}
             >
               {/* HEADER */}
-              <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4 shrink-0">
+              <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4 shrink-0 relative">
                 <div>
                   <h2 className="font-monumental text-2xl tracking-widest text-electric-blue flex items-center gap-3">
                     <Terminal size={24} />
                     SOUL FORGE <span className="text-white/20 text-sm align-top">TERMINAL_LINK</span>
                   </h2>
                 </div>
+
+                {/* CREATE AGENT BUTTON (Floating in Header) */}
+                <AnimatePresence>
+                    {showCreateButton && (
+                        <motion.button
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 20 }}
+                            onClick={() => sendMessage(FINALIZE_TOKEN)}
+                            disabled={isLoading}
+                            className="absolute right-12 top-0 flex items-center gap-2 bg-electric-blue/10 border border-electric-blue/50 text-electric-blue hover:bg-electric-blue/20 hover:shadow-[0_0_15px_rgba(0,255,255,0.3)] px-4 py-2 text-xs font-monumental tracking-widest transition-all uppercase"
+                        >
+                            <Sparkles size={14} />
+                            Summon Soul
+                        </motion.button>
+                    )}
+                </AnimatePresence>
+
                 <button
                   onClick={onClose}
                   className="text-white/30 hover:text-alert-red transition-colors"
@@ -205,6 +230,9 @@ export const SoulForgeModal: React.FC<SoulForgeModalProps> = ({ isOpen, onClose,
                 )}
 
                 {messages.map((msg, idx) => {
+                  // Don't render the hidden finalize token
+                  if (msg.content === FINALIZE_TOKEN) return null;
+
                   const isLast = idx === messages.length - 1;
                   const isSystem = msg.role === 'system';
 
