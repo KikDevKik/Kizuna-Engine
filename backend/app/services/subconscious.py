@@ -106,7 +106,8 @@ class SubconsciousMind:
                                     user_id=user_id,
                                     agent_id=agent_id,
                                     summary=f"User triggered insight: {trigger_word} -> {hint}",
-                                    valence=0.5
+                                    valence=0.5,
+                                    raw_transcript=full_text
                                 )
                             except Exception:
                                 logger.exception("Failed to persist subconscious insight")
@@ -214,6 +215,7 @@ class SubconsciousMind:
                 prompt_template = (
                     "Synthesize these memories into a surreal dream concept. "
                     "Return JSON with keys: theme (str), intensity (0.0-1.0), surrealism_level (0.0-1.0).\n\n"
+                    "CRITICAL: You MUST retain all specific proper nouns, technical terms, names of songs, media, or projects mentioned by the user. Never generalize specific entities. Act as a precise archivist.\n\n"
                     "Memories:\n{summary_text}"
                 )
 

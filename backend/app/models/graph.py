@@ -24,12 +24,13 @@ class AgentNode(BaseModel):
 
     # Dynamic Prompts (Zero Hardcoding)
     memory_extraction_prompt: str = "Analyze the user's emotional state AND visual context from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return nothing."
-    dream_prompt: str = "Synthesize these memories into a surreal dream concept. Return JSON with keys: theme (str), intensity (0.0-1.0), surrealism_level (0.0-1.0).\n\nMemories:\n{summary_text}"
+    dream_prompt: str = "Synthesize these memories into a surreal dream concept. Return JSON with keys: theme (str), intensity (0.0-1.0), surrealism_level (0.0-1.0).\n\nCRITICAL: You MUST retain all specific proper nouns, technical terms, names of songs, media, or projects mentioned by the user. Never generalize specific entities. Act as a precise archivist.\n\nMemories:\n{summary_text}"
     vision_instruction_prompt: str = "Analyze the visual input critically. Focus on style, composition, and emotional resonance."
 
 class MemoryEpisodeNode(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     summary: str
+    raw_transcript: Optional[str] = None # Full conversation text (RAG Source of Truth)
     timestamp: datetime = Field(default_factory=datetime.now)
     emotional_valence: float = 0.0  # -1.0 to 1.0
     embedding: Optional[List[float]] = None # Vector embedding for RAG
