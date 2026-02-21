@@ -50,7 +50,7 @@ class DreamNode(BaseModel):
 class ResonanceEdge(BaseModel):
     source_id: str # User ID
     target_id: str # Agent ID
-    affinity_level: int = 0
+    affinity_level: float = 50.0 # 0.0 to 100.0 (50.0 = Neutral)
     last_interaction: datetime = Field(default_factory=datetime.now)
     shared_memories: List[str] = Field(default_factory=list) # List of Episode IDs
 

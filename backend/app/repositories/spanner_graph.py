@@ -109,7 +109,7 @@ class SpannerSoulRepository(SoulRepository):
             for row in results:
                 # row[2] (shared_memories) might be ARRAY<STRING>
                 return ResonanceEdge(source_id=user_id, target_id=agent_id,
-                                     affinity_level=row[0],
+                                     affinity_level=float(row[0]), # Ensure float
                                      last_interaction=row[1],
                                      shared_memories=row[2] if row[2] else [])
             return None
@@ -120,9 +120,9 @@ class SpannerSoulRepository(SoulRepository):
                 return res
 
             # Default empty resonance (not persisted until update)
-            return ResonanceEdge(source_id=user_id, target_id=agent_id, affinity_level=0)
+            return ResonanceEdge(source_id=user_id, target_id=agent_id, affinity_level=50.0)
 
-    async def update_resonance(self, user_id: str, agent_id: str, delta: int) -> ResonanceEdge:
+    async def update_resonance(self, user_id: str, agent_id: str, delta: float) -> ResonanceEdge:
         def update_tx(transaction):
             # Upsert edge logic in GQL? Or MERGE logic.
             # Assuming basic CREATE if not exists, SET if exists.
@@ -139,23 +139,27 @@ class SpannerSoulRepository(SoulRepository):
                                            param_types={"uid": spanner.param_types.STRING, "aid": spanner.param_types.STRING}))
 
             if not exists:
+                # Start at 50.0 (neutral) + delta
+                initial_level = 50.0 + delta
+                initial_level = max(0.0, min(100.0, initial_level))
+
                 create_query = """
                     GRAPH FinetuningGraph
                     MATCH (u:User {id: @uid}), (a:Agent {id: @aid})
-                    CREATE (u)-[:HAS_RESONANCE {affinity_level: @delta, last_interaction: @now}]->(a)
+                    CREATE (u)-[:HAS_RESONANCE {affinity_level: @initial_level, last_interaction: @now}]->(a)
                 """
                 transaction.execute_update(create_query, params={
-                    "uid": user_id, "aid": agent_id, "delta": delta, "now": datetime.now().isoformat()
+                    "uid": user_id, "aid": agent_id, "initial_level": initial_level, "now": datetime.now().isoformat()
                 }, param_types={
                     "uid": spanner.param_types.STRING, "aid": spanner.param_types.STRING,
-                    "delta": spanner.param_types.INT64, "now": spanner.param_types.STRING
+                    "initial_level": spanner.param_types.FLOAT64, "now": spanner.param_types.STRING
                 })
             else:
                 transaction.execute_update(query, params={
                     "uid": user_id, "aid": agent_id, "delta": delta, "now": datetime.now().isoformat()
                 }, param_types={
                     "uid": spanner.param_types.STRING, "aid": spanner.param_types.STRING,
-                    "delta": spanner.param_types.INT64, "now": spanner.param_types.STRING
+                    "delta": spanner.param_types.FLOAT64, "now": spanner.param_types.STRING
                 })
 
         try:

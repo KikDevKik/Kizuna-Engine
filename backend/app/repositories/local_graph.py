@@ -196,20 +196,23 @@ class LocalSoulRepository(SoulRepository):
             if agent_id in user_resonances:
                 return user_resonances[agent_id]
 
-            # Default Resonance (Starts at 0)
-            new_resonance = ResonanceEdge(source_id=user_id, target_id=agent_id, affinity_level=0)
+            # Default Resonance (Starts at 50.0 - Neutral)
+            new_resonance = ResonanceEdge(source_id=user_id, target_id=agent_id, affinity_level=50.0)
             if user_id not in self.resonances:
                 self.resonances[user_id] = {}
             self.resonances[user_id][agent_id] = new_resonance
             await self._save()
             return new_resonance
 
-    async def update_resonance(self, user_id: str, agent_id: str, delta: int) -> ResonanceEdge:
+    async def update_resonance(self, user_id: str, agent_id: str, delta: float) -> ResonanceEdge:
         async with self.lock:
             resonance = await self.get_resonance(user_id, agent_id)
             # Apply delta
             new_affinity = resonance.affinity_level + delta
-            # Clamp logic could go here (e.g. max 100)
+
+            # Clamp between 0.0 and 100.0
+            new_affinity = max(0.0, min(100.0, new_affinity))
+
             resonance.affinity_level = new_affinity
             resonance.last_interaction = datetime.now()
 
@@ -301,11 +304,12 @@ class LocalSoulRepository(SoulRepository):
                 return
 
             # Simulate LLM Clustering & Compression (Mock)
-            # Find all unprocessed episodes (valence=0.5 was our trigger)
+            # Find all unprocessed episodes (valence != 999.0)
+            # We use 999.0 to mark 'Archived' since 0.0 is valid Neutral valence.
             raw_episodes = []
             for eid in ep_ids:
                 ep = self.episodes.get(eid)
-                if ep and ep.emotional_valence == 0.5: # Mock 'raw' flag
+                if ep and abs(ep.emotional_valence) <= 1.0: # Valid range -1.0 to 1.0
                     raw_episodes.append(ep)
 
             if not raw_episodes:
@@ -340,13 +344,63 @@ class LocalSoulRepository(SoulRepository):
                 # 2. Link Summary to User
                 self.experienced[user_id].append(summary_node.id)
 
-            # 3. Mark Raw Episodes as archived (or delete them to save space)
-            # For demo, we just update valence to indicate processed
-            for ep in raw_episodes:
-                ep.emotional_valence = 0.0 # Archived state
-
             # 4. Trigger Affinity Decay/Growth (Mathematical recalibration)
-            # Stub: Just +1 for a good consolidation
-            # In Phase 4, this would be the exponential moving average.
+            # Exponential Moving Average (EMA)
+            # NOTE: Must be done BEFORE archiving episodes so we have the correct valence.
+
+            # Calculate Average Valence (-1.0 to 1.0)
+            avg_valence = sum(ep.emotional_valence for ep in raw_episodes) / len(raw_episodes)
+
+            # FIX: We need to know the agent.
+            # `save_episode` links User->Episode.
+            # `ResonanceEdge` has `shared_memories` (list of Episode IDs).
+            # We can reverse lookup: For each episode, find which agent lists it in `shared_memories`.
+
+            agent_episode_map = {} # {agent_id: [episodes]}
+
+            # This is expensive in a big graph but fine for local.
+            # Iterate all agents -> resonances for this user -> check shared_memories.
+            user_resonances = self.resonances.get(user_id, {})
+
+            for agent_id, resonance in user_resonances.items():
+                agent_eps = []
+                for ep in raw_episodes:
+                    if ep.id in resonance.shared_memories:
+                        agent_eps.append(ep)
+                if agent_eps:
+                    agent_episode_map[agent_id] = agent_eps
+
+            # Now calculate EMA per agent
+            ALPHA = 0.15
+
+            for agent_id, eps in agent_episode_map.items():
+                if not eps: continue
+
+                # Avg valence for this agent's episodes
+                local_avg_valence = sum(e.emotional_valence for e in eps) / len(eps)
+
+                # Map Valence to Target Signal (0-100)
+                # -1.0 -> 0.0
+                #  0.0 -> 50.0
+                #  1.0 -> 100.0
+                local_target = 50.0 + (local_avg_valence * 50.0)
+
+                # Get current affinity
+                resonance = user_resonances[agent_id]
+                old_affinity = float(resonance.affinity_level)
+
+                # EMA Formula
+                new_affinity = (local_target * ALPHA) + (old_affinity * (1.0 - ALPHA))
+
+                # Clamp
+                new_affinity = max(0.0, min(100.0, new_affinity))
+
+                resonance.affinity_level = new_affinity
+                logger.info(f"📉 Affinity EMA Updated for {agent_id}: {old_affinity:.2f} -> {new_affinity:.2f} (Target: {local_target:.2f})")
+
+            # 3. Mark Raw Episodes as archived (or delete them to save space)
+            # We use 999.0 to indicate processed/archived state
+            for ep in raw_episodes:
+                ep.emotional_valence = 999.0 # Archived state
 
             await self._save()
