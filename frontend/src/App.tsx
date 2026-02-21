@@ -14,7 +14,7 @@ import './KizunaHUD.css';
 
 function App() {
   const liveApi = useLiveAPI();
-  const { connected, status, volumeRef, isAiSpeaking, connect, disconnect, sendImage } = liveApi;
+  const { connected, status, volumeRef, isAiSpeaking, connect, disconnect, sendImage, addSystemAudio, removeSystemAudio } = liveApi;
 
   const [viewMode, setViewMode] = useState<'core' | 'roster'>('roster'); // Default to Roster to force selection
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -145,7 +145,12 @@ function App() {
       </main>
 
       {/* PERIPHERAL PANELS */}
-      <VisionPanel connected={connected} sendImage={sendImage} />
+      <VisionPanel
+        connected={connected}
+        sendImage={sendImage}
+        addSystemAudio={addSystemAudio}
+        removeSystemAudio={removeSystemAudio}
+      />
       <EpistemicPanel />
       <SystemLogs />
 

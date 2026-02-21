@@ -31,7 +31,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
           api.sendImage(frame);
           addLog("AUTO-SYNC: Frame sent");
         }
-      }, 2000);
+      }, 1000);
     }
     return () => clearInterval(interval);
   }, [autoSync, isCameraReady, api.connected, captureFrame, api]);
@@ -110,7 +110,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
                     onClick={() => setAutoSync(!autoSync)}
                     className={`flex-1 border py-2 font-technical text-sm transition-colors flex items-center justify-center gap-2 ${autoSync ? 'bg-alert-red/20 border-alert-red text-alert-red' : 'bg-vintage-navy/30 border-electric-blue/50 text-electric-blue hover:bg-electric-blue/20'}`}
                   >
-                    <Activity size={16} /> {autoSync ? 'STOP SYNC' : 'AUTO SYNC (2s)'}
+                    <Activity size={16} /> {autoSync ? 'STOP SYNC' : 'AUTO SYNC (1s)'}
                   </button>
                 </div>
               </div>

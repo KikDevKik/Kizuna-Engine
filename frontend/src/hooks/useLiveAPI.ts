@@ -12,6 +12,8 @@ export interface UseLiveAPI {
   connect: (agentId: string) => Promise<void>;
   disconnect: () => void;
   sendImage: (base64: string) => void;
+  addSystemAudio: (track: MediaStreamTrack) => void;
+  removeSystemAudio: () => void;
 }
 
 export const useLiveAPI = (): UseLiveAPI => {
@@ -137,6 +139,20 @@ export const useLiveAPI = (): UseLiveAPI => {
     }
   }, []);
 
+  const addSystemAudio = useCallback((track: MediaStreamTrack) => {
+    if (audioManagerRef.current) {
+        audioManagerRef.current.addSystemAudioTrack(track);
+    } else {
+        console.warn("Audio Manager not initialized. Cannot add system audio.");
+    }
+  }, []);
+
+  const removeSystemAudio = useCallback(() => {
+    if (audioManagerRef.current) {
+        audioManagerRef.current.removeSystemAudioTrack();
+    }
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -154,7 +170,9 @@ export const useLiveAPI = (): UseLiveAPI => {
     lastAiMessage,
     connect,
     disconnect,
-    sendImage
+    sendImage,
+    addSystemAudio,
+    removeSystemAudio
   }), [
     connected,
     status,
@@ -162,6 +180,8 @@ export const useLiveAPI = (): UseLiveAPI => {
     lastAiMessage,
     connect,
     disconnect,
-    sendImage
+    sendImage,
+    addSystemAudio,
+    removeSystemAudio
   ]);
 };

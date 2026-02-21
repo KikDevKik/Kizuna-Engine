@@ -7,16 +7,31 @@ import '../KizunaHUD.css';
 interface VisionPanelProps {
   connected: boolean;
   sendImage: (base64: string) => void;
+  addSystemAudio: (track: MediaStreamTrack) => void;
+  removeSystemAudio: () => void;
 }
 
 // Optimization: Prevent re-renders when parent re-renders (e.g. audio loop) but props are stable.
-export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage }) => {
+export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage, addSystemAudio, removeSystemAudio }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [visionMode, setVisionMode] = useState<VisionMode>('off');
   const [pulse, setPulse] = useState(false);
 
   // Vision Hook with Reset Callback (Argus Phase 6)
-  const { videoRef, captureFrame, isReady } = useVision(visionMode, () => setVisionMode('off'));
+  const { videoRef, captureFrame, isReady, audioTrack } = useVision(visionMode, () => setVisionMode('off'));
+
+  // Effect: Connect System Audio when available
+  useEffect(() => {
+    if (audioTrack && connected) {
+        addSystemAudio(audioTrack);
+    } else {
+        removeSystemAudio();
+    }
+
+    return () => {
+        removeSystemAudio();
+    };
+  }, [audioTrack, connected, addSystemAudio, removeSystemAudio]);
 
   // Force vision off if disconnected
   useEffect(() => {
@@ -29,7 +44,7 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage 
   useEffect(() => {
     if (!connected || !isReady || visionMode === 'off') return;
 
-    // Argus: Muestreo Inteligente (2s heartbeat)
+    // Argus: Muestreo Inteligente (1s heartbeat)
     const interval = setInterval(async () => {
       const frame = await captureFrame();
       if (frame) {
@@ -38,7 +53,7 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage 
         setPulse(true);
         setTimeout(() => setPulse(false), 200);
       }
-    }, 2000);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [connected, isReady, visionMode, captureFrame, sendImage]);

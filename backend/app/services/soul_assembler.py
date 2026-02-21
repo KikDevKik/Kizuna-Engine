@@ -52,6 +52,26 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         # Default/0
         modifiers.append("RELATIONSHIP: STRANGER. You are meeting the user for the first time. Be polite, helpful, and professional, but show your personality.")
 
+    # 4. Fetch Deep Memory (The "File")
+    last_dream = await repository.get_last_dream(user_id)
+    dream_context = ""
+    if last_dream:
+        dream_context = (
+            f"--- DEEP MEMORY (LAST DREAM) ---\n"
+            f"Theme: {last_dream.theme}\n"
+            f"Intensity: {last_dream.intensity}\n"
+            f"Surrealism: {last_dream.surrealism_level}\n"
+            f"This represents your subconscious state from the previous sleep cycle. Let it subtly influence your mood."
+        )
+
+    # 5. Fetch Recent Context (Short Term Memory)
+    recent_episodes = await repository.get_recent_episodes(user_id, limit=5)
+    episode_context = ""
+    if recent_episodes:
+        episode_context = "--- RECENT MEMORIES ---\n" + "\n".join(
+            [f"- {ep.summary} (Valence: {ep.emotional_valence})" for ep in recent_episodes]
+        )
+
     # Construct the final prompt
     full_instruction = (
         f"{CORE_DIRECTIVE}\n\n"
@@ -63,7 +83,9 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         f"Agent Name: {agent.name}\n"
         f"User ID: {user_id}\n"
         f"Affinity Level: {affinity_level}\n"
-        f"Directives:\n" + "\n".join(modifiers)
+        f"Directives:\n" + "\n".join(modifiers) + "\n\n"
+        f"{dream_context}\n\n"
+        f"{episode_context}"
     )
 
     logger.info(f"Soul assembled for {agent.name} (ID: {agent_id}) with affinity {affinity_level}.")
