@@ -141,13 +141,32 @@ export const useLiveAPI = (): UseLiveAPI => {
         setStatus('error');
       };
 
-      ws.onclose = () => {
-        console.log('WebSocket closed');
+      ws.onclose = (event) => {
+        console.log(`WebSocket closed: ${event.code} (Reason: ${event.reason})`);
         if (connectionTimeoutRef.current) {
             clearTimeout(connectionTimeoutRef.current);
             connectionTimeoutRef.current = null;
         }
-        disconnect();
+
+        // Handle Abnormal Closures (1006, 1011) by setting Error state
+        // This gives UI feedback that connection was dropped, rather than just "stopped".
+        if (event.code === 1006 || event.code === 1011) {
+            console.warn("Abnormal closure. Setting status to error.");
+
+            // Clean up without resetting status to 'disconnected' (which disconnect() does)
+            if (wsRef.current) {
+                wsRef.current = null;
+            }
+            if (audioManagerRef.current) {
+                audioManagerRef.current.cleanup();
+                audioManagerRef.current = null;
+            }
+            setConnected(false);
+            setIsAiSpeaking(false);
+            setStatus('error');
+        } else {
+            disconnect();
+        }
       };
 
     } catch (err) {

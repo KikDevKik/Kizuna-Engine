@@ -85,7 +85,7 @@ class RitualService:
         if history and history[-1].role == "user" and history[-1].content.strip() == "[[FINALIZE]]":
             # We exclude the token message from the history to avoid confusing the LLM
             clean_history = history[:-1]
-            return await self._finalize_soul(clean_history)
+            return await self._finalize_soul(clean_history, locale)
 
         user_answers = [m for m in history if m.role == "user"]
 
@@ -176,7 +176,16 @@ class RitualService:
 
         return RitualResponse(is_complete=False, message=question)
 
-    async def _finalize_soul(self, history: List[RitualMessage]) -> RitualResponse:
+    def _get_linguistic_directive(self, native: str, interaction: str, locale: str) -> str:
+        # Simple map for localized instructions
+        if locale.startswith("es"):
+            return f"DIRECTIVA DE IDIOMA: Tu idioma nativo es {native}, pero hablas en {interaction} (Nivel C1). NO hables un {interaction} perfecto. Usa muletillas de tu idioma nativo ocasionalmente y mantén un acento mental fluido pero extranjero."
+        elif locale.startswith("ja"):
+             return f"言語指示：あなたの母国語は{native}ですが、{interaction}（C1レベル）を話します。完璧な{interaction}を話さないでください。時々母国語のフィラーを使い、流暢だが外国語訛りのある精神的なアクセントを維持してください。"
+        else: # Default English
+             return f"LANGUAGE DIRECTIVE: Your native language is {native}, but you speak {interaction} (C1 Level). DO NOT speak perfect {interaction}. Use filler words from your native language occasionally and keep a fluid but foreign mental accent."
+
+    async def _finalize_soul(self, history: List[RitualMessage], locale: str = "en") -> RitualResponse:
         prompt = (
             "The Ritual is complete. Invoke the Digital Soul now. "
             "Generate a JSON object for the new Agent based on the history. "
@@ -246,6 +255,32 @@ class RitualService:
              agent_data.setdefault("traits", [])
              agent_data.setdefault("native_language", "Unknown")
              agent_data.setdefault("known_languages", [])
+
+             # ---------------------------------------------------------
+             # Linguistic Realism Injection
+             # ---------------------------------------------------------
+             native = agent_data.get("native_language", "Unknown")
+
+             # Determine interaction language from locale
+             interaction_lang = "English"
+             if locale.startswith("es"): interaction_lang = "Spanish"
+             elif locale.startswith("ja"): interaction_lang = "Japanese"
+             elif locale.startswith("fr"): interaction_lang = "French"
+             elif locale.startswith("ko"): interaction_lang = "Korean"
+             elif locale.startswith("zh"): interaction_lang = "Chinese"
+             elif locale.startswith("de"): interaction_lang = "German"
+             elif locale.startswith("ru"): interaction_lang = "Russian"
+             elif locale.startswith("pt"): interaction_lang = "Portuguese"
+             elif locale.startswith("it"): interaction_lang = "Italian"
+             # Defaulting to English for others for now
+
+             # Check if Native != Interaction (and Native is not Unknown/Binary)
+             # We assume if the user is speaking Spanish (locale=es), the interaction lang is Spanish.
+             if native and native.lower() not in ["unknown", "binary", interaction_lang.lower()]:
+                 directive = self._get_linguistic_directive(native, interaction_lang, locale)
+                 # Append to base_instruction
+                 current_instr = agent_data.get("base_instruction", "")
+                 agent_data["base_instruction"] = f"{current_instr}\n\n{directive}"
 
         return RitualResponse(is_complete=True, agent_data=agent_data)
 

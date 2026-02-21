@@ -10,6 +10,15 @@ try:
 except ImportError:
     types = None
 
+# Try importing websockets exceptions if available (used by some underlying libraries)
+try:
+    from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, ConnectionClosedError
+except ImportError:
+    # If websockets is not installed, define dummy exceptions that won't match anything
+    class ConnectionClosed(Exception): pass
+    class ConnectionClosedOK(Exception): pass
+    class ConnectionClosedError(Exception): pass
+
 logger = logging.getLogger(__name__)
 
 # 16000 Hz * 2 bytes = 32000 bytes/sec
@@ -109,7 +118,7 @@ async def send_to_gemini(websocket: WebSocket, session):
                 except Exception as e:
                     logger.error(f"Error handling text message: {e}")
 
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, ConnectionClosed, ConnectionClosedOK, ConnectionClosedError):
         logger.info("Client disconnected (send_to_gemini)")
         # Send remaining audio if any?
         # Usually if user disconnects we don't care, but for completeness:
@@ -118,10 +127,19 @@ async def send_to_gemini(websocket: WebSocket, session):
                  await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
              except Exception:
                  pass
-        raise
+        # Do not re-raise, exit cleanly
+        return
+
     except Exception as e:
+        # Check for specific string patterns if exception type is generic
+        error_msg = str(e).lower()
+        if "disconnect" in error_msg or "closed" in error_msg or "1006" in error_msg or "1011" in error_msg:
+             logger.warning(f"Connection dropped in send_to_gemini: {e}")
+             return
+
         logger.error(f"Error sending to Gemini: {e}")
-        raise
+        # Don't re-raise to avoid crashing the whole session manager task group
+        return
 
 async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: asyncio.Queue | None = None):
     """
@@ -174,15 +192,21 @@ async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: a
             except Exception as e:
                 # 1. Check for specific GenAI disconnect messages
                 error_msg = str(e)
-                if "disconnect" in error_msg or "Cannot call 'receive'" in error_msg:
+                if "disconnect" in error_msg or "Cannot call 'receive'" in error_msg or "closed" in error_msg:
                     logger.info(f"Gemini session closed by client/network: {error_msg}")
                     break
                 else:
                     logger.error(f"Error in receive loop: {e}")
-                    raise
+                    # Don't re-raise, break to exit loop cleanly
+                    break
 
             logger.info("Gemini session.receive() iterator exhausted. Re-entering loop to listen for next turn...")
 
+    except (WebSocketDisconnect, ConnectionClosed, ConnectionClosedOK, ConnectionClosedError):
+        logger.info("Client disconnected (receive_from_gemini)")
+        return
+
     except Exception as e:
         logger.error(f"Error receiving from Gemini: {e}")
-        raise
+        # Don't re-raise
+        return

@@ -228,9 +228,13 @@ class LocalSoulRepository(SoulRepository):
             logger.info(f"Resonance updated for User {user_id} -> Agent {agent_id}: {new_affinity}")
             return resonance
 
-    async def save_episode(self, user_id: str, agent_id: str, summary: str, valence: float) -> MemoryEpisodeNode:
+    async def save_episode(self, user_id: str, agent_id: str, summary: str, valence: float, raw_transcript: Optional[str] = None) -> MemoryEpisodeNode:
         async with self.lock:
-            episode = MemoryEpisodeNode(summary=summary, emotional_valence=valence)
+            episode = MemoryEpisodeNode(
+                summary=summary,
+                emotional_valence=valence,
+                raw_transcript=raw_transcript
+            )
             self.episodes[episode.id] = episode
 
             # Link to User
