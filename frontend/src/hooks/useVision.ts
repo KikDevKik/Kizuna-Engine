@@ -1,63 +1,113 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 
-export const useVision = (active: boolean = false) => {
+export type VisionMode = 'off' | 'camera' | 'screen';
+
+export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    // Only request camera if 'active' is true
-    if (!active) {
-        // Cleanup if deactivated
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach(t => t.stop());
-            streamRef.current = null;
-        }
-        setIsCameraReady(false);
-        return;
-    }
+    let currentStream: MediaStream | null = null;
+    let isMounted = true;
 
-    const startCamera = async () => {
-      try {
-        console.log("[UseVision] Requesting camera access...");
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                facingMode: "user"
-            }
-        });
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => {
-             videoRef.current?.play().catch(e => console.error("Auto-play failed:", e));
-             setIsCameraReady(true);
-             console.log("[UseVision] Camera active and playing.");
-          };
-        }
-      } catch (err) {
-        console.error("Failed to access camera:", err);
-        setIsCameraReady(false);
+    // Cleanup function to stop tracks
+    const stopStream = () => {
+      if (currentStream) {
+        console.log("[UseVision] Stopping media tracks...");
+        currentStream.getTracks().forEach(t => t.stop());
+        currentStream = null;
       }
-    };
-
-    startCamera();
-
-    return () => {
       if (streamRef.current) {
-        console.log("[UseVision] Stopping camera tracks...");
         streamRef.current.getTracks().forEach(t => t.stop());
         streamRef.current = null;
       }
+      if (isMounted) setIsReady(false);
     };
-  }, [active]);
+
+    // If mode is off, just ensure cleanup
+    if (mode === 'off') {
+      stopStream();
+      return;
+    }
+
+    const startStream = async () => {
+      try {
+        let stream: MediaStream;
+
+        if (mode === 'camera') {
+            console.log("[UseVision] Requesting camera access...");
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    facingMode: "user"
+                }
+            });
+        } else if (mode === 'screen') {
+            console.log("[UseVision] Requesting screen share access...");
+            // Use generic video constraints for screen share to avoid TS issues
+            stream = await navigator.mediaDevices.getDisplayMedia({
+                video: true,
+                audio: false
+            });
+        } else {
+            return;
+        }
+
+        if (!isMounted) {
+            stream.getTracks().forEach(t => t.stop());
+            return;
+        }
+
+        currentStream = stream;
+        streamRef.current = stream;
+
+        // Handle stream ending (e.g. user clicks "Stop sharing" on browser UI)
+        stream.getVideoTracks()[0].onended = () => {
+            console.log("[UseVision] Stream ended externally.");
+            stopStream();
+            if (isMounted && onReset) onReset();
+        };
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          // Wait for metadata to load to ensure dimensions are known
+          videoRef.current.onloadedmetadata = async () => {
+             if (!isMounted) return;
+             try {
+                await videoRef.current?.play();
+                if (isMounted) {
+                    setIsReady(true);
+                    console.log(`[UseVision] ${mode} active and playing.`);
+                }
+             } catch (e) {
+                console.error("Auto-play failed:", e);
+                stopStream();
+                if (isMounted && onReset) onReset();
+             }
+          };
+        }
+      } catch (err) {
+        console.error(`Failed to access ${mode}:`, err);
+        stopStream();
+        if (isMounted && onReset) onReset();
+      }
+    };
+
+    startStream();
+
+    return () => {
+      isMounted = false;
+      stopStream();
+    };
+  }, [mode]); // Removed onReset from deps to avoid re-running on callback change
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Async capture to prevent UI freeze (Argus Optimization)
   const captureFrame = useCallback(async (): Promise<string | null> => {
-    if (!videoRef.current || !isCameraReady) return null;
+    if (!videoRef.current || !isReady) return null;
 
     const video = videoRef.current;
 
@@ -69,6 +119,7 @@ export const useVision = (active: boolean = false) => {
     }
     const canvas = canvasRef.current;
 
+    // Use actual video dimensions for capture
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
@@ -93,7 +144,7 @@ export const useVision = (active: boolean = false) => {
             reader.readAsDataURL(blob);
         }, 'image/jpeg', 0.8);
     });
-  }, [isCameraReady]);
+  }, [isReady]);
 
-  return { videoRef, captureFrame, isCameraReady };
+  return { videoRef, captureFrame, isReady };
 };
