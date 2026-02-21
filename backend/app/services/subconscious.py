@@ -2,6 +2,7 @@ import asyncio
 import logging
 import json
 import os
+import httpx
 from asyncio import Queue
 from datetime import datetime
 from ..repositories.base import SoulRepository
@@ -170,6 +171,9 @@ class SubconsciousMind:
                     return result.replace("SYSTEM_HINT:", "").strip()
                 return None
 
+            except (httpx.RemoteProtocolError, httpx.ConnectError) as e:
+                logger.debug(f"Subconscious inference network error: {e}")
+                return None
             except Exception:
                 logger.warning("Subconscious inference failed. Fallback to keywords.", exc_info=True)
 

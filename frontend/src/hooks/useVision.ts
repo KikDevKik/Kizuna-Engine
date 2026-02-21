@@ -130,8 +130,12 @@ export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
     const canvas = canvasRef.current;
 
     // Use actual video dimensions for capture
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Aggressive Compression: Scale down to max width 480px
+    const MAX_WIDTH = 480;
+    const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
+
+    canvas.width = video.videoWidth * scale;
+    canvas.height = video.videoHeight * scale;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
@@ -152,7 +156,7 @@ export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
                 resolve(base64data.split(',')[1]);
             };
             reader.readAsDataURL(blob);
-        }, 'image/jpeg', 0.8);
+        }, 'image/jpeg', 0.5);
     });
   }, [isReady]);
 

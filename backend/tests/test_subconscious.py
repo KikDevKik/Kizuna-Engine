@@ -144,8 +144,34 @@ async def test_analyze_sentiment_custom_agent_prompt():
         # Verify the prompt sent contained the custom prompt text
         call_args = service.client.aio.models.generate_content.call_args
         assert call_args is not None
-        sent_contents = call_args.kwargs['contents']
-        assert "CUSTOM_PROMPT: hello" in sent_contents
+
+        # Check system_instruction in config
+        config = call_args.kwargs['config']
+        system_instruction_part = config.system_instruction.parts[0].text
+        # The code replaces {text} with [TRANSCRIPT] in the system instruction
+        # prompt_template = "CUSTOM_PROMPT: {text}" -> "CUSTOM_PROMPT: [TRANSCRIPT]"
+        assert "CUSTOM_PROMPT: [TRANSCRIPT]" in system_instruction_part
+
+@pytest.mark.asyncio
+async def test_analyze_sentiment_network_error():
+    """
+    Verifies that network errors (httpx) are caught gracefully and return None.
+    """
+    service = SubconsciousMind()
+    service.client = MagicMock()
+    service.client.aio.models.generate_content = AsyncMock()
+
+    # Simulate Network Error
+    import httpx
+    service.client.aio.models.generate_content.side_effect = httpx.ConnectError("Connection failed")
+
+    with patch("app.services.subconscious.settings") as mock_settings:
+        mock_settings.MOCK_GEMINI = False
+
+        result = await service._analyze_sentiment("hello")
+
+        assert result is None
+        # Ensure it didn't crash
 
 @pytest.mark.asyncio
 async def test_analyze_sentiment_agent_traits_fallback():
