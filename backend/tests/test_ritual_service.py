@@ -143,6 +143,60 @@ async def test_generate_with_retry_429():
         mock_sleep.assert_called_once_with(4)
 
 @pytest.mark.asyncio
+async def test_process_ritual_finalize_malformed_json():
+    """Verifies fallback to KIZUNA-FAILSAFE when LLM returns malformed JSON."""
+    service = RitualService()
+    service.client = MagicMock()
+
+    # Mock invalid JSON
+    with patch.object(RitualService, '_generate_with_retry', new_callable=AsyncMock, return_value="{ incomplete json"):
+        history = [
+            RitualMessage(role="user", content="1"),
+            RitualMessage(role="user", content="2"),
+            RitualMessage(role="user", content="3")
+        ]
+        resp = await service.process_ritual(history)
+
+        assert resp.is_complete is True
+        assert resp.agent_data["name"] == "KIZUNA-FAILSAFE"
+
+@pytest.mark.asyncio
+async def test_process_ritual_finalize_empty_string():
+    """Verifies fallback to KIZUNA-FAILSAFE when LLM returns an empty string."""
+    service = RitualService()
+    service.client = MagicMock()
+
+    # Mock empty string
+    with patch.object(RitualService, '_generate_with_retry', new_callable=AsyncMock, return_value=""):
+        history = [
+            RitualMessage(role="user", content="1"),
+            RitualMessage(role="user", content="2"),
+            RitualMessage(role="user", content="3")
+        ]
+        resp = await service.process_ritual(history)
+
+        assert resp.is_complete is True
+        assert resp.agent_data["name"] == "KIZUNA-FAILSAFE"
+
+@pytest.mark.asyncio
+async def test_process_ritual_finalize_valid_raw_json():
+    """Verifies correct parsing when LLM returns valid JSON without markdown wrappers."""
+    service = RitualService()
+    service.client = MagicMock()
+
+    raw_json = '{"name": "Raw Soul", "role": "Raw", "base_instruction": "Raw", "lore": "Raw", "traits": [], "native_language": "Raw", "known_languages": []}'
+
+    with patch.object(RitualService, '_generate_with_retry', new_callable=AsyncMock, return_value=raw_json):
+        history = [
+            RitualMessage(role="user", content="1"),
+            RitualMessage(role="user", content="2"),
+            RitualMessage(role="user", content="3")
+        ]
+        resp = await service.process_ritual(history)
+
+        assert resp.is_complete is True
+        assert resp.agent_data["name"] == "Raw Soul"
+        assert resp.agent_data["role"] == "Raw"
 async def test_generate_with_retry_failure():
     """Verifies that if the retry also fails (e.g., second 429), it returns None."""
     service = RitualService()
