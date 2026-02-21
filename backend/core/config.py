@@ -24,7 +24,7 @@ class Settings:
 
     # 1. Main Voice Thread (Low Latency Audio)
     # Using 2.5 Flash as the stable base for audio/realtime if supported, or standard Flash.
-    MODEL_LIVE_VOICE: str = os.getenv("MODEL_LIVE_VOICE", "gemini-2.5-flash")
+    MODEL_LIVE_VOICE: str = os.getenv("MODEL_LIVE_VOICE", "gemini-2.5-flash-native-audio-preview-12-2025")
 
     # 2. Subconscious Worker (Fast Text Analysis - Scout)
     # Always Flash for speed and cost.
