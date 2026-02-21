@@ -57,6 +57,8 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         f"{CORE_DIRECTIVE}\n\n"
         f"--- AGENT DNA ---\n"
         f"{agent.base_instruction}\n\n"
+        f"--- VISION PROTOCOL ---\n"
+        f"{getattr(agent, 'vision_instruction_prompt', 'Analyze the visual input critically.')}\n\n"
         f"--- DYNAMIC SOUL STATE ---\n"
         f"Agent Name: {agent.name}\n"
         f"User ID: {user_id}\n"
