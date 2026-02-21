@@ -128,7 +128,7 @@ async def health_check():
 async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, token: str | None = None):
     # Security: Verify Origin
     origin = websocket.headers.get("origin")
-    if origin and origin not in settings.CORS_ORIGINS:
+    if "*" not in settings.CORS_ORIGINS and origin not in settings.CORS_ORIGINS:
         logger.warning(f"Rejected connection from unauthorized origin: {origin}")
         await websocket.close(code=1008) # Policy Violation
         return
