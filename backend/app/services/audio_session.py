@@ -121,40 +121,55 @@ async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: a
     """
     try:
         while True:
-            async for response in session.receive():
-                if response.server_content is None:
-                    continue
+            try:
+                async for response in session.receive():
+                    if response.server_content is None:
+                        continue
 
-                server_content = response.server_content
-                model_turn = server_content.model_turn
+                    server_content = response.server_content
+                    model_turn = server_content.model_turn
 
-                if model_turn:
-                    for part in model_turn.parts:
-                        # Handle Audio
-                        if part.inline_data:
-                            # part.inline_data.data is bytes
-                            # Optimize: Send raw binary directly to avoid Base64 overhead
-                            await websocket.send_bytes(part.inline_data.data)
+                    if model_turn:
+                        for part in model_turn.parts:
+                            # Handle Audio
+                            if part.inline_data:
+                                # part.inline_data.data is bytes
+                                # Optimize: Send raw binary directly to avoid Base64 overhead
+                                await websocket.send_bytes(part.inline_data.data)
 
-                        # Handle Text (if interleaved or final transcript)
-                        if part.text:
-                            logger.info(f"Gemini -> Client: Text: {part.text[:50]}...")
-                            await websocket.send_json({
-                                "type": "text",
-                                "data": part.text
-                            })
+                            # Handle Text (if interleaved or final transcript)
+                            if part.text:
+                                logger.info(f"Gemini -> Client: Text: {part.text[:50]}...")
+                                await websocket.send_json({
+                                    "type": "text",
+                                    "data": part.text
+                                })
 
-                            # Feed the Subconscious Mind
-                            if transcript_queue:
-                                try:
-                                    transcript_queue.put_nowait(part.text)
-                                except Exception as e:
-                                    logger.warning(f"Failed to queue transcript: {e}")
+                                # Feed the Subconscious Mind
+                                if transcript_queue:
+                                    try:
+                                        transcript_queue.put_nowait(part.text)
+                                    except Exception as e:
+                                        logger.warning(f"Failed to queue transcript: {e}")
 
-                # Handle turn completion
-                if server_content.turn_complete:
-                    logger.info("Gemini -> Client: Turn complete signal.")
-                    await websocket.send_json({"type": "turn_complete"})
+                    # Handle turn completion
+                    if server_content.turn_complete:
+                        logger.info("Gemini -> Client: Turn complete signal.")
+                        await websocket.send_json({"type": "turn_complete"})
+
+            except asyncio.CancelledError:
+                logger.info("Receive loop cancelled (Graceful Shutdown).")
+                break
+
+            except Exception as e:
+                # 1. Check for specific GenAI disconnect messages
+                error_msg = str(e)
+                if "disconnect" in error_msg or "Cannot call 'receive'" in error_msg:
+                    logger.info(f"Gemini session closed by client/network: {error_msg}")
+                    break
+                else:
+                    logger.error(f"Error in receive loop: {e}")
+                    raise
 
             logger.info("Gemini session.receive() iterator exhausted. Re-entering loop to listen for next turn...")
 
