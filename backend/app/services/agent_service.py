@@ -18,6 +18,28 @@ class AgentService:
         self.data_dir = data_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
+    def _get_safe_path(self, agent_id: str) -> Optional[Path]:
+        """
+        Resolves the file path and ensures it is within the data directory.
+        Returns None if the path is invalid or attempts traversal.
+        """
+        try:
+            # Resolve the data directory to an absolute path
+            data_dir_abs = self.data_dir.resolve()
+
+            # Construct the target path
+            target_path = (self.data_dir / f"{agent_id}.json").resolve()
+
+            # Check if the target path is relative to the data directory
+            if not target_path.is_relative_to(data_dir_abs):
+                logger.warning(f"Path traversal attempt blocked for agent_id: {agent_id}")
+                return None
+
+            return target_path
+        except Exception as e:
+            logger.error(f"Error resolving path for agent_id {agent_id}: {e}")
+            return None
+
     async def list_agents(self) -> List[AgentNode]:
         """
         Scans the agents directory and returns a list of AgentNode objects.
@@ -43,8 +65,8 @@ class AgentService:
         Retrieves a specific agent by ID.
         Since filename is [ID].json, we can look it up directly.
         """
-        file_path = self.data_dir / f"{agent_id}.json"
-        if not file_path.exists():
+        file_path = self._get_safe_path(agent_id)
+        if not file_path or not file_path.exists():
             return None
 
         try:
@@ -88,7 +110,10 @@ class AgentService:
         """
         Deletes an agent file by ID.
         """
-        file_path = self.data_dir / f"{agent_id}.json"
+        file_path = self._get_safe_path(agent_id)
+        if not file_path:
+            return False
+
         if not file_path.exists():
             logger.warning(f"Agent deletion requested for non-existent ID: {agent_id}")
             return False
