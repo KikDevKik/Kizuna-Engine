@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.services.subconscious import SubconsciousMind
@@ -99,3 +100,38 @@ async def test_generate_dream_empty_response():
         assert dream.theme == "Void"
         assert dream.intensity == 0.0
         assert dream.surrealism_level == 0.0
+
+@pytest.mark.asyncio
+async def test_subconscious_start_resilience():
+    """Verifies that the start loop recovers from an unexpected error in one iteration."""
+    service = SubconsciousMind()
+    transcript_queue = asyncio.Queue()
+    injection_queue = asyncio.Queue()
+
+    # Mock _analyze_sentiment to raise an exception on the first call, then succeed
+    # Note: we need to bypass the "len(self.buffer) < 5" check or provide enough segments
+    # Actually, we can just mock it to return a hint after some segments.
+
+    with patch.object(service, "_analyze_sentiment", side_effect=[Exception("Boom!"), "Happy Hint"]):
+        # Start the loop in a task
+        task = asyncio.create_task(service.start(transcript_queue, injection_queue, "test_user", "test_agent"))
+
+        # We need to trigger the logic.
+        # Requirement: len(self.buffer) >= 5 or text_segment contains punctuation.
+        await transcript_queue.put("segment 1.") # triggers 1st call -> Exception
+
+        # We need to wait a bit for the 1s sleep in the error handler
+        await asyncio.sleep(1.1)
+
+        await transcript_queue.put("segment 2.") # triggers 2nd call -> "Happy Hint"
+
+        try:
+            # Wait for the injection queue to get the "Happy Hint"
+            hint_payload = await asyncio.wait_for(injection_queue.get(), timeout=2.0)
+            assert hint_payload["text"] == "SYSTEM_HINT: Happy Hint"
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
