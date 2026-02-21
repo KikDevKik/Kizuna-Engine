@@ -24,8 +24,8 @@ async def test_process_ritual_start():
     assert "虚空が見つめ返している" in resp.message
 
 @pytest.mark.asyncio
-async def test_process_ritual_next_question_mock():
-    """Verifies fallback sequential questions when Gemini client is absent."""
+async def test_process_ritual_next_question_no_client_fallback():
+    """Verifies that the service returns a fallback message when no Gemini client is available."""
     service = RitualService()
     service.client = None
 
@@ -33,7 +33,7 @@ async def test_process_ritual_next_question_mock():
     history = [RitualMessage(role="user", content="I want to create a protector")]
     resp = await service.process_ritual(history)
     assert resp.is_complete is False
-    # Fallback message
+# Fallback message
     assert resp.message == "The connection flickers. Tell me more of your intent."
 
     # Two user answers
@@ -43,6 +43,7 @@ async def test_process_ritual_next_question_mock():
     assert resp.is_complete is False
     # Still fallback
     assert resp.message == "The connection flickers. Tell me more of your intent."
+
 
 @pytest.mark.asyncio
 async def test_process_ritual_next_question_gemini_success():

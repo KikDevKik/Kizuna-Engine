@@ -42,7 +42,7 @@ const TypewriterText: React.FC<{
         setIsComplete(true);
         if (onComplete) onComplete();
       }
-    }, 50); // Slow cadence (50ms)
+    }, 10); // Fast cadence (10ms)
 
     return () => clearInterval(intervalId);
   }, [text, isActive]); // Depend on text to restart if it changes

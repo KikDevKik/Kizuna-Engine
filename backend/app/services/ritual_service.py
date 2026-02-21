@@ -152,7 +152,8 @@ class RitualService:
 
         prompt = (
             f"{prompt_instruction}\n"
-            "Maintain the 'Dark Water' aesthetic (cold, abyssal, but creative). "
+            "TONE DIRECTIVE: Start mysterious, but ADAPT your tone to match the vibe of the agent the user is creating. If they are creating a fun, underground DJ, become more casual and energetic.\n"
+            "CONCISENESS DIRECTIVE: NEVER write walls of text. Keep your responses extremely concise (maximum 3-4 short sentences). Ask ONLY ONE focused question or offer ONE specific choice at a time."
             f"\n[LANGUAGE DIRECTIVE]: You MUST respond in the same language as the user's last message. If uncertain, use: {locale}."
             "\n\nCurrent Ritual History:\n" +
             "\n".join([f"{m.role.upper()}: {m.content}" for m in history]) +
