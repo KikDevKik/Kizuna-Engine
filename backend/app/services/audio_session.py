@@ -126,7 +126,7 @@ async def send_to_gemini(websocket: WebSocket, session):
     except Exception as e:
         # Check for specific string patterns if exception type is generic
         error_msg = str(e).lower()
-        if "disconnect" in error_msg or "closed" in error_msg or "1006" in error_msg or "1011" in error_msg:
+        if "disconnect" in error_msg or "closed" in error_msg or "1006" in error_msg or "1011" in error_msg or "unexpected asgi message" in error_msg:
              logger.warning(f"Connection dropped in send_to_gemini: {e}")
              raise e
 
@@ -162,7 +162,8 @@ async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: a
                                     # Handle ASGI Race Condition during Fast Shutdown
                                     if "Unexpected ASGI message" in str(e) or "closed" in str(e).lower():
                                         logger.debug("Socket closed before audio chunk could be sent. Breaking loop.")
-                                        raise asyncio.CancelledError() # Exit gracefully
+                                        # Use WebSocketDisconnect to force TaskGroup cancellation of siblings
+                                        raise WebSocketDisconnect()
                                     raise e
 
                             # Handle Text (if interleaved or final transcript)
@@ -176,7 +177,7 @@ async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: a
                                 except RuntimeError as e:
                                     if "Unexpected ASGI message" in str(e) or "closed" in str(e).lower():
                                         logger.debug("Socket closed before text could be sent. Breaking loop.")
-                                        raise asyncio.CancelledError()
+                                        raise WebSocketDisconnect()
                                     raise e
 
                                 # Feed the Subconscious Mind
@@ -194,19 +195,19 @@ async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: a
                         except RuntimeError as e:
                             if "Unexpected ASGI message" in str(e) or "closed" in str(e).lower():
                                 logger.debug("Socket closed before turn_complete could be sent.")
-                                raise asyncio.CancelledError()
+                                raise WebSocketDisconnect()
                             raise e
 
             except asyncio.CancelledError:
                 logger.info("Receive loop cancelled (Graceful Shutdown).")
-                break
+                raise
 
             except Exception as e:
                 # 1. Check for specific GenAI disconnect messages
                 error_msg = str(e)
                 if "disconnect" in error_msg or "Cannot call 'receive'" in error_msg or "closed" in error_msg:
                     logger.info(f"Gemini session closed by client/network: {error_msg}")
-                    break
+                    raise e
                 else:
                     logger.error(f"Error in receive loop: {e}")
                     # Don't re-raise, break to exit loop cleanly
