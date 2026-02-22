@@ -22,12 +22,14 @@ Jules, when generating or modifying code, you MUST adhere to this structure:
     *   **State/Cache:** Redis (Neural Sync) for session persistence and agent caching (`warm_up_agents`).
     *   **Graph:** Use `AgentNode`, `DreamNode`, `ArchetypeNode` in `backend/app/models/graph.py`.
 *   **Audio Protocol:** Full Duplex WebSocket. Buffer ~100ms (3200 bytes) before sending to Gemini to balance latency/network load.
+*   **Bio-Feedback:** Ingest BPM signals via `/api/bio/submit` to modulate `SubconsciousMind` hints.
 
 ### **Frontend (The Senses)**
 *   **Framework:** React + Vite + TypeScript.
-*   **Audio:** Raw PCM 16kHz Mono via `AudioWorklet`. **NEVER** connect the microphone source to `destination` (prevents feedback loops).
-*   **Vision:** Capture video frames (JPEG) via hidden Canvas (1-2 FPS) and send as `{ "type": "image", ... }` JSON messages.
-*   **Performance:** Use `useRef` + `requestAnimationFrame` for high-frequency UI updates (e.g., audio visualizers). **DO NOT** trigger React renders for audio levels.
+*   **Audio Input:** Raw PCM 16kHz Mono via `AudioWorklet`. **NEVER** connect the microphone source to `destination`.
+*   **Audio Output:** Dynamic Jitter Buffer (Target: 60ms, Max Latency: 200ms). Use `playbackRate` modulation (1.05x) for smooth catch-up.
+*   **Vision (Argus):** Capture video frames (JPEG quality 0.5, Max Width 480px) via hidden Canvas. Throttle to prevents WebSocket saturation.
+*   **Performance:** Use `useRef` + `requestAnimationFrame` for high-frequency UI updates. **DO NOT** trigger React renders for audio levels.
 
 ---
 
@@ -35,21 +37,20 @@ Jules, when generating or modifying code, you MUST adhere to this structure:
 
 ### **A. Anti-Hardcoding (Dynamic Soul)**
 *   **No Static Prompts:** System instructions must reside in the `AgentNode` schema or DB, **NEVER** as hardcoded Python strings.
-*   **Dynamic Affinity:** Relationship modifiers (Strangers -> Soulmates) must be calculated via formulas in the DB/Graph, not `if/else` blocks in Python.
+*   **Dynamic Affinity:** Relationship modifiers (Strangers -> Soulmates) must be calculated via formulas in the DB/Graph.
 *   **Traits:** Use `ArchetypeNode` and `EMBODIES` edges to define personality traits dynamically.
 
-### **B. Security & Stability**
-*   **Error Masking:** API endpoints must catch exceptions and return a generic `500 Internal Server Error` message to the client, while logging the full traceback with `logger.exception()`.
-*   **WebSocket Origin:** Strictly enforce `Origin` header checks. Deny by default if missing.
-*   **Auth Fail-Safe:** If critical credentials (e.g., Firebase) are missing in Production (`GCP_PROJECT_ID` set), the app MUST crash or reject requests, not fallback to "guest" mode.
+### **B. Security & Resilience**
+*   **Model Waterfall:** Implement a fallback strategy for `429 Rate Limit` errors (e.g., retry with alternative models in `settings.MODEL_SUBCONSCIOUS` before failing).
+*   **Error Masking:** API endpoints must catch exceptions and return a generic `500 Internal Server Error`, logging the traceback internally.
+*   **WebSocket Origin:** Strictly enforce `Origin` header checks.
 *   **Graceful Shutdown:** `SleepManager` must enforce a **10-second timeout** on memory consolidation during shutdown to prevent hangs.
 
 ### **C. The "Ritual" (Agent Creation)**
 *   **Two-Phase Process:** "Foundations" (Basic Q&A) -> "Deepening" (Lore/Personality).
 *   **Persona Integrity:** The "Void" (System Persona) must **NEVER** bleed into the generated Agent's `base_instruction`.
-*   **Linguistic Directives:** Agents must have a `native_language` and `known_languages`. Inject instructions for "C1 Level" interaction with native filler words if the user's language differs from the agent's native tongue.
+*   **Linguistic Directives:** Agents must have a `native_language` and `known_languages`. Inject instructions for "C1 Level" interaction.
 *   **Voice Assignment:** Strictly assign one of the standard Gemini Live voices: `Aoede`, `Kore`, `Puck`, `Charon`, `Fenrir`.
-*   **Model Waterfall:** Implement a fallback strategy for `429 Rate Limit` errors (e.g., retry with alternative models in `settings.MODEL_SUBCONSCIOUS`).
 
 ### **D. Dreams & Memory (Neural Sync)**
 *   **Non-Destructive:** Consolidation happens in the background ("Lucid Dreaming"). Use `DreamNode` and `SHADOW_LINK` edges.
@@ -69,7 +70,7 @@ Jules, when generating or modifying code, you MUST adhere to this structure:
     *   **Background:** `var(--color-abyssal-black)` (Deep dark).
 *   **Geometry:**
     *   **No Circles:** Avoid `rounded-full` or soft organic shapes.
-    *   **Shards:** Use aggressive `clip-path` polygons for avatars, buttons, and modals (e.g., `.shape-shard-avatar`, `.shape-shard-create`).
+    *   **Shards:** Use aggressive `clip-path` polygons for avatars and modals (e.g., `.shape-shard-avatar`).
     *   **Borders:** Use 1px sharp borders with low opacity for inactive elements, high opacity/glow for active.
 
 ### **B. Component Behavior**
@@ -80,6 +81,6 @@ Jules, when generating or modifying code, you MUST adhere to this structure:
 ---
 
 ## 5. RECENT PROTOCOLS (Update Log)
+*   **2026-05-22 (Chronicler):** Synced docs with Reality. Added Bio-Feedback, Jitter Buffers, and Vision protocols.
 *   **2026-02-21 (Synapse):** Migrated all system prompts to `AgentNode` schema. Use `scripts/validate_agents.py`.
 *   **2026-02-21 (UI):** Unification of "Dark Water". Replaced all Tailwind utility colors with CSS variables.
-*   **2025-05-18 (Architect):** Decoupled WebSocket logic from React hooks into `utils/audioUtils.ts`.
