@@ -109,14 +109,10 @@ class SubconsciousMind:
                                 if delta != 0:
                                     await self.repository.update_resonance(user_id, agent_id, delta)
 
-                                # Save Episode
-                                await self.repository.save_episode(
-                                    user_id=user_id,
-                                    agent_id=agent_id,
-                                    summary=f"User triggered insight: {trigger_word} -> {hint}",
-                                    valence=0.5,
-                                    raw_transcript=full_text
-                                )
+                                # REMOVED: Save Episode
+                                # We no longer save fragmented episodes here.
+                                # Full session transcript is saved in main.py upon disconnection.
+                                # await self.repository.save_episode(...)
                             except Exception:
                                 logger.exception("Failed to persist subconscious insight")
 

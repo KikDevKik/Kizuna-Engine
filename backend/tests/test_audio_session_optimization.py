@@ -17,6 +17,9 @@ except ImportError as e:
     print(f"ImportError: {e}")
     sys.exit(1)
 
+import pytest
+
+@pytest.mark.asyncio
 async def test_send_to_gemini_image_offloading():
     # Mock WebSocket
     mock_websocket = AsyncMock()
