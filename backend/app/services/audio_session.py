@@ -128,7 +128,7 @@ async def send_to_gemini(websocket: WebSocket, session):
         error_msg = str(e).lower()
         if "disconnect" in error_msg or "closed" in error_msg or "1006" in error_msg or "1011" in error_msg:
              logger.warning(f"Connection dropped in send_to_gemini: {e}")
-             return
+             raise e
 
         logger.error(f"Error sending to Gemini: {e}")
         # Don't re-raise to avoid crashing the whole session manager task group

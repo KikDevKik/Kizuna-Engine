@@ -2,7 +2,7 @@ import asyncio
 import logging
 import sys
 import os
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, ANY
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,13 +30,13 @@ async def test_rem_sleep_debounce():
 
     # 2. Case A: Disconnect -> Reconnect (Cancel Sleep)
     print("\n[Case A] User disconnects and reconnects quickly...")
-    manager.schedule_sleep(user_id)
+    await manager.schedule_sleep(user_id)
     print("   User disconnected. Timer started.")
 
     await asyncio.sleep(0.5) # Wait less than grace period
 
     print("   User reconnecting...")
-    manager.cancel_sleep(user_id)
+    await manager.cancel_sleep(user_id)
 
     # Wait to ensure timer would have fired if not cancelled
     await asyncio.sleep(2.0)
@@ -49,7 +49,7 @@ async def test_rem_sleep_debounce():
 
     # 3. Case B: Disconnect -> Timeout (Trigger Sleep)
     print("\n[Case B] User disconnects and stays offline...")
-    manager.schedule_sleep(user_id)
+    await manager.schedule_sleep(user_id)
     print(f"   User disconnected. Waiting {manager.grace_period}s...")
 
     await asyncio.sleep(2.5) # Wait longer than grace period
@@ -57,7 +57,7 @@ async def test_rem_sleep_debounce():
     if repo.consolidate_memories.call_count == 1:
         print("✅ SUCCESS: Consolidation triggered after grace period.")
         # Verify call args
-        repo.consolidate_memories.assert_called_with(user_id)
+        repo.consolidate_memories.assert_called_with(user_id, dream_generator=ANY)
     else:
         print(f"❌ FAILURE: Consolidation call count: {repo.consolidate_memories.call_count}")
         sys.exit(1)
