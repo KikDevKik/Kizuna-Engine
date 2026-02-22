@@ -270,6 +270,12 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   const isFirst = activeIndex === 0;
   const isLast = activeIndex === agents.length - 1;
 
+  // Accessibility: Announce current selection
+  const currentAgent = agents[activeIndex];
+  const a11yAnnouncement = currentAgent
+    ? `Selected: ${currentAgent.name}, ${currentAgent.role}`
+    : 'Agent Carousel';
+
   return (
     <>
       <motion.div
@@ -277,8 +283,29 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         initial="hidden"
         animate="visible"
         exit="exit"
+        role="region"
+        aria-label="Agent Selection Carousel"
         className="flex flex-col items-center justify-center w-full h-[700px] relative overflow-hidden"
       >
+        {/* Screen Reader Live Region */}
+        <div
+          aria-live="polite"
+          aria-atomic="true"
+          style={{
+            position: 'absolute',
+            width: 1,
+            height: 1,
+            padding: 0,
+            margin: -1,
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0
+          }}
+        >
+          {a11yAnnouncement}
+        </div>
+
         {error && (
             <div className="absolute top-4 text-alert-red font-technical text-sm bg-abyssal-black/90 p-4 border border-alert-red z-[300] shadow-[0_0_20px_rgba(255,51,102,0.4)] backdrop-blur-md tracking-widest uppercase">
                 {'>'} CONNECTION_ERROR: {error}
@@ -418,6 +445,11 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
               NEXT &gt;
             </div>
           </button>
+
+          {/* Keyboard Hint */}
+          <div className="absolute top-full mt-4 left-1/2 -translate-x-1/2 text-electric-blue/30 text-[10px] font-technical tracking-widest flex gap-4 pointer-events-none select-none w-max">
+            <span>[ KEYBOARD: ← / → ]</span>
+          </div>
         </motion.div>
       </motion.div>
 
