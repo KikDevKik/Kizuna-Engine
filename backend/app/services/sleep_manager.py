@@ -18,6 +18,8 @@ class SleepManager:
         self.repository = repository
         # Map user_id -> asyncio.TimerHandle (or Task)
         self.active_timers: Dict[str, asyncio.Task] = {}
+        # Buffer for pending transcripts during grace period
+        self.pending_transcripts: Dict[str, dict] = {}
         # Default grace period in seconds (e.g., 30s)
         self.grace_period = settings.SLEEP_GRACE_PERIOD
         self._is_shutting_down = False
@@ -57,7 +59,7 @@ class SleepManager:
 
         logger.info(f"💤 Restored {restored_count} pending sleep cycles.")
 
-    async def schedule_sleep(self, user_id: str, delay: int = None):
+    async def schedule_sleep(self, user_id: str, delay: int = None, agent_id: str = None, raw_transcript: str = None):
         """
         Schedule consolidation after a grace period.
         Called on WebSocket Disconnect.
@@ -69,13 +71,21 @@ class SleepManager:
         if delay is None:
             delay = self.grace_period
 
+        # Cancel any existing timer just in case
+        # This cleans up previous state so we don't accidentally delete the NEW transcript we are about to add
+        await self.cancel_sleep(user_id, remove_intent=False)
+
+        # Store pending transcript if provided
+        if raw_transcript:
+            self.pending_transcripts[user_id] = {
+                "agent_id": agent_id,
+                "transcript": raw_transcript
+            }
+
         # Persist Intent (Neural Sync)
         target_ts = datetime.now().timestamp() + delay
         # TTL slightly longer than delay to ensure it exists until trigger
         await cache.set(f"sleep_intent:{user_id}", str(target_ts), ttl=int(delay + 60))
-
-        # Cancel any existing timer just in case
-        await self.cancel_sleep(user_id, remove_intent=False)
 
         logger.info(f"💤 User {user_id} disconnected. Scheduling REM Sleep in {delay}s...")
 
@@ -95,6 +105,10 @@ class SleepManager:
         if remove_intent:
             await cache.delete(f"sleep_intent:{user_id}")
 
+        # Also clear any pending transcript as the session is continuing
+        if user_id in self.pending_transcripts:
+            del self.pending_transcripts[user_id]
+
         if user_id in self.active_timers:
             task = self.active_timers.pop(user_id)
             if not task.done():
@@ -110,6 +124,24 @@ class SleepManager:
         try:
             await asyncio.sleep(delay)
             # If we get here without cancellation, trigger consolidation
+
+            # Check for pending transcript to save safely in background
+            if user_id in self.pending_transcripts:
+                data = self.pending_transcripts.pop(user_id)
+                agent_id = data.get("agent_id")
+                transcript = data.get("transcript")
+                logger.info(f"Saving Full Session Transcript ({len(transcript)} chars) for {user_id} (Background)")
+                try:
+                    await self.repository.save_episode(
+                        user_id=user_id,
+                        agent_id=agent_id,
+                        summary="Full Session Transcript",
+                        valence=0.0,
+                        raw_transcript=transcript
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to save Master Session Transcript in background: {e}")
+
             await self._trigger_consolidation(user_id)
             # Cleanup Redis
             await cache.delete(f"sleep_intent:{user_id}")
@@ -156,6 +188,23 @@ class SleepManager:
         pending_users = list(self.active_timers.keys())
 
         for user_id in pending_users:
+            # Rescue Protocol: Save any pending transcripts before cancellation
+            if user_id in self.pending_transcripts:
+                data = self.pending_transcripts.pop(user_id)
+                agent_id = data.get("agent_id")
+                transcript = data.get("transcript")
+                logger.info(f"🛑 Rescue Protocol: Saving pending transcript for {user_id}...")
+                try:
+                    await self.repository.save_episode(
+                        user_id=user_id,
+                        agent_id=agent_id,
+                        summary="Full Session Transcript",
+                        valence=0.0,
+                        raw_transcript=transcript
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to rescue transcript during shutdown: {e}")
+
             task = self.active_timers.get(user_id)
             if task and not task.done():
                 logger.info(f"🛑 Force-triggering pending consolidation for {user_id}...")

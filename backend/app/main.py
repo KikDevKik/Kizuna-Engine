@@ -209,21 +209,16 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
         logger.info("WebSocket session closed.")
 
         # Full Session Persistence (Master Session Logger)
+        # Decoupled to SleepManager to avoid ASGI Deadlock
+        full_transcript = None
         if session_transcript_buffer:
             full_transcript = "\n".join(session_transcript_buffer)
-            logger.info(f"Saving Full Session Transcript ({len(full_transcript)} chars) for {user_id}")
-            try:
-                # Valence 0.0 is neutral, summary is generic until dream processing
-                await soul_repo.save_episode(
-                    user_id=user_id,
-                    agent_id=agent_id,
-                    summary="Full Session Transcript",
-                    valence=0.0,
-                    raw_transcript=full_transcript
-                )
-            except Exception as e:
-                logger.error(f"Failed to save Master Session Transcript: {e}")
+            logger.info(f"Buffering Full Session Transcript ({len(full_transcript)} chars) for {user_id}")
 
         # Phase 4: Entering REM Sleep (Debounced Consolidation)
         # Schedule consolidation after grace period.
-        asyncio.create_task(sleep_manager.schedule_sleep(user_id))
+        asyncio.create_task(sleep_manager.schedule_sleep(
+            user_id=user_id,
+            agent_id=agent_id,
+            raw_transcript=full_transcript
+        ))
