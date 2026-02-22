@@ -148,14 +148,33 @@ export class AudioStreamManager {
 
     const currentTime = this.ctx.currentTime;
 
-    // El Jitter Buffer: Si el reproductor se quedó sin audio (currentTime superó a nextStartTime),
-    // le damos un margen de 100ms a 150ms al futuro para que acumule el siguiente paquete y no se entrecorte.
-    if (this.nextStartTime < currentTime) {
-      this.nextStartTime = currentTime + 0.15; // 150ms de gracia
+    // Dynamic Jitter Buffer Strategy
+    // Goal: Maintain a smooth stream without hard resets or high latency.
+    const JITTER_BUFFER_MS = 0.06; // 60ms target buffer (Tight but safe)
+    const MAX_LATENCY_MS = 0.20;   // 200ms max latency before catch-up
+    const CATCHUP_RATE = 1.05;     // 5% speedup to catch up gently
+
+    let startTime = this.nextStartTime;
+
+    // 1. Underrun Handling (The Gap)
+    // If nextStartTime is in the past, we ran dry. Reset to now + small buffer.
+    if (startTime < currentTime) {
+        startTime = currentTime + JITTER_BUFFER_MS;
     }
 
-    source.start(this.nextStartTime);
-    this.nextStartTime += buffer.duration;
+    // 2. Latency Handling (The Drift)
+    // If buffer is too large (startTime is far in future), play faster to catch up.
+    let playbackRate = 1.0;
+    if (startTime > currentTime + MAX_LATENCY_MS) {
+        playbackRate = CATCHUP_RATE;
+    }
+
+    source.playbackRate.value = playbackRate;
+    source.start(startTime);
+
+    // 3. Advance Next Start Time
+    // Calculate effective duration based on playback rate
+    this.nextStartTime = startTime + (buffer.duration / playbackRate);
   }
 
   cleanup() {
