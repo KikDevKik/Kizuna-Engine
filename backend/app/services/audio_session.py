@@ -256,6 +256,10 @@ async def receive_from_gemini(
                                             turn_buffer = ""
 
                                 # --- Clean Internal Monologue ---
+                                # Strip <thinking>...</thinking> (Cognitive Exhaust)
+                                # Archibald's Clean-up: Prevent internal monologue from leaking to TTS/DB.
+                                text_to_process = re.sub(r'<thinking>.*?</thinking>', '', text_to_process, flags=re.DOTALL)
+
                                 # Strip **...** (Cognitive Exhaust)
                                 # Note: This simple regex might fail if ** is split across chunks.
                                 # But handling split tokens is complex. Best effort for now.

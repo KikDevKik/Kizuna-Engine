@@ -465,23 +465,57 @@ class LocalSoulRepository(SoulRepository):
             return self.dreams.get(last_edge.target_id)
 
     async def get_recent_episodes(self, user_id: str, limit: int = 10) -> List[MemoryEpisodeNode]:
-        """Retrieve recent episodes (short-term memory)."""
+        """
+        Retrieve recent episodes (short-term memory).
+        Archivist Patch: Implements 'Verbatim Priority' to ensure raw transcripts are not
+        displaced by consolidation summaries.
+        """
         async with self.lock:
             episode_ids = self.experienced.get(user_id, [])
             if not episode_ids:
                 return []
 
-            # Get the last 'limit' IDs
-            recent_ids = episode_ids[-limit:]
+            # Scan backwards to find relevant episodes with Verbatim Priority
+            collected_raw = []
+            collected_summaries = []
 
-            # Fetch nodes
-            episodes = []
-            for eid in recent_ids:
+            # We want to fill 'limit' slots.
+            # We scan deeper than 'limit' to skip over potential summaries if needed.
+            # Arbitrary lookback limit to prevent infinite scan on huge history
+            LOOKBACK_LIMIT = 50
+            scanned = 0
+
+            for eid in reversed(episode_ids):
                 ep = self.episodes.get(eid)
-                if ep:
-                    episodes.append(ep)
+                if not ep:
+                    continue
 
-            return episodes
+                if ep.raw_transcript and len(ep.raw_transcript.strip()) > 0:
+                    collected_raw.append(ep)
+                else:
+                    collected_summaries.append(ep)
+
+                # If we have filled the quota with raw transcripts, we are done.
+                if len(collected_raw) >= limit:
+                    break
+
+                scanned += 1
+                if scanned >= LOOKBACK_LIMIT:
+                    break
+
+            # Construct result: Prioritize raw, backfill with summaries
+            result = collected_raw
+
+            if len(result) < limit:
+                needed = limit - len(result)
+                # Take the most recent summaries available
+                result.extend(collected_summaries[:needed])
+
+            # Restore chronological order (since we collected backwards)
+            # Sorting by timestamp ensures correct flow regardless of mix
+            result.sort(key=lambda x: x.timestamp)
+
+            return result
 
     # --- Evolution Phase 1: Ontology & Archetypes (Mock for Local) ---
 
