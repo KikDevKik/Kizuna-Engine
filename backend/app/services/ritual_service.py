@@ -1,7 +1,7 @@
 import json
 import logging
 import asyncio
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Literal
 from pydantic import BaseModel
 
 from core.config import settings
@@ -16,7 +16,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class RitualMessage(BaseModel):
-    role: str # "user" or "assistant"
+    role: Literal["user", "assistant"]
     content: str
 
 class RitualResponse(BaseModel):
