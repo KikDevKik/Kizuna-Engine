@@ -75,17 +75,30 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         )
 
     # 5. Fetch Recent Context (Short Term Memory)
-    recent_episodes = await repository.get_recent_episodes(user_id, limit=5)
+    # ARCHIVIST UPDATE: Inject raw transcripts for true recall (Echo Protocol)
+    recent_episodes = await repository.get_recent_episodes(user_id, limit=3)
     episode_context = ""
     if recent_episodes:
-        episode_context = "--- RECENT MEMORIES ---\n" + "\n".join(
-            [f"- {ep.summary} (Valence: {ep.emotional_valence})" for ep in recent_episodes]
-        )
+        # Sort chronologically just in case, though get_recent_episodes usually returns sorted (oldest first? or newest? check repo)
+        # Repo: returns episodes[-limit:], so chronological (oldest to newest).
+
+        lines = []
+        for ep in recent_episodes:
+             if ep.raw_transcript:
+                 lines.append(f"{ep.raw_transcript}")
+             else:
+                 # Fallback to summary if no transcript exists (legacy data)
+                 lines.append(f"Summary: {ep.summary} (Valence: {ep.emotional_valence})")
+
+        episode_context = "--- RECENT CONVERSATION HISTORY (VERBATIM) ---\n" + "\n\n".join(lines)
 
     # Construct the final prompt
     # We rename 'Role' to 'Archetype' to reduce its constraint on the relationship.
     full_instruction = (
         f"{CORE_DIRECTIVE}\n\n"
+        f"CRITICAL LIVE AUDIO DIRECTIVE: You must silently transcribe the user's spoken audio into text so the system can log it. "
+        f"ALWAYS begin your text response with this exact XML block: <user_log>the exact words the user just said</user_log>. "
+        f"After closing the tag, provide your natural spoken response.\n\n"
         f"--- AGENT DNA ---\n"
         f"Name: {agent.name}\n"
         f"Archetype/Core Drive: {agent.role}\n"

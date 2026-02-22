@@ -64,12 +64,14 @@ class SessionManager:
 
         # Agent Voice Configuration
         voice_name = None
+        agent_name = "AI"
 
         try:
             # Fetch Agent to get Voice Config
             agent = await self.soul_repo.get_agent(agent_id)
             if agent:
                 voice_name = agent.voice_name
+                agent_name = agent.name
 
             # Phase 5: Neural Sync (Redis Check)
             cache_key = f"soul:{user_id}:{agent_id}"
@@ -132,6 +134,7 @@ class SessionManager:
                                 session,
                                 transcript_queue,
                                 session_transcript_buffer,
+                                agent_name=agent_name,
                             )
                         )
 
