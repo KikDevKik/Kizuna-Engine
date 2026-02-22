@@ -5,6 +5,7 @@ from datetime import datetime
 from ..repositories.base import SoulRepository
 from .subconscious import subconscious_mind
 from .cache import cache
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class SleepManager:
         # Map user_id -> asyncio.TimerHandle (or Task)
         self.active_timers: Dict[str, asyncio.Task] = {}
         # Default grace period in seconds (e.g., 30s)
-        self.grace_period = 30
+        self.grace_period = settings.SLEEP_GRACE_PERIOD
         self._is_shutting_down = False
 
     async def restore_state(self):

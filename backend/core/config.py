@@ -57,4 +57,7 @@ class Settings:
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
     REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
 
+    # Sleep Manager Configuration
+    SLEEP_GRACE_PERIOD: int = int(os.getenv("SLEEP_GRACE_PERIOD", "5"))
+
 settings = Settings()
