@@ -121,6 +121,7 @@ class SleepManager:
         """
         Internal coroutine to wait and trigger.
         """
+        data = None
         try:
             await asyncio.sleep(delay)
             # If we get here without cancellation, trigger consolidation
@@ -146,8 +147,12 @@ class SleepManager:
             # Cleanup Redis
             await cache.delete(f"sleep_intent:{user_id}")
         except asyncio.CancelledError:
-            # Task was cancelled, do nothing
-            pass
+            # Task was cancelled (e.g. by shutdown).
+            # If we had popped 'data' but were interrupted during save_episode, we must restore it.
+            if data:
+                logger.warning(f"⚠️ _sleep_timer cancelled with captured data for {user_id}. Restoring to rescue queue.")
+                self.pending_transcripts[user_id] = data
+            raise
         finally:
             # Cleanup map with safety against Loop Close
             try:
@@ -162,6 +167,23 @@ class SleepManager:
         Execute the consolidation logic.
         This represents the "Worker" taking over.
         """
+        # Ensure any pending transcripts are saved (Robustness against race conditions)
+        if user_id in self.pending_transcripts:
+            data = self.pending_transcripts.pop(user_id)
+            agent_id = data.get("agent_id")
+            transcript = data.get("transcript")
+            logger.info(f"Saving Full Session Transcript ({len(transcript)} chars) for {user_id} (Late Rescue)")
+            try:
+                await self.repository.save_episode(
+                    user_id=user_id,
+                    agent_id=agent_id,
+                    summary="Full Session Transcript",
+                    valence=0.0,
+                    raw_transcript=transcript
+                )
+            except Exception as e:
+                logger.error(f"Failed to save Master Session Transcript in consolidation: {e}")
+
         logger.info(f"💾 Saving memories for {user_id} (Consolidation)...")
         try:
             # Use Subconscious Mind to generate dreams during consolidation
