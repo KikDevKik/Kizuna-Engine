@@ -180,19 +180,38 @@ body {
   }
 }
 
-/* STATE: LISTENING / PROCESSING (Quantum Sync) */
+/* STATE: LISTENING / PROCESSING (Liquid Resonance) */
 .ai-core-indicator[data-state="listening"] {
-  width: 120px;
-  height: 120px;
-  background: var(--color-electric-blue);
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%); /* Hexagon-ish */
-  filter: drop-shadow(0 0 40px var(--color-electric-blue)) contrast(150%);
-  animation: quantum-sync 0.3s steps(2, end) infinite alternate;
+  width: 100px;
+  height: 100px;
+  background: radial-gradient(circle at center, rgba(0, 209, 255, 0.9), transparent 70%); /* More solid/active than idle */
+  border-radius: 50%;
+  box-shadow: 0 0 40px rgba(0, 209, 255, 0.5);
+
+  /* JS controls size via --vol-scale */
+  transform: scale(var(--vol-scale, 1));
+
+  /* Rapid fluid distortion (Sound Vibration) */
+  animation: liquid-resonance 0.5s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 20px rgba(0, 209, 255, 0.6));
 }
 
-@keyframes quantum-sync {
-  0% { transform: scale(1) rotate(0deg); }
-  100% { transform: scale(1.1) rotate(15deg); }
+@keyframes liquid-resonance {
+  0% {
+    border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%;
+  }
+  25% {
+     border-radius: 55% 45% 52% 48% / 48% 55% 45% 50%;
+  }
+  50% {
+     border-radius: 50% 50% 45% 55% / 55% 45% 50% 50%;
+  }
+  75% {
+      border-radius: 45% 55% 48% 52% / 50% 48% 55% 45%;
+  }
+  100% {
+     border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%;
+  }
 }
 
 /* STATE: SPEAKING (Volumetric Expansion) */
