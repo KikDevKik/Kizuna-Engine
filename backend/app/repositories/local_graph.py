@@ -270,7 +270,17 @@ class LocalSoulRepository(SoulRepository):
             self.experienced[user_id].append(episode.id)
 
             # Update Resonance with this shared memory
-            resonance = await self.get_resonance(user_id, agent_id)
+            # Access self.resonances directly since we already hold self.lock
+            user_resonances = self.resonances.get(user_id, {})
+            if agent_id in user_resonances:
+                resonance = user_resonances[agent_id]
+            else:
+                # Default Resonance (Starts at 10.0 - Stranger/Warm)
+                resonance = ResonanceEdge(source_id=user_id, target_id=agent_id, affinity_level=10.0)
+                if user_id not in self.resonances:
+                    self.resonances[user_id] = {}
+                self.resonances[user_id][agent_id] = resonance
+
             resonance.shared_memories.append(episode.id)
 
             await self._save()
