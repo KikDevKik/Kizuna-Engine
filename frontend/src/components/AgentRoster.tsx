@@ -280,8 +280,8 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         className="flex flex-col items-center justify-center w-full h-[700px] relative overflow-hidden"
       >
         {error && (
-            <div className="absolute top-4 text-red-500 font-mono text-xs bg-black/50 p-2 border border-red-500 z-50">
-                CONNECTION_ERROR: {error}
+            <div className="absolute top-4 text-alert-red font-technical text-sm bg-abyssal-black/90 p-4 border border-alert-red z-[300] shadow-[0_0_20px_rgba(255,51,102,0.4)] backdrop-blur-md tracking-widest uppercase">
+                {'>'} CONNECTION_ERROR: {error}
             </div>
         )}
 
@@ -386,7 +386,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         </div>
 
         {/* CONTROLS */}
-        <motion.div variants={shardVariants} className="mt-12 flex gap-8 z-50 relative">
+        <motion.div variants={shardVariants} className="mt-12 flex gap-8 z-[200] relative">
           <button
             onClick={() => rotateCarousel(-1)}
             disabled={isFirst}
