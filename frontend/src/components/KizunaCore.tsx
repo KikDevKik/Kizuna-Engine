@@ -84,10 +84,6 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isListening: 
 
   return (
     <div className="kizuna-core-container">
-      {/* Outer Rings (Decorative) */}
-      <div className="absolute inset-0 border border-electric-blue/20 rounded-full scale-150 animate-pulse" />
-      <div className="absolute inset-0 border border-electric-blue/10 rounded-full scale-125" />
-
       {/* The Core */}
       <div
         ref={coreRef}
@@ -96,13 +92,6 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isListening: 
       >
         {/* Inner Glint */}
         <div className="absolute top-1/4 left-1/4 w-2 h-2 bg-white/50 rounded-full blur-[1px]" />
-      </div>
-
-      {/* Label under core */}
-      <div className="absolute -bottom-16 text-center">
-        <div className="font-technical text-xs tracking-widest opacity-60">
-           STATUS: {status.toUpperCase()}
-        </div>
       </div>
     </div>
   );
