@@ -206,4 +206,4 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
         logger.info("WebSocket session closed.")
         # Phase 4: Entering REM Sleep (Debounced Consolidation)
         # Schedule consolidation after grace period.
-        await sleep_manager.schedule_sleep(user_id)
+        asyncio.create_task(sleep_manager.schedule_sleep(user_id))
