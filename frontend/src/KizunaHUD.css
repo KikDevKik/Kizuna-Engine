@@ -1,401 +1,147 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=Oswald:wght@400;500;700&family=Roboto+Condensed:ital,wght@0,300..900;1,300..900&family=Teko:wght@300..700&display=swap');
-
-:root {
-  /* DARK WATER PALETTE */
-  --color-electric-blue: #00D1FF;       /* High Frequency Cyan */
-  --color-vintage-navy: #112D54;        /* Deep Ocean Anchor */
-  --color-abyssal-black: #05080F;       /* Dystopian Black (Not Pure #000) */
-  --color-translucent-cyan: rgba(125, 249, 255, 0.15); /* Fractal Water */
-  --color-alert-red: #FF3366;           /* Critical Alert */
-
-  /* FLUID PHYSICS CONSTANTS */
-  --damping-factor: 0.85;
-}
-
-body {
-  background-color: var(--color-abyssal-black);
-  color: #fff;
-  font-family: 'Inter', sans-serif;
-  margin: 0;
-  overflow: hidden; /* Prevent scrollbars in the app view */
-}
-
 /* -------------------------------------------------------------------------- */
-/* 1. VIEWPORT & PARALLAX LAYERS                                              */
+/* 11. PERIPHERAL SHARDS (VISION & EPISTEMIC)                                 */
 /* -------------------------------------------------------------------------- */
 
-.kizuna-engine-viewport {
-  width: 100vw;
-  height: 100vh;
+/* Vision Panel Shard Structure */
+.shard-vision-wrapper {
   position: relative;
-  overflow: hidden;
-  perspective: 1000px;
-  background: radial-gradient(circle at center, #1C2436 0%, var(--color-abyssal-black) 80%);
+  width: 320px; /* w-80 */
+  height: 256px; /* h-64 */
+  padding: 1px; /* Border thickness */
+  background: var(--color-electric-blue);
+  /* Top-Right aligned, jagged bottom-left cut */
+  clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 20% 100%, 0% 80%);
+  filter: drop-shadow(0 0 5px rgba(0, 209, 255, 0.3));
 }
 
-.layer-abyssal-background {
-  position: absolute;
-  top: -10%; left: -10%; right: -10%; bottom: -10%;
-  background-image:
-    linear-gradient(45deg, rgba(17, 45, 84, 0.3) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(17, 45, 84, 0.3) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(17, 45, 84, 0.3) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(17, 45, 84, 0.3) 75%);
-  background-size: 40px 40px;
-  opacity: 0.15;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.water-caustics-shader {
-  /* Placeholder for WebGL shader or heavy CSS animation */
-  position: absolute;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: radial-gradient(circle at 50% 50%, rgba(0, 209, 255, 0.03), transparent 60%);
-  animation: pulse-deep 8s infinite alternate ease-in-out;
-}
-
-@keyframes pulse-deep {
-  0% { opacity: 0.3; transform: scale(1); }
-  100% { opacity: 0.6; transform: scale(1.1); }
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* 2. GEOMETRY & PANELS (SKEW / CLIP-PATH)                                    */
-/* -------------------------------------------------------------------------- */
-
-.kizuna-panel-base {
-  position: relative;
-  background: rgba(17, 45, 84, 0.65); /* Vintage Navy translúcido */
-  border-left: 4px solid var(--color-electric-blue);
-  box-shadow: -5px 5px 20px rgba(5, 8, 15, 0.8);
-  backdrop-filter: blur(12px) saturate(110%);
-  /* Agresive Geometry Base */
-  transform: skewX(-10deg);
-}
-
-.kizuna-panel-content {
-  /* Inverse Skew to restore content readability */
-  transform: skewX(10deg);
-  padding: 1.5rem;
-}
-
-/* Specialized Shapes via Clip-Path */
-.shape-shard-output {
-  clip-path: polygon(2% 0%, 100% 0%, 98% 100%, 0% 100%);
-}
-
-.shape-shard-input {
-  clip-path: polygon(0% 0%, 95% 0%, 100% 20%, 100% 100%, 5% 100%, 0% 80%);
-}
-
-/* -------------------------------------------------------------------------- */
-/* 3. TYPOGRAPHY                                                              */
-/* -------------------------------------------------------------------------- */
-
-.font-monumental {
-  font-family: 'Roboto Condensed', sans-serif;
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #fff;
-  text-shadow:
-    2px 2px 0px var(--color-vintage-navy),
-    0 0 10px rgba(0, 209, 255, 0.4);
-}
-
-.font-technical {
-  font-family: 'Teko', sans-serif;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  color: var(--color-electric-blue);
-}
-
-.font-narrative {
-  font-family: 'Inter', sans-serif;
-  font-weight: 400;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.95);
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* 4. LIQUID GLASSMORPHISM                                                    */
-/* -------------------------------------------------------------------------- */
-
-.kizuna-liquid-glass {
-  background: linear-gradient(
-    135deg,
-    rgba(28, 71, 97, 0.45) 0%,
-    rgba(5, 8, 15, 0.70) 100%
-  );
-  backdrop-filter: blur(20px) saturate(120%) brightness(90%);
-  border-top: 1px solid rgba(125, 249, 255, 0.3);
-  border-left: 1px solid rgba(125, 249, 255, 0.15);
-  box-shadow:
-    0 15px 35px 0 rgba(5, 8, 15, 0.85),
-    inset 0 0 30px rgba(0, 209, 255, 0.05);
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* 5. KIZUNA CORE (THE SACRED ENGINE VISUALIZER)                              */
-/* -------------------------------------------------------------------------- */
-
-.kizuna-core-container {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 200px;
-  height: 200px;
-}
-
-.ai-core-indicator {
-  width: 100px;
-  height: 100px;
-  background: radial-gradient(circle at center, rgba(0, 209, 255, 0.6), transparent 70%);
-  border-radius: 50%;
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-/* STATE: IDLE (Liquid Breathing) */
-.ai-core-indicator[data-state="idle"] {
-  animation: liquid-breathing 6s ease-in-out infinite;
-  box-shadow: 0 0 20px rgba(17, 45, 84, 0.6);
-}
-
-@keyframes liquid-breathing {
-  0%, 100% {
-    transform: translateY(0px) scale(1) rotate(0deg);
-    border-radius: 40% 60% 50% 50% / 40% 50% 60% 50%;
-    opacity: 0.8;
-  }
-  50% {
-    transform: translateY(-10px) scale(1.1) rotate(5deg);
-    border-radius: 50% 50% 40% 60% / 50% 40% 50% 60%;
-    opacity: 1;
-    filter: drop-shadow(0 0 25px rgba(0, 209, 255, 0.4));
-  }
-}
-
-/* STATE: LISTENING / PROCESSING (Liquid Resonance) */
-.ai-core-indicator[data-state="listening"] {
-  width: 100px;
-  height: 100px;
-  background: radial-gradient(circle at center, rgba(0, 209, 255, 0.9), transparent 70%); /* More solid/active than idle */
-  border-radius: 50%;
-  box-shadow: 0 0 40px rgba(0, 209, 255, 0.5);
-
-  /* JS controls size via --vol-scale */
-  transform: scale(var(--vol-scale, 1));
-
-  /* Rapid fluid distortion (Sound Vibration) */
-  animation: liquid-resonance 0.5s ease-in-out infinite alternate;
-  filter: drop-shadow(0 0 20px rgba(0, 209, 255, 0.6));
-}
-
-@keyframes liquid-resonance {
-  0% {
-    border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%;
-  }
-  25% {
-     border-radius: 55% 45% 52% 48% / 48% 55% 45% 50%;
-  }
-  50% {
-     border-radius: 50% 50% 45% 55% / 55% 45% 50% 50%;
-  }
-  75% {
-      border-radius: 45% 55% 48% 52% / 50% 48% 55% 45%;
-  }
-  100% {
-     border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%;
-  }
-}
-
-/* STATE: SPEAKING (Volumetric Expansion) */
-.ai-core-indicator[data-state="speaking"] {
-  background: radial-gradient(circle, #fff 10%, var(--color-electric-blue) 90%);
-  box-shadow: 0 0 50px var(--color-electric-blue), 0 0 100px var(--color-electric-blue);
-  /* The scale is handled via JS (CSS variable --vol-scale) for perf */
-  transform: scale(var(--vol-scale, 1));
-  border-radius: 50%;
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* 6. 3D AGENT CAROUSEL                                                       */
-/* -------------------------------------------------------------------------- */
-
-.agent-card-glass {
+.shard-vision-inner {
   width: 100%;
   height: 100%;
-  border: 1px solid rgba(0, 209, 255, 0.3);
-  background: linear-gradient(160deg, rgba(20,20,20,0.8) 0%, rgba(5,8,15,0.95) 100%);
-  clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%); /* Cut corners */
+  background: rgba(5, 8, 15, 0.95);
+  clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 20% 100%, 0% 80%);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 1.5rem;
-  transition: all 0.3s ease;
 }
 
-.agent-card-glass:hover {
-  border-color: var(--color-electric-blue);
-  box-shadow: 0 0 20px rgba(0, 209, 255, 0.2);
-}
-
-.agent-card-title {
-  font-family: 'Oswald', sans-serif;
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--color-electric-blue);
-  text-shadow: 2px 2px 0 #000;
-  margin: 0;
-}
-
-.agent-card-role {
-  font-family: 'Teko', sans-serif;
-  font-size: 1.2rem;
-  text-transform: uppercase;
-  color: #aaa;
-  margin-top: -5px;
-}
-
-/* -------------------------------------------------------------------------- */
-/* 7. UTILITIES                                                               */
-/* -------------------------------------------------------------------------- */
-
-.glitch-text:hover {
-  animation: glitch-anim 0.3s cubic-bezier(.25, .46, .45, .94) both infinite;
-  color: var(--color-electric-blue);
-}
-
-@keyframes glitch-anim {
-  0% { transform: translate(0) }
-  20% { transform: translate(-2px, 2px) }
-  40% { transform: translate(-2px, -2px) }
-  60% { transform: translate(2px, 2px) }
-  80% { transform: translate(2px, -2px) }
-  100% { transform: translate(0) }
-}
-
-/* -------------------------------------------------------------------------- */
-/* 8. GEOMETRIC AGGRESSION BUTTONS (SHARD)                                    */
-/* -------------------------------------------------------------------------- */
-
-/* Wrapper para el borde brillante */
-.kizuna-shard-btn-wrapper {
+/* Epistemic Panel Shard Structure */
+.shard-epistemic-wrapper {
   position: relative;
-  display: inline-block;
-  padding: 2px; /* Grosor del borde */
-  background: var(--color-electric-blue); /* Color del borde */
-  clip-path: polygon(0% 20%, 10% 0%, 100% 0%, 100% 80%, 90% 100%, 0% 100%);
-  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-  filter: drop-shadow(0 0 5px rgba(0, 209, 255, 0.4));
-  border: none;
-  cursor: pointer;
+  width: 384px; /* w-96 */
+  max-height: 384px; /* max-h-96 */
+  padding: 1px;
+  background: var(--color-electric-blue);
+  /* Bottom-Right aligned, jagged top-left cut */
+  clip-path: polygon(20% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 20%);
+  filter: drop-shadow(0 0 5px rgba(0, 209, 255, 0.3));
+  margin-bottom: 1rem;
 }
 
-.kizuna-shard-btn-wrapper:hover {
-  filter: drop-shadow(0 0 15px rgba(0, 209, 255, 0.8));
-  transform: scale(1.05);
+.shard-epistemic-inner {
+  width: 100%;
+  height: 100%;
+  background: rgba(5, 8, 15, 0.9);
+  clip-path: polygon(20% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 20%);
+  display: flex;
+  flex-direction: column;
 }
 
-.kizuna-shard-btn-wrapper:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  filter: none;
-}
+/* -------------------------------------------------------------------------- */
+/* 12. RITUAL VOID PORTAL ANIMATION                                           */
+/* -------------------------------------------------------------------------- */
 
-/* Interior oscuro del botón */
-.kizuna-shard-btn-inner {
-  background: rgba(5, 8, 15, 0.95); /* Negro Abisal */
-  color: var(--color-electric-blue);
-  font-family: 'Roboto Condensed', sans-serif;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  padding: 12px 32px;
-  clip-path: polygon(0% 20%, 10% 0%, 100% 0%, 100% 80%, 90% 100%, 0% 100%);
+.ritual-void-portal {
+  position: relative;
+  width: 80px;
+  height: 80px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  width: 100%;
-  height: 100%;
 }
 
-.kizuna-shard-btn-wrapper:active .kizuna-shard-btn-inner {
+.void-core {
+  width: 10px;
+  height: 10px;
   background: var(--color-electric-blue);
-  color: #000;
+  border-radius: 50%;
+  box-shadow: 0 0 20px var(--color-electric-blue), 0 0 40px var(--color-electric-blue);
+  animation: void-pulse-core 3s ease-in-out infinite alternate;
+}
+
+.void-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(0, 209, 255, 0.3);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.void-ring:nth-child(1) {
+  width: 40px;
+  height: 40px;
+  border-color: rgba(0, 209, 255, 0.6);
+  border-left-color: transparent;
+  border-right-color: transparent;
+  animation: void-spin 4s linear infinite;
+}
+
+.void-ring:nth-child(2) {
+  width: 60px;
+  height: 60px;
+  border-color: rgba(0, 209, 255, 0.3);
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+  animation: void-spin-reverse 7s linear infinite;
+}
+
+.void-ring:nth-child(3) {
+  width: 80px;
+  height: 80px;
+  border: 1px dashed rgba(0, 209, 255, 0.15);
+  animation: void-spin 12s linear infinite;
+}
+
+@keyframes void-pulse-core {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  100% { transform: scale(1.2); opacity: 1; }
+}
+
+@keyframes void-spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes void-spin-reverse {
+  0% { transform: translate(-50%, -50%) rotate(360deg); }
+  100% { transform: translate(-50%, -50%) rotate(0deg); }
 }
 
 /* -------------------------------------------------------------------------- */
-/* 9. SHARD NAV BUTTONS                                                       */
+/* 13. GLOBAL ATMOSPHERIC OVERLAY                                             */
 /* -------------------------------------------------------------------------- */
 
-.kizuna-shard-nav-btn {
-  position: relative;
-  display: inline-block;
-  padding: 1px; /* Thinner border for nav */
-  background: var(--color-electric-blue);
-  clip-path: polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%); /* Trapezoid */
-  transition: all 0.3s ease;
-  border: none;
-  cursor: pointer;
-  opacity: 0.6; /* Inactive state by default */
+.global-overlay-vignette {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: radial-gradient(circle, transparent 60%, rgba(5, 8, 15, 0.8) 100%);
+  pointer-events: none;
+  z-index: 900;
 }
 
-.kizuna-shard-nav-btn:hover {
-  opacity: 0.8;
-  transform: translateY(-2px);
-}
-
-.kizuna-shard-nav-btn.active {
-  opacity: 1;
-  filter: drop-shadow(0 0 8px rgba(0, 209, 255, 0.6));
-}
-
-.kizuna-shard-nav-inner {
-  background: var(--color-abyssal-black);
-  color: var(--color-electric-blue);
-  font-family: 'Teko', sans-serif;
-  font-weight: 500;
-  font-size: 1.1rem;
-  letter-spacing: 0.05em;
-  padding: 4px 24px;
-  clip-path: polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-}
-
-.kizuna-shard-nav-btn.active .kizuna-shard-nav-inner {
-  background: var(--color-electric-blue);
-  color: var(--color-abyssal-black);
-  font-weight: 700;
-}
-
-/* -------------------------------------------------------------------------- */
-/* 10. UNIFIED SHARD UTILITIES (AUTO-GENERATED)                               */
-/* -------------------------------------------------------------------------- */
-
-.shape-shard-avatar {
-  clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);
-}
-
-.shape-shard-create {
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-}
-
-.shape-modal-shard {
-  clip-path: polygon(2% 0, 100% 0, 100% 95%, 98% 100%, 0 100%, 0 5%);
-}
-
-.font-log {
-  font-family: 'Teko', sans-serif;
-  letter-spacing: 0.05em;
+.global-overlay-scanlines {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0) 50%,
+    rgba(0, 0, 0, 0.2) 50%,
+    rgba(0, 0, 0, 0.2)
+  );
+  background-size: 100% 3px;
+  opacity: 0.05; /* Subtle texture, barely visible */
+  pointer-events: none;
+  z-index: 901;
+  mix-blend-mode: overlay;
 }

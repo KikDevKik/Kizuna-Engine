@@ -35,6 +35,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="kizuna-engine-viewport">
+      {/* GLOBAL ATMOSPHERIC OVERLAY (Vignette & Scanlines) */}
+      <div className="global-overlay-vignette" />
+      <div className="global-overlay-scanlines" />
+
       {/* ESTRATO -10: FONDO ABISAL */}
       <motion.div
         className="layer-abyssal-background"

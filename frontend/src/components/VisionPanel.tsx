@@ -80,8 +80,9 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage,
             initial={{ opacity: 0, x: 50, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 50, scale: 0.9 }}
-            className="mt-4 w-80 h-64 bg-abyssal-black/90 border border-electric-blue/30 backdrop-blur-lg rounded-bl-3xl overflow-hidden shadow-lg shadow-vintage-navy/20 flex flex-col"
+            className="mt-4 shard-vision-wrapper"
           >
+            <div className="shard-vision-inner">
             {/* Header */}
             <div className="flex items-center justify-between p-2 border-b border-electric-blue/20 bg-abyssal-black/40">
                <span className="font-technical text-xs tracking-widest text-electric-blue/80">
@@ -134,7 +135,7 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage,
             </div>
 
             {/* Control Footer */}
-            <div className="flex justify-around items-center p-3 bg-abyssal-black/60 border-t border-electric-blue/20 backdrop-blur-md">
+            <div className="flex justify-around items-center p-3 bg-abyssal-black/60 border-t border-electric-blue/20 backdrop-blur-md mt-auto">
                 <VisionButton
                     active={visionMode === 'camera'}
                     onClick={() => setVisionMode('camera')}
@@ -157,6 +158,7 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage,
                     disabled={!connected && visionMode === 'off'}
                     isDestructive
                 />
+            </div>
             </div>
           </motion.div>
         )}
