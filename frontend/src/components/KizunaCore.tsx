@@ -103,9 +103,6 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isListening: 
         <div className="font-technical text-xs tracking-widest opacity-60">
            STATUS: {status.toUpperCase()}
         </div>
-        <div className="font-monumental text-xl tracking-tighter text-electric-blue">
-           {visualState.toUpperCase()}
-        </div>
       </div>
     </div>
   );
