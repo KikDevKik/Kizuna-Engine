@@ -20,10 +20,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const backgroundX = useTransform(smoothMouseX, [0, window.innerWidth], [-15, 15]);
   const backgroundY = useTransform(smoothMouseY, [0, window.innerHeight], [-15, 15]);
 
-  // Capa Midground (10): HUD Táctico, movimiento sutil opuesto
-  const midgroundX = useTransform(smoothMouseX, [0, window.innerWidth], [10, -10]);
-  const midgroundY = useTransform(smoothMouseY, [0, window.innerHeight], [10, -10]);
-
   // Capa Primer Plano (50): Core Interactivo, movimiento rápido opuesto
   const foregroundX = useTransform(smoothMouseX, [0, window.innerWidth], [30, -30]);
   const foregroundY = useTransform(smoothMouseY, [0, window.innerHeight], [30, -30]);
@@ -47,26 +43,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="water-caustics-shader" />
       </motion.div>
 
-      {/* ESTRATO 10: HUD TÁCTICO (NUEVO) */}
-      <motion.div
-        className="layer-tactical-hud"
-        style={{
-            x: midgroundX,
-            y: midgroundY,
-            position: 'absolute',
-            inset: 0,
-            zIndex: 10,
-            pointerEvents: 'none'
-        }}
-      >
-        {/* Elementos decorativos flotantes independientes del Core */}
-        <svg className="absolute top-10 right-10 w-24 h-24 opacity-40 animate-spin-slow">
-            <circle cx="50" cy="50" r="40" stroke="#00D1FF" strokeWidth="1" fill="none" strokeDasharray="5,5" />
-        </svg>
-        <div className="absolute bottom-20 left-10 font-technical text-xs text-cyan-700">
-            COORD: {smoothMouseX.get().toFixed(0)} : {smoothMouseY.get().toFixed(0)}
-        </div>
-      </motion.div>
 
       {/* ESTRATO 50: CORE INTERACTIVO */}
       <motion.div
