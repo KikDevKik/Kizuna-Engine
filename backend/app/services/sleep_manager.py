@@ -17,8 +17,8 @@ class SleepManager:
         self.repository = repository
         # Map user_id -> asyncio.TimerHandle (or Task)
         self.active_timers: Dict[str, asyncio.Task] = {}
-        # Default grace period in seconds (e.g., 300s = 5 mins)
-        self.grace_period = 300
+        # Default grace period in seconds (e.g., 30s)
+        self.grace_period = 30
         self._is_shutting_down = False
 
     async def restore_state(self):
@@ -139,6 +139,7 @@ class SleepManager:
     async def shutdown(self):
         """
         Gracefully shutdown all pending sleep/consolidation tasks.
+        Ensures that any pending memory consolidation is executed before exit.
         """
         self._is_shutting_down = True
         logger.info("🛑 SleepManager shutting down...")
@@ -146,14 +147,23 @@ class SleepManager:
         if not self.active_timers:
             return
 
-        tasks = list(self.active_timers.values())
-        for task in tasks:
-            if not task.done():
-                task.cancel()
+        consolidation_tasks = []
+        pending_users = list(self.active_timers.keys())
 
-        # Await clean cancellation
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        for user_id in pending_users:
+            task = self.active_timers.get(user_id)
+            if task and not task.done():
+                logger.info(f"🛑 Force-triggering pending consolidation for {user_id}...")
+                task.cancel()  # Cancel the waiting timer
+
+                # Create a task for immediate consolidation
+                consolidation_task = asyncio.create_task(self._trigger_consolidation(user_id))
+                consolidation_tasks.append(consolidation_task)
+
+        # Await all consolidations
+        if consolidation_tasks:
+            logger.info(f"🛑 Waiting for {len(consolidation_tasks)} consolidations to complete...")
+            await asyncio.gather(*consolidation_tasks, return_exceptions=True)
 
         self.active_timers.clear()
-        logger.info("🛑 SleepManager shutdown complete.")
+        logger.info("🛑 SleepManager shutdown complete. All memories secured.")

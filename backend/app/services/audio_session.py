@@ -118,17 +118,10 @@ async def send_to_gemini(websocket: WebSocket, session):
                 except Exception as e:
                     logger.error(f"Error handling text message: {e}")
 
-    except (WebSocketDisconnect, ConnectionClosed, ConnectionClosedOK, ConnectionClosedError):
-        logger.info("Client disconnected (send_to_gemini)")
-        # Send remaining audio if any?
-        # Usually if user disconnects we don't care, but for completeness:
-        if len(audio_buffer) > 0:
-             try:
-                 await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
-             except Exception:
-                 pass
-        # Do not re-raise, exit cleanly
-        return
+    except (WebSocketDisconnect, ConnectionClosed, ConnectionClosedOK, ConnectionClosedError) as e:
+        logger.info(f"Client disconnected (send_to_gemini): {e}")
+        # Re-raise to trigger TaskGroup cancellation of other tasks (e.g. receive loop)
+        raise e
 
     except Exception as e:
         # Check for specific string patterns if exception type is generic
@@ -221,9 +214,10 @@ async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: a
 
             logger.info("Gemini session.receive() iterator exhausted. Re-entering loop to listen for next turn...")
 
-    except (WebSocketDisconnect, ConnectionClosed, ConnectionClosedOK, ConnectionClosedError):
-        logger.info("Client disconnected (receive_from_gemini)")
-        return
+    except (WebSocketDisconnect, ConnectionClosed, ConnectionClosedOK, ConnectionClosedError) as e:
+        logger.info(f"Client disconnected (receive_from_gemini): {e}")
+        # Re-raise to trigger TaskGroup cancellation of other tasks
+        raise e
 
     except Exception as e:
         logger.error(f"Error receiving from Gemini: {e}")

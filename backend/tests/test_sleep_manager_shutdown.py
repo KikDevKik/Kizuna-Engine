@@ -37,10 +37,13 @@ async def test_shutdown_prevents_scheduling():
     assert len(sleep_manager.active_timers) == 0
 
 @pytest.mark.asyncio
-async def test_shutdown_cancels_existing_tasks():
+async def test_shutdown_triggers_consolidation():
     # Mock dependencies
     repo_mock = Mock()
     sleep_manager = SleepManager(repo_mock)
+
+    # Mock _trigger_consolidation so we can verify it's called
+    sleep_manager._trigger_consolidation = AsyncMock()
 
     # Schedule a task
     await sleep_manager.schedule_sleep("user_3", delay=10) # 10s delay
@@ -51,8 +54,13 @@ async def test_shutdown_cancels_existing_tasks():
     # Shutdown
     await sleep_manager.shutdown()
 
-    # Task should be cancelled and removed
-    assert task.cancelled() or task.done()
+    # The timer task should be cancelled
+    assert task.cancelled()
+
+    # BUT consolidation should have been triggered immediately
+    sleep_manager._trigger_consolidation.assert_called_with("user_3")
+
+    # And removed from active timers
     assert "user_3" not in sleep_manager.active_timers
 
 if __name__ == "__main__":
