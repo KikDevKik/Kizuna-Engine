@@ -80,7 +80,7 @@ Este documento detalla los pasos secuenciales para transformar la implementació
 
 --------------------------------------------------------------------------------
 
-## Fase 5: Ascensión a la Nube (Próximos Pasos)
+## Fase 5: Ascensión a la Nube (En Foco Actual)
 **Objetivo**: Migrar la infraestructura local validada a Google Cloud Platform para producción masiva.
 
 ### 1. [CLOUD] Migración a Spanner (Pendiente)
@@ -89,3 +89,19 @@ Este documento detalla los pasos secuenciales para transformar la implementació
 
 ### 2. [CLOUD] Despliegue de Redis (Pendiente)
 - **Acción**: Activar caché distribuida en entorno de producción (GCP Memorystore).
+
+--------------------------------------------------------------------------------
+
+## Fase 6: Refinamiento y Memoria Profunda (Optimización)
+**Objetivo**: Convertir el prototipo en un motor de producción robusto y con memoria semántica real.
+
+### 1. [BACKEND] Refactorización de Sesión (Pendiente)
+- **Acción**: Migrar la lógica de WebSocket inline en `main.py` a una clase dedicada `SessionManager`.
+- **Beneficio**: Mejor testabilidad y modularidad del ciclo de vida de la conexión.
+
+### 2. [BACKEND] RAG con Embeddings (Pendiente)
+- **Acción**: Implementar búsqueda vectorial real en `SoulRepository` usando `embedding.py`.
+- **Beneficio**: Reemplazar la búsqueda por palabras clave en `get_relevant_facts` con búsqueda semántica (text-embedding-004).
+
+### 3. [FRONTEND] Optimización de Audio (Pendiente)
+- **Acción**: Refinar el algoritmo de Jitter Buffer en `AudioStreamManager.ts` para manejar mejor redes inestables (packet loss concealment).
