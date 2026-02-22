@@ -7,11 +7,15 @@ La arquitectura actual está diseñada como un sistema de streaming multimodal (
 
 ### Backend (backend/app/)
 - **Tecnología**: Python, FastAPI, Uvicorn, google-genai SDK.
+- **Orquestación de Sesión**: La lógica WebSocket reside en `main.py`, utilizando `asyncio.TaskGroup` para gestionar simultáneamente:
+    - `audio_session.send_to_gemini`: Streaming de audio upstream.
+    - `audio_session.receive_from_gemini`: Streaming downstream.
+    - `subconscious_mind.start`: Análisis paralelo de sentimientos.
 - **Flujo de Datos**:
     1. **Recepción Multimodal (Client -> Gemini)**:
        - **Audio**: Recibe audio PCM (16kHz, 16-bit, mono) con buffering de ~100ms.
        - **Visión**: Recibe frames JPEG base64 (max 480px, calidad 0.5) para análisis visual.
-       - **Bio-Feedback**: Endpoint `/api/bio/submit` ingesta BPM para modular hints del sistema.
+       - **Bio-Feedback**: Endpoint `/api/bio/submit` ingesta BPM para modular hints del sistema (vía `SubconsciousMind`).
     2. **Envío (Gemini -> Client)**: Recibe chunks de audio y texto de Gemini en tiempo real y los reenvía al cliente mediante un protocolo JSON personalizado (`{'type': 'audio', ...}`, `{'type': 'turn_complete'}`).
 - **Model Waterfall**: Implementa estrategia de fallback (Cascada) en `SubconsciousMind` y `RitualService`. Si un modelo devuelve error 429 (Rate Limit), el sistema intenta automáticamente con el siguiente en la lista configurada (`settings.MODEL_SUBCONSCIOUS`), asegurando continuidad operativa.
 - **Memoria y Mente**:
