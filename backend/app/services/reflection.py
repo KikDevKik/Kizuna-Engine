@@ -1,0 +1,147 @@
+import asyncio
+import logging
+import random
+import httpx
+from asyncio import Queue
+from datetime import datetime
+from core.config import settings
+from ..models.graph import AgentNode
+
+# Try import genai
+try:
+    from google import genai
+    from google.genai import types
+    from google.genai import errors as genai_errors
+except ImportError:
+    genai = None
+    genai_errors = None
+
+logger = logging.getLogger(__name__)
+
+class ReflectionMind:
+    """
+    The Inner Critic (Self-Reflection Module).
+    Analyzes the AI's own output to ensure persona consistency and quality.
+    Operates as the Agent's internal monologue/conscience.
+    """
+    def __init__(self):
+        self.client = None
+        if genai and settings.GEMINI_API_KEY:
+            self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+    async def start(self, ai_transcript_queue: Queue, injection_queue: Queue, agent: AgentNode):
+        """
+        Main loop for the Reflection Mind.
+        """
+        logger.info(f"🪞 Reflection Mind activated for Agent: {agent.name}")
+
+        try:
+            while True:
+                try:
+                    # Wait for AI's spoken text
+                    text_segment = await ai_transcript_queue.get()
+
+                    if not text_segment:
+                        continue
+
+                    # Throttling Logic (Trait-Based)
+                    # "neuroticism" (0.0 - 1.0): High = more reflection. Low = less.
+                    # Default to 0.5 (Moderate) if missing.
+                    neuroticism = agent.traits.get("neuroticism", 0.5)
+
+                    # Base chance: 0.2 + (0.6 * neuroticism)
+                    # Low neuroticism (0.0) -> 20% chance
+                    # High neuroticism (1.0) -> 80% chance
+                    reflection_chance = 0.2 + (0.6 * neuroticism)
+
+                    if random.random() > reflection_chance:
+                        # Skip reflection this turn to save latency/tokens and avoid overthinking
+                        continue
+
+                    # Analyze (Real or Mock)
+                    correction = await self._reflect(text_segment, agent)
+
+                    if correction:
+                        logger.info(f"🪞 Inner Voice: {correction}")
+
+                        # Inject Correction
+                        payload = {
+                            "text": f"SYSTEM_HINT: [{agent.name} Inner Voice]: {correction}",
+                            "turn_complete": False
+                        }
+                        await injection_queue.put(payload)
+
+                except Exception:
+                    logger.exception("🪞 Reflection Mind iteration error. Recovering...")
+                    await asyncio.sleep(1)
+
+        except asyncio.CancelledError:
+            logger.info("🪞 Reflection Mind deactivated.")
+            pass
+
+    async def _reflect(self, text: str, agent: AgentNode) -> str | None:
+        """
+        Analyzes the text for persona drift using Gemini.
+        """
+        mock_mode = settings.MOCK_GEMINI
+
+        if self.client and not mock_mode:
+            try:
+                # Dynamic Prompt Loading
+                prompt_template = (
+                    "You are the inner voice/conscience of {name}. Read your own recent spoken output below.\n"
+                    "Based on your lore ({base_instruction}) and your personality traits ({traits}), are you staying true to yourself?\n"
+                    "Are you sounding too robotic, too formal, or drifting from your character?\n"
+                    "If you feel you are losing your 'vibe', give yourself a quick, in-character mental slap (max 10 words).\n"
+                    "If you are acting naturally, return nothing."
+                )
+
+                system_instruction = prompt_template.format(
+                    name=agent.name,
+                    base_instruction=agent.base_instruction,
+                    traits=str(agent.traits)
+                )
+
+                # Waterfall Logic (Reuse Subconscious Model or dedicated one?)
+                # User suggested gemini-3.0-flash or 2.5 fallback.
+                # We'll use MODEL_SUBCONSCIOUS for now as it fits the "background thought" tier.
+                models = settings.MODEL_SUBCONSCIOUS
+                if isinstance(models, str):
+                    models = [models]
+
+                response = None
+
+                for model in models:
+                    try:
+                        response = await self.client.aio.models.generate_content(
+                            model=model,
+                            contents=text,
+                            config=types.GenerateContentConfig(
+                                system_instruction=types.Content(
+                                    parts=[types.Part(text=system_instruction)]
+                                )
+                            )
+                        )
+                        break
+                    except (httpx.RemoteProtocolError, httpx.ConnectError) as e:
+                        logger.debug(f"Reflection inference network error on {model}: {e}")
+                        continue
+                    except Exception as e:
+                        if genai_errors and isinstance(e, genai_errors.ClientError) and e.code == 429:
+                            continue
+                        logger.warning(f"Reflection inference failed on {model}: {e}")
+                        continue
+
+                if response and response.text:
+                    result = response.text.strip()
+                    # Filter out empty or "Nothing" responses
+                    if not result or result.lower() in ["nothing", "none", "no correction"]:
+                        return None
+                    return result
+
+            except Exception as e:
+                logger.warning("Reflection inference failed (Global).", exc_info=True)
+
+        return None
+
+reflection_mind = ReflectionMind()

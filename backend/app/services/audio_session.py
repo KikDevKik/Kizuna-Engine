@@ -56,7 +56,7 @@ async def send_injections_to_gemini(session, injection_queue: asyncio.Queue):
         pass
 
 
-async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[str] | None = None):
+async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[str] | None = None, transcript_queue: asyncio.Queue | None = None):
     """
     Task A: Client -> Gemini
     Reads audio bytes from WebSocket and sends to Gemini session.
@@ -110,7 +110,15 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
                         # If the payload is just text content (e.g. {type: "text", text: "Hello"})
                         # Or if the payload itself IS the text (though it's json.loads parsed)
                         if payload.get("type") == "text" and payload.get("data"):
-                             transcript_buffer.append(f"User: {payload.get('data')}")
+                             user_content = payload.get('data')
+                             transcript_buffer.append(f"User: {user_content}")
+
+                             # Feed Subconscious Mind (Direct Text Input)
+                             if transcript_queue:
+                                 try:
+                                     transcript_queue.put_nowait(user_content)
+                                 except Exception as e:
+                                     logger.warning(f"Failed to queue user text transcript: {e}")
 
                     if payload.get("type") == "image":
                         # Phase 5: Ojos Digitales
@@ -150,6 +158,7 @@ async def receive_from_gemini(
     websocket: WebSocket,
     session,
     transcript_queue: asyncio.Queue | None = None,
+    reflection_queue: asyncio.Queue | None = None,
     transcript_buffer: list[str] | None = None,
     agent_name: str = "AI"
 ):
@@ -216,6 +225,14 @@ async def receive_from_gemini(
                                         if transcript_buffer is not None:
                                             transcript_buffer.append(f"User: {user_text}")
 
+                                        # Feed Subconscious Mind (User Voice via Echo Protocol)
+                                        # Pollution Fix: Only user input goes here.
+                                        if transcript_queue:
+                                            try:
+                                                transcript_queue.put_nowait(user_text)
+                                            except Exception as e:
+                                                logger.warning(f"Failed to queue user transcript: {e}")
+
                                         # Remove the block from buffer
                                         text_to_process = turn_buffer.replace(match.group(0), "")
 
@@ -264,12 +281,12 @@ async def receive_from_gemini(
                                         raise WebSocketDisconnect()
                                     raise e
 
-                                # Feed the Subconscious Mind (Cleaned Text)
-                                if transcript_queue:
+                                # Feed Reflection Mind (AI Output)
+                                if reflection_queue:
                                     try:
-                                        transcript_queue.put_nowait(clean_text)
+                                        reflection_queue.put_nowait(clean_text)
                                     except Exception as e:
-                                        logger.warning(f"Failed to queue transcript: {e}")
+                                        logger.warning(f"Failed to queue reflection: {e}")
 
                     # Handle turn completion
                     if server_content.turn_complete:

@@ -11,6 +11,7 @@ from app.services.audio_session import (
 )
 from app.services.soul_assembler import assemble_soul
 from app.services.subconscious import subconscious_mind
+from app.services.reflection import reflection_mind
 from app.services.sleep_manager import SleepManager
 from app.services.cache import cache
 from app.repositories.base import SoulRepository
@@ -110,6 +111,7 @@ class SessionManager:
 
                 # Phase 2: Initialize Subconscious Channels
                 transcript_queue = asyncio.Queue()
+                reflection_queue = asyncio.Queue()
                 injection_queue = asyncio.Queue()
 
                 # Manage bidirectional streams and subconscious concurrently
@@ -123,7 +125,7 @@ class SessionManager:
                         # 1. Audio Upstream (Client -> Gemini)
                         tg.create_task(
                             send_to_gemini(
-                                websocket, session, session_transcript_buffer
+                                websocket, session, session_transcript_buffer, transcript_queue
                             )
                         )
 
@@ -133,6 +135,7 @@ class SessionManager:
                                 websocket,
                                 session,
                                 transcript_queue,
+                                reflection_queue,
                                 session_transcript_buffer,
                                 agent_name=agent_name,
                             )
@@ -149,6 +152,15 @@ class SessionManager:
                         tg.create_task(
                             send_injections_to_gemini(session, injection_queue)
                         )
+
+                        # 5. Reflection Mind (AI Output -> Self-Critique -> Injection Queue)
+                        if agent:
+                            tg.create_task(
+                                reflection_mind.start(
+                                    reflection_queue, injection_queue, agent
+                                )
+                            )
+
                 except WebSocketDisconnect:
                     logger.info("WebSocket disconnected by client.")
                 except Exception as e:
