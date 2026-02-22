@@ -116,16 +116,20 @@ class SleepManager:
             # Task was cancelled, do nothing
             pass
         finally:
-            # Cleanup map
-            if user_id in self.active_timers and self.active_timers[user_id] == asyncio.current_task():
-                del self.active_timers[user_id]
+            # Cleanup map with safety against Loop Close
+            try:
+                if user_id in self.active_timers and self.active_timers[user_id] == asyncio.current_task():
+                    del self.active_timers[user_id]
+            except RuntimeError:
+                # Loop is already closed (Shutdown race condition)
+                pass
 
     async def _trigger_consolidation(self, user_id: str):
         """
         Execute the consolidation logic.
         This represents the "Worker" taking over.
         """
-        logger.info(f"🌙 Grace Period expired for {user_id}. Entering REM Sleep (Consolidation)...")
+        logger.info(f"💾 Saving memories for {user_id} (Consolidation)...")
         try:
             # Use Subconscious Mind to generate dreams during consolidation
             await self.repository.consolidate_memories(
@@ -160,10 +164,19 @@ class SleepManager:
                 consolidation_task = asyncio.create_task(self._trigger_consolidation(user_id))
                 consolidation_tasks.append(consolidation_task)
 
-        # Await all consolidations
+        # Await all consolidations with timeout
         if consolidation_tasks:
-            logger.info(f"🛑 Waiting for {len(consolidation_tasks)} consolidations to complete...")
-            await asyncio.gather(*consolidation_tasks, return_exceptions=True)
+            count = len(consolidation_tasks)
+            logger.info(f"🛑 Waiting for {count} consolidations to complete (Max 10s)...")
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*consolidation_tasks, return_exceptions=True),
+                    timeout=10.0
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"⏳ Shutdown timed out. {count} memories might not be fully consolidated.")
+            except Exception as e:
+                logger.error(f"Error during shutdown wait: {e}")
 
         self.active_timers.clear()
         logger.info("🛑 SleepManager shutdown complete. All memories secured.")
