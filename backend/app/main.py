@@ -154,6 +154,9 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
     await websocket.accept()
     logger.info(f"WebSocket connection established from origin: {origin} for Agent: {agent_id}")
 
+    # Master Session Logger: Global Transcript Accumulation
+    session_transcript_buffer: list[str] = []
+
     try:
         async with gemini_service.connect(system_instruction=system_instruction, voice_name=voice_name) as session:
             logger.info(f"Gemini session started for {agent_id}.")
@@ -171,10 +174,10 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
             try:
                 async with asyncio.TaskGroup() as tg:
                     # 1. Audio Upstream (Client -> Gemini)
-                    tg.create_task(send_to_gemini(websocket, session))
+                    tg.create_task(send_to_gemini(websocket, session, session_transcript_buffer))
 
                     # 2. Audio/Text Downstream (Gemini -> Client) + Transcript Feed
-                    tg.create_task(receive_from_gemini(websocket, session, transcript_queue))
+                    tg.create_task(receive_from_gemini(websocket, session, transcript_queue, session_transcript_buffer))
 
                     # 3. Subconscious Mind (Transcripts -> Analysis -> Injection Queue -> Persistence)
                     tg.create_task(subconscious_mind.start(transcript_queue, injection_queue, user_id, agent_id))
@@ -204,6 +207,23 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str | None = None, 
         logger.error(f"Unexpected error managing Gemini Session: {e}")
     finally:
         logger.info("WebSocket session closed.")
+
+        # Full Session Persistence (Master Session Logger)
+        if session_transcript_buffer:
+            full_transcript = "\n".join(session_transcript_buffer)
+            logger.info(f"Saving Full Session Transcript ({len(full_transcript)} chars) for {user_id}")
+            try:
+                # Valence 0.0 is neutral, summary is generic until dream processing
+                await soul_repo.save_episode(
+                    user_id=user_id,
+                    agent_id=agent_id,
+                    summary="Full Session Transcript",
+                    valence=0.0,
+                    raw_transcript=full_transcript
+                )
+            except Exception as e:
+                logger.error(f"Failed to save Master Session Transcript: {e}")
+
         # Phase 4: Entering REM Sleep (Debounced Consolidation)
         # Schedule consolidation after grace period.
         asyncio.create_task(sleep_manager.schedule_sleep(user_id))

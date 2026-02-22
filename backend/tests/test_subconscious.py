@@ -199,6 +199,7 @@ async def test_analyze_sentiment_agent_traits_fallback():
         traits=custom_traits
     )
     mock_repo.get_agent.return_value = custom_agent
+    mock_repo.get_agent_archetype.return_value = None  # Ensure we fall back to traits
 
     with patch("app.services.subconscious.settings") as mock_settings:
         mock_settings.MOCK_GEMINI = False

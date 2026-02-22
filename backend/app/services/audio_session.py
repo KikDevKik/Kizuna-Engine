@@ -55,7 +55,7 @@ async def send_injections_to_gemini(session, injection_queue: asyncio.Queue):
         pass
 
 
-async def send_to_gemini(websocket: WebSocket, session):
+async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[str] | None = None):
     """
     Task A: Client -> Gemini
     Reads audio bytes from WebSocket and sends to Gemini session.
@@ -100,6 +100,17 @@ async def send_to_gemini(websocket: WebSocket, session):
                 # --- VIDEO / CONTROL FLOW ---
                 try:
                     payload = json.loads(text)
+
+                    # Capture User Text (if provided)
+                    if transcript_buffer is not None:
+                        # Assuming 'text' type or implicit text in payload
+                        # Adjust based on actual client protocol if needed
+                        user_text = payload.get("text")
+                        # If the payload is just text content (e.g. {type: "text", text: "Hello"})
+                        # Or if the payload itself IS the text (though it's json.loads parsed)
+                        if payload.get("type") == "text" and payload.get("data"):
+                             transcript_buffer.append(f"User: {payload.get('data')}")
+
                     if payload.get("type") == "image":
                         # Phase 5: Ojos Digitales
                         # Payload: {type: "image", data: "base64..."}
@@ -134,7 +145,7 @@ async def send_to_gemini(websocket: WebSocket, session):
         # Don't re-raise to avoid crashing the whole session manager task group
         return
 
-async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: asyncio.Queue | None = None):
+async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: asyncio.Queue | None = None, transcript_buffer: list[str] | None = None):
     """
     Task B: Gemini -> Client + Subconscious
     Receives from Gemini and sends to WebSocket as custom JSON.
@@ -169,6 +180,11 @@ async def receive_from_gemini(websocket: WebSocket, session, transcript_queue: a
                             # Handle Text (if interleaved or final transcript)
                             if part.text:
                                 logger.info(f"Gemini -> Client: Text: {part.text[:50]}...")
+
+                                # Global Transcript Buffer
+                                if transcript_buffer is not None:
+                                    transcript_buffer.append(f"AI: {part.text}")
+
                                 try:
                                     await websocket.send_json({
                                         "type": "text",
