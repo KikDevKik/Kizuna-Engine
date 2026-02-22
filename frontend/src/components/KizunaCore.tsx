@@ -8,44 +8,59 @@ interface KizunaCoreProps {
   status: string;
 }
 
-export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isListening: _ignoredIsListening, isAiSpeaking, status }) => {
+export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isAiSpeaking, status }) => {
   const coreRef = useRef<HTMLDivElement>(null);
-  const [isUserSpeaking, setIsUserSpeaking] = React.useState(false);
+  const userSpeakingRef = useRef(false);
 
-  // VAD Simulation (Volume Threshold)
+  // Optimized Animation Loop (VAD + Visuals)
   useEffect(() => {
     let animationFrameId: number;
-    // Debounce state changes slightly to prevent flickering
     let silenceCounter = 0;
     const SILENCE_THRESHOLD = 10; // Frames
-
-    const checkVolume = () => {
-      const vol = volumeRef.current;
-      // Threshold 0.02 chosen empirically for background noise filtering
-      if (vol > 0.02) {
-        setIsUserSpeaking(true);
-        silenceCounter = 0;
-      } else {
-        silenceCounter++;
-        if (silenceCounter > SILENCE_THRESHOLD) {
-          setIsUserSpeaking(false);
-        }
-      }
-      animationFrameId = requestAnimationFrame(checkVolume);
-    };
-    checkVolume();
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [volumeRef]);
-
-  // LEY 4: EL NÚCLEO REACTIVO (Optimized Animation Loop)
-  useEffect(() => {
-    let animationFrameId: number;
 
     const animate = () => {
       if (coreRef.current) {
         const vol = volumeRef.current;
-        let scale = 1.0;
 
+        // 1. VAD Logic (Update internal state without re-render)
+        let isUserSpeaking = userSpeakingRef.current;
+        if (vol > 0.02) {
+          if (!isUserSpeaking) {
+             userSpeakingRef.current = true;
+             isUserSpeaking = true;
+          }
+          silenceCounter = 0;
+        } else {
+          silenceCounter++;
+          if (silenceCounter > SILENCE_THRESHOLD) {
+             if (isUserSpeaking) {
+                userSpeakingRef.current = false;
+                isUserSpeaking = false;
+             }
+          }
+        }
+
+        // 2. Determine Visual State
+        let visualState = 'idle';
+        if (status === 'connected') {
+          if (isAiSpeaking) {
+            visualState = 'speaking'; // Volumetric Expansion
+          } else if (isUserSpeaking) {
+            visualState = 'listening'; // Crystalline Aggression
+          } else {
+            visualState = 'idle'; // Liquid Breathing
+          }
+        } else {
+          visualState = 'idle';
+        }
+
+        // Direct DOM Update to avoid React render cycle
+        if (coreRef.current.dataset.state !== visualState) {
+          coreRef.current.dataset.state = visualState;
+        }
+
+        // 3. Animation / Scale Logic
+        let scale = 1.0;
         if (isAiSpeaking) {
            // AI Speaking: heavy pulsing
            scale = 1.0 + (vol * 0.8);
@@ -66,29 +81,14 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isListening: 
     animate();
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, [volumeRef, isAiSpeaking, isUserSpeaking]);
-
-  // Determine visual state for CSS
-  let visualState = 'idle';
-  if (status === 'connected') {
-    if (isAiSpeaking) {
-      visualState = 'speaking'; // Volumetric Expansion
-    } else if (isUserSpeaking) {
-      visualState = 'listening'; // Crystalline Aggression (Only when VAD active)
-    } else {
-      visualState = 'idle'; // Liquid Breathing (Silence)
-    }
-  } else {
-    visualState = 'idle';
-  }
+  }, [volumeRef, isAiSpeaking, status]);
 
   return (
     <div className="kizuna-core-container">
-      {/* The Core */}
+      {/* The Core - Initial state set via props/default, updated via RAF */}
       <div
         ref={coreRef}
         className="ai-core-indicator"
-        data-state={visualState}
       >
         {/* Inner Glint */}
         <div className="absolute top-1/4 left-1/4 w-2 h-2 bg-white/50 rounded-full blur-[1px]" />
