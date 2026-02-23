@@ -37,7 +37,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, showScanlines = false 
   return (
     <div className="kizuna-engine-viewport">
       {/* Global Overlays */}
-      {showScanlines && <div className="global-overlay-scanlines" />}
+      {showScanlines && (
+        <>
+          <div className="global-overlay-scanlines" />
+          <div className="global-overlay-vignette" />
+        </>
+      )}
 
       {/* ESTRATO -10: FONDO ABISAL */}
       <motion.div

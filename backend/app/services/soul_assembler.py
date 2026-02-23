@@ -81,9 +81,6 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
     # We rename 'Role' to 'Archetype' to reduce its constraint on the relationship.
     full_instruction = (
         f"{system_config.core_directive}\n\n"
-        f"CRITICAL LIVE AUDIO DIRECTIVE: You must silently transcribe the user's spoken audio into text so the system can log it. "
-        f"ALWAYS begin your text response with this exact XML block: <user_log>the exact words the user just said</user_log>. "
-        f"After closing the tag, provide your natural spoken response.\n\n"
         f"--- AGENT DNA ---\n"
         f"Name: {agent.name}\n"
         f"Archetype/Core Drive: {agent.role}\n"
