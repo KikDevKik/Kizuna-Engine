@@ -119,6 +119,7 @@ class SessionManager:
 
                 # Phase 3: Inject Repository into Subconscious
                 subconscious_mind.set_repository(self.soul_repo)
+                reflection_mind.set_repository(self.soul_repo)
 
                 try:
                     async with asyncio.TaskGroup() as tg:

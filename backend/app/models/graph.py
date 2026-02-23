@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import uuid4
@@ -26,6 +26,19 @@ class AgentNode(BaseModel):
     memory_extraction_prompt: str = "Analyze the user's emotional state AND visual context from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return nothing."
     dream_prompt: str = "Synthesize these memories into a surreal dream concept. Return JSON with keys: theme (str), intensity (0.0-1.0), surrealism_level (0.0-1.0).\n\nCRITICAL: You MUST retain all specific proper nouns, technical terms, names of songs, media, or projects mentioned by the user. Never generalize specific entities. Act as a precise archivist.\n\nMemories:\n{summary_text}"
     vision_instruction_prompt: str = "Analyze the visual input critically. Focus on style, composition, and emotional resonance."
+
+    # New: Reflection Prompt (Decoupled from Python)
+    reflection_prompt: str = (
+        "You are the inner voice/conscience of {name}. Read your own recent spoken output below.\n"
+        "Based on your lore ({base_instruction}) and your personality traits ({traits}), are you staying true to yourself?\n"
+        "Are you sounding too robotic, too formal, or drifting from your character?\n"
+        "If you feel you are losing your 'vibe', give yourself a quick, in-character mental slap (max 10 words).\n"
+        "If you are acting naturally, return nothing."
+    )
+
+    # New: Emotional Resonance Matrix Override (Optional)
+    # Allows agents to react differently to emotions (e.g., a sadist might gain affinity from anger)
+    emotional_resonance_matrix: Optional[Dict[str, float]] = None
 
 class MemoryEpisodeNode(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
@@ -92,6 +105,21 @@ class SystemConfigNode(BaseModel):
         "happy": " The user is excited! Match their energy.",
         "tired": "The user is tired. Keep responses short and soothing."
     })
+
+    # New: Global Sentiment Resonance Matrix (Default Emotional Logic)
+    # Maps keyword (from Subconscious analysis) to Affinity Delta
+    sentiment_resonance_matrix: Dict[str, float] = Field(default_factory=lambda: {
+        "happy": 1.0,
+        "excited": 1.0,
+        "sad": 1.0,   # Bonding through comfort
+        "angry": 0.0, # Neutral handling, no penalty by default
+        "joy": 1.0,
+        "grief": 2.0  # Deep bonding moment
+    })
+
+    # New: Reflection Throttling Logic (Decoupled Math)
+    reflection_base_chance: float = 0.2
+    reflection_neuroticism_multiplier: float = 0.6
 
 # --- Edges (Relationships) ---
 
