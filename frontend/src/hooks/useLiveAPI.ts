@@ -24,6 +24,7 @@ export const useLiveAPI = (): UseLiveAPI => {
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioManagerRef = useRef<AudioStreamManager | null>(null);
+  const recognitionRef = useRef<any>(null); // TRUE ECHO: Native Speech Recognition
   const volumeRef = useRef<number>(0);
   const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -45,10 +46,92 @@ export const useLiveAPI = (): UseLiveAPI => {
       audioManagerRef.current = null;
     }
 
+    // Stop Speech Recognition
+    if (recognitionRef.current) {
+        recognitionRef.current.onend = null;
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+    }
+
     setStatus('disconnected');
     setConnected(false);
     setIsAiSpeaking(false);
   }, []);
+
+  // TRUE ECHO PROTOCOL: Native Browser Speech Recognition
+  useEffect(() => {
+    if (connected && wsRef.current) {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onresult = (event: any) => {
+                const lastResult = event.results[event.results.length - 1];
+                if (lastResult.isFinal) {
+                    const transcript = lastResult[0].transcript;
+                    console.log("True Echo Transcript:", transcript);
+
+                    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({
+                            type: "native_transcript",
+                            text: transcript
+                        }));
+                    }
+                }
+            };
+
+            recognition.onerror = (event: any) => {
+                // benign errors like 'no-speech' are common
+                if (event.error !== 'no-speech') {
+                    console.error("Speech recognition error:", event.error);
+                }
+            };
+
+            recognition.onend = () => {
+                 // Auto-restart if still connected
+                 // Check connected state via ref or relying on closure, but connected is in dependency array
+                 // so this effect runs on change.
+                 // We can check wsRef.current state.
+                 if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                     try {
+                         recognition.start();
+                     } catch (e) {
+                         // Ignore if already started
+                     }
+                 }
+            };
+
+            try {
+                recognition.start();
+                recognitionRef.current = recognition;
+                console.log("True Echo Protocol: Listening...");
+            } catch (e) {
+                console.error("Failed to start SpeechRecognition:", e);
+            }
+        } else {
+            console.warn("True Echo Protocol: Browser does not support SpeechRecognition.");
+        }
+    } else {
+        // Cleanup if connected becomes false (handled by disconnect too, but safe here)
+        if (recognitionRef.current) {
+            recognitionRef.current.onend = null;
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+        }
+    }
+
+    return () => {
+         if (recognitionRef.current) {
+            recognitionRef.current.onend = null;
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+        }
+    };
+  }, [connected]);
 
   const connect = useCallback(async (agentId: string) => {
     if (!agentId) return;

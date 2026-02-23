@@ -514,6 +514,30 @@ class LocalSoulRepository(SoulRepository):
             last_edge = shadow_edges[-1]
             return self.dreams.get(last_edge.target_id)
 
+    async def purge_all_memories(self) -> None:
+        """
+        SCORCHED EARTH PROTOCOL: Wipes all episodic memory and dreams.
+        Preserves Identity (Users/Agents) and Facts (Knowledge).
+        """
+        async with self.lock:
+            logger.warning("☢️ SCORCHED EARTH: Purging all memories...")
+
+            # Clear Episodic Memory
+            self.episodes.clear()
+            self.experienced.clear()
+
+            # Clear Dreams & Shadows
+            self.dreams.clear()
+            self.shadows.clear()
+
+            # Clear Shared Memories in Resonances (Keep Affinities)
+            for user_res in self.resonances.values():
+                for resonance in user_res.values():
+                    resonance.shared_memories.clear()
+
+            await self._save()
+            logger.info("☢️ Memory Purge Complete.")
+
     async def get_recent_episodes(self, user_id: str, limit: int = 10) -> List[MemoryEpisodeNode]:
         """
         Retrieve recent episodes (short-term memory).

@@ -15,7 +15,7 @@ from app.services.sleep_manager import SleepManager
 from app.services.cache import cache
 from app.services.agent_service import agent_service
 from app.services.seeder import seed_data
-from app.routers import warmup, agents, bio
+from app.routers import warmup, agents, bio, system
 from app.dependencies import soul_repo
 from core.config import settings
 
@@ -84,6 +84,7 @@ app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=li
 app.include_router(warmup.router)
 app.include_router(agents.router)
 app.include_router(bio.router)
+app.include_router(system.router)
 
 app.add_middleware(
     CORSMiddleware,
