@@ -21,7 +21,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
   const handleBioTransmit = async () => {
     try {
         const token = localStorage.getItem("token") || "guest-token";
-        const res = await fetch("http://localhost:8000/api/bio/submit", {
+        const res = await fetch("/api/bio/submit", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -37,30 +37,6 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
     } catch (e) {
         addLog(`BIO: Network Error`);
     }
-  };
-
-  // SCORCHED EARTH: Wipe Graph
-  const handleWipeGraph = async () => {
-      if (!window.confirm("WARNING: This will permanently delete all episodic memories and dreams. Are you sure?")) {
-          return;
-      }
-
-      try {
-          const res = await fetch("http://localhost:8000/api/system/purge-memories", {
-              method: "DELETE"
-          });
-
-          if (res.ok) {
-              addLog("SYSTEM: MEMORY PURGED (SCORCHED EARTH)");
-              window.alert("Memory Cleared. The slate is clean.");
-          } else {
-              addLog("SYSTEM: PURGE FAILED");
-              window.alert("Purge failed. Check server logs.");
-          }
-      } catch (e) {
-          addLog("SYSTEM: PURGE ERROR");
-          console.error(e);
-      }
   };
 
   // Log Helper
@@ -201,17 +177,6 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
                     />
                     <button onClick={handleBioTransmit} className="w-full bg-electric-blue/20 hover:bg-electric-blue/40 text-electric-blue font-technical py-1 text-xs border border-electric-blue/50">
                         INJECT SIGNAL
-                    </button>
-                </div>
-
-                {/* Danger Zone (Scorched Earth) */}
-                <div className="p-3 bg-alert-red/10 border border-alert-red/50">
-                    <h3 className="text-xs font-technical text-alert-red mb-2">DANGER ZONE</h3>
-                    <button
-                        onClick={handleWipeGraph}
-                        className="w-full bg-alert-red/20 hover:bg-alert-red/40 text-alert-red font-technical py-2 text-xs border border-alert-red/50 tracking-widest flex items-center justify-center gap-2"
-                    >
-                        <Activity size={12} className="animate-pulse" /> WIPE GRAPH (SCORCHED EARTH)
                     </button>
                 </div>
 

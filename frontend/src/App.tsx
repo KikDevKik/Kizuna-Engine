@@ -7,9 +7,10 @@ import { VisionPanel } from './components/VisionPanel';
 import { EpistemicPanel } from './components/EpistemicPanel';
 import { SystemLogs } from './components/SystemLogs';
 import { JulesSanctuary } from './components/JulesSanctuary';
+import { ConfigurationPanel } from './components/ConfigurationPanel';
 import { RitualProvider } from './contexts/RitualContext';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Power } from 'lucide-react';
+import { Power, Settings } from 'lucide-react';
 import './KizunaHUD.css';
 
 function App() {
@@ -20,8 +21,19 @@ function App() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [isSanctuaryOpen, setIsSanctuaryOpen] = useState(false);
 
+  // Configuration State
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [showScanlines, setShowScanlines] = useState(() => {
+    return localStorage.getItem('kizuna_scanlines') === 'true';
+  });
+
   // Derived state for Law 4 logic (passed to Core)
   const isListening = connected && !isAiSpeaking;
+
+  // Persist Scanlines
+  useEffect(() => {
+    localStorage.setItem('kizuna_scanlines', String(showScanlines));
+  }, [showScanlines]);
 
   const handleAgentSelect = useCallback((agentId: string) => {
     console.log(`Agent Selected: ${agentId}`);
@@ -58,7 +70,7 @@ function App() {
 
   return (
     <RitualProvider>
-    <Layout>
+    <Layout showScanlines={showScanlines}>
       {/* HEADER / NAV */}
       <header className="fixed top-0 left-0 w-full p-6 flex justify-between items-start z-50 pointer-events-none">
         <div className="flex flex-col pointer-events-auto">
@@ -71,7 +83,15 @@ function App() {
           </div>
         </div>
 
-        <div className="flex gap-4 pointer-events-auto">
+        <div className="flex gap-4 pointer-events-auto items-center">
+          {/* Config Button */}
+          <button
+            onClick={() => setIsConfigOpen(true)}
+            className="text-electric-blue/60 hover:text-electric-blue transition-colors mr-4"
+          >
+             <Settings size={24} />
+          </button>
+
           <button
             onClick={() => setViewMode('core')}
             className={`kizuna-shard-nav-btn ${viewMode === 'core' ? 'active' : ''}`}
@@ -158,6 +178,13 @@ function App() {
         isOpen={isSanctuaryOpen}
         onClose={() => setIsSanctuaryOpen(false)}
         api={liveApi}
+      />
+
+      <ConfigurationPanel
+        isOpen={isConfigOpen}
+        onClose={() => setIsConfigOpen(false)}
+        showScanlines={showScanlines}
+        setShowScanlines={setShowScanlines}
       />
 
       {/* FOOTER STATUS */}
