@@ -12,6 +12,19 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isAiSpeaking,
   const coreRef = useRef<HTMLDivElement>(null);
   const userSpeakingRef = useRef(false);
 
+  // --- Optimization: Track props via refs to avoid restarting animation loop ---
+  const isAiSpeakingRef = useRef(isAiSpeaking);
+  const statusRef = useRef(status);
+
+  useEffect(() => {
+    isAiSpeakingRef.current = isAiSpeaking;
+  }, [isAiSpeaking]);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+  // -----------------------------------------------------------------------------
+
   // Optimized Animation Loop (VAD + Visuals)
   useEffect(() => {
     let animationFrameId: number;
@@ -21,6 +34,9 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isAiSpeaking,
     const animate = () => {
       if (coreRef.current) {
         const vol = volumeRef.current;
+        // Use refs for current values inside the loop
+        const currentIsAiSpeaking = isAiSpeakingRef.current;
+        const currentStatus = statusRef.current;
 
         // 1. VAD Logic (Update internal state without re-render)
         let isUserSpeaking = userSpeakingRef.current;
@@ -42,8 +58,8 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isAiSpeaking,
 
         // 2. Determine Visual State
         let visualState = 'idle';
-        if (status === 'connected') {
-          if (isAiSpeaking) {
+        if (currentStatus === 'connected') {
+          if (currentIsAiSpeaking) {
             visualState = 'speaking'; // Volumetric Expansion
           } else if (isUserSpeaking) {
             visualState = 'listening'; // Crystalline Aggression
@@ -61,7 +77,7 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isAiSpeaking,
 
         // 3. Animation / Scale Logic
         let scale = 1.0;
-        if (isAiSpeaking) {
+        if (currentIsAiSpeaking) {
            // AI Speaking: heavy pulsing
            scale = 1.0 + (vol * 0.8);
         } else if (isUserSpeaking) {
@@ -81,7 +97,7 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isAiSpeaking,
     animate();
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, [volumeRef, isAiSpeaking, status]);
+  }, [volumeRef]); // Loop is now stable and doesn't restart on prop changes
 
   return (
     <div className="kizuna-core-container">

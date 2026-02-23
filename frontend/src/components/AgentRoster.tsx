@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { SoulForgeModal } from './SoulForgeModal';
 import { DeleteAgentModal } from './DeleteAgentModal';
 import '../KizunaHUD.css';
