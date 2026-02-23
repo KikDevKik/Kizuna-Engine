@@ -20,13 +20,27 @@ async def test_analyze_sentiment_mock_mode_fallback():
     # Ensure client is "present" to prove we skip it due to mock_mode
     service.client = MagicMock()
 
+    # Mock Repository and System Config for fallback triggers
+    mock_repo = AsyncMock()
+    service.set_repository(mock_repo)
+
+    mock_config = MagicMock()
+    mock_config.default_triggers = {
+        "sad": "The user seems down. Be extra gentle and supportive."
+    }
+    mock_repo.get_system_config.return_value = mock_config
+    # Ensure get_agent and get_agent_archetype return None so it falls through to config
+    mock_repo.get_agent.return_value = None
+    mock_repo.get_agent_archetype.return_value = None
+
     with patch("app.services.subconscious.settings") as mock_settings:
         mock_settings.MOCK_GEMINI = True
 
         # Text containing a default trigger "sad" -> "The user seems down..."
         text = "I am feeling very sad today."
 
-        hint = await service._analyze_sentiment(text)
+        # Must pass agent_id to trigger fallback logic
+        hint = await service._analyze_sentiment(text, agent_id="test-agent")
 
         # Should return the default trigger hint for "sad"
         assert hint == "The user seems down. Be extra gentle and supportive."
@@ -69,6 +83,18 @@ async def test_analyze_sentiment_gemini_exception_fallback():
     service.client = MagicMock()
     service.client.aio.models.generate_content = AsyncMock()
 
+    # Mock Repository and System Config for fallback triggers
+    mock_repo = AsyncMock()
+    service.set_repository(mock_repo)
+
+    mock_config = MagicMock()
+    mock_config.default_triggers = {
+        "angry": "The user is frustrated. Apologize and de-escalate calmly."
+    }
+    mock_repo.get_system_config.return_value = mock_config
+    mock_repo.get_agent.return_value = None
+    mock_repo.get_agent_archetype.return_value = None
+
     # Mock Exception
     service.client.aio.models.generate_content.side_effect = Exception("API connection failed")
 
@@ -79,7 +105,8 @@ async def test_analyze_sentiment_gemini_exception_fallback():
         # Text with a keyword trigger "angry"
         text = "I am so angry right now!"
 
-        hint = await service._analyze_sentiment(text)
+        # Must pass agent_id to trigger fallback logic
+        hint = await service._analyze_sentiment(text, agent_id="test-agent")
 
         # Should fall back to "angry" trigger
         assert hint == "The user is frustrated. Apologize and de-escalate calmly."

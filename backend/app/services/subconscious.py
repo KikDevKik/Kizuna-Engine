@@ -67,19 +67,48 @@ class SubconsciousMind:
                         continue
 
                     # Analyze (Real or Mock)
-                    hint = await self._analyze_sentiment(full_text, agent_id)
+                    # Parallel Execution: Sentiment Analysis + Semantic Memory Retrieval
+                    sentiment_task = asyncio.create_task(self._analyze_sentiment(full_text, agent_id))
+                    memory_task = None
+                    if self.repository:
+                        memory_task = asyncio.create_task(
+                            self.repository.get_relevant_episodes(user_id, query=full_text, limit=1)
+                        )
 
+                    hint = await sentiment_task
+                    episodes = []
+                    try:
+                        if memory_task:
+                            episodes = await memory_task
+                    except Exception as e:
+                        logger.error(f"Memory retrieval failed: {e}")
+
+                    # --- 1. Memory Injection (The Semantic Bridge) ---
+                    if episodes:
+                        # We found a relevant memory from the past
+                        episode = episodes[0]
+                        whisper = (
+                            f"SYSTEM_HINT: 🧠 [Flashback]: The user's current topic relates to a past memory: "
+                            f"{episode.summary}. Use this context naturally."
+                        )
+                        logger.info(f"🧠 Memory Retrieved: {episode.summary}")
+                        await injection_queue.put({
+                            "text": whisper,
+                            "turn_complete": False
+                        })
+
+                    # --- 2. Sentiment Insight ---
                     if hint:
                         logger.info(f"🧠 Insight detected: {hint}")
 
-                        # 1. Inject Context
+                        # Inject Context
                         payload = {
                             "text": f"SYSTEM_HINT: {hint}",
                             "turn_complete": False
                         }
                         await injection_queue.put(payload)
 
-                        # 2. Persist Insight (Phase 3)
+                        # Persist Insight (Phase 3)
                         if self.repository:
                             try:
                                 # Dynamic Resonance Update
@@ -101,14 +130,11 @@ class SubconsciousMind:
                                 if delta != 0:
                                     await self.repository.update_resonance(user_id, agent_id, delta)
 
-                                # REMOVED: Save Episode
-                                # We no longer save fragmented episodes here.
-                                # Full session transcript is saved in main.py upon disconnection.
-                                # await self.repository.save_episode(...)
                             except Exception:
                                 logger.exception("Failed to persist subconscious insight")
 
-                        # Clear buffer after successful insight to avoid repetition
+                    # Clear buffer if ANY insight was found to avoid repetition
+                    if hint or episodes:
                         self.buffer = []
 
                     # Keep buffer manageable
