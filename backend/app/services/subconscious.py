@@ -35,14 +35,6 @@ class SubconsciousMind:
         self.active_sessions: dict[str, Queue] = {} # user_id -> injection_queue
         self.backoff_until: datetime | None = None
 
-        # Default fallback if agent traits are missing
-        self.default_triggers = {
-            "sad": "The user seems down. Be extra gentle and supportive.",
-            "angry": "The user is frustrated. Apologize and de-escalate calmly.",
-            "happy": " The user is excited! Match their energy.",
-            "tired": "The user is tired. Keep responses short and soothing."
-        }
-
         # Real GenAI Client (Phase 5)
         self.client = None
         if genai and settings.GEMINI_API_KEY:
@@ -233,19 +225,23 @@ class SubconsciousMind:
             except Exception as e:
                 logger.warning("Subconscious inference failed (Global). Fallback to keywords.", exc_info=True)
 
-        # 2. Fallback (Keyword Matching via Archetypes -> Traits)
-        triggers = self.default_triggers
+        # 2. Fallback (Keyword Matching via Archetypes -> Traits -> System Config)
+        triggers = {}
 
         if agent_id and self.repository:
-            # Ontology Phase 1: Check Archetype First
+            # Priority 1: Archetype (The Soul Class)
             archetype = await self.repository.get_agent_archetype(agent_id)
             if archetype and archetype.triggers:
                 triggers = archetype.triggers
             else:
-                # Fallback to Traits
+                # Priority 2: Agent Traits (The Individual)
                 agent = await self.repository.get_agent(agent_id)
                 if agent and agent.traits and "emotional_triggers" in agent.traits:
                     triggers = agent.traits["emotional_triggers"]
+                else:
+                    # Priority 3: System Config (The Global Unconscious)
+                    config = await self.repository.get_system_config()
+                    triggers = config.default_triggers
 
         text_lower = text.lower()
         for trigger, hint in triggers.items():
