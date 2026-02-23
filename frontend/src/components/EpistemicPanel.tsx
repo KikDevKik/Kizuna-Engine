@@ -27,9 +27,8 @@ export const EpistemicPanel: React.FC<EpistemicPanelProps> = ({ logs = [] }) => 
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            className="shard-epistemic-wrapper"
+            className="mb-4 w-96 max-h-96 flex flex-col bg-abyssal-black/80 border border-electric-blue/30 backdrop-blur-lg rounded-tl-3xl overflow-hidden shadow-lg shadow-vintage-navy/20"
           >
-            <div className="shard-epistemic-inner">
             <div className="flex items-center justify-between p-3 border-b border-electric-blue/20 bg-abyssal-black/40">
                <span className="font-technical text-xs tracking-widest text-electric-blue/80">
                  EPISTEMIC MEMORY // SYNCED
@@ -56,7 +55,6 @@ export const EpistemicPanel: React.FC<EpistemicPanelProps> = ({ logs = [] }) => 
 
             {/* SCAN LINES */}
             <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] pointer-events-none" />
-            </div>
           </motion.div>
         )}
       </AnimatePresence>
