@@ -7,7 +7,7 @@ La arquitectura actual está diseñada como un sistema de streaming multimodal (
 
 ### Backend (backend/app/)
 - **Tecnología**: Python, FastAPI, Uvicorn, google-genai SDK.
-- **Orquestación de Sesión**: La lógica WebSocket reside en `main.py`, utilizando `asyncio.TaskGroup` para gestionar simultáneamente:
+- **Orquestación de Sesión**: La lógica WebSocket es gestionada por `SessionManager`, utilizando `asyncio.TaskGroup` para gestionar simultáneamente:
     - `audio_session.send_to_gemini`: Streaming de audio upstream.
     - `audio_session.receive_from_gemini`: Streaming downstream.
     - `subconscious_mind.start`: Análisis paralelo de sentimientos.
@@ -16,16 +16,19 @@ La arquitectura actual está diseñada como un sistema de streaming multimodal (
        - **Audio**: Recibe audio PCM (16kHz, 16-bit, mono) con buffering de ~100ms.
        - **Visión**: Recibe frames JPEG base64 (max 480px, calidad 0.5) para análisis visual.
        - **Bio-Feedback**: Endpoint `/api/bio/submit` ingesta BPM para modular hints del sistema (vía `SubconsciousMind`).
+       - **True Echo Protocol**: Recibe transcripciones nativas del navegador (`native_transcript`) para evitar re-procesamiento de speech-to-text en el backend.
     2. **Envío (Gemini -> Client)**: Recibe chunks de audio y texto de Gemini en tiempo real y los reenvía al cliente mediante un protocolo JSON personalizado (`{'type': 'audio', ...}`, `{'type': 'turn_complete'}`).
 - **Model Waterfall**: Implementa estrategia de fallback (Cascada) en `SubconsciousMind` y `RitualService`. Si un modelo devuelve error 429 (Rate Limit), el sistema intenta automáticamente con el siguiente en la lista configurada (`settings.MODEL_SUBCONSCIOUS`), asegurando continuidad operativa.
 - **Memoria y Mente**:
+    - **Local Vector Parity**: `LocalSoulRepository` implementa búsqueda semántica utilizando similitud coseno y `embedding_service`, permitiendo RAG real sin dependencias externas pesadas.
     - **RAG (Soul Assembler)**: Inyecta episodios recientes (`MemoryEpisodeNode`) y el último sueño (`DreamNode`) en el prompt del sistema al iniciar sesión.
-    - **Mente Subconsciente**: Proceso paralelo que analiza transcripciones en tiempo real para generar "System Hints" (emocionales o contextuales) y consolidar memorias.
+    - **Ontological Decoupling**: La configuración del sistema y matrices de afinidad se cargan dinámicamente desde `SystemConfigNode` en el grafo, desacoplando datos de código.
     - **Sleep Manager**: Gestiona el ciclo de sueño REM. Persiste la intención de consolidación en Redis (`sleep_intent:*`) y asegura que las memorias se guarden incluso ante reinicios o desconexiones, con un timeout de shutdown de 10s.
 
 ### Frontend (frontend/src/)
 - **Tecnología**: React, TypeScript, Vite.
 - **Captura de Audio**: Utiliza AudioWorklet (`pcm-processor.js`) para procesar audio crudo (PCM 16-bit) directamente en un hilo separado.
+- **True Echo Protocol**: `useLiveAPI.ts` implementa `SpeechRecognition` nativo del navegador para capturar lo que el usuario dice y enviarlo como texto, reduciendo latencia y costes.
 - **Gestión de Audio (AudioStreamManager)**:
     - **Jitter Buffer Dinámico**: Implementa un buffer elástico (objetivo 60ms). Si la latencia sube (>200ms), acelera la reproducción (1.05x) para alcanzar el tiempo real sin cortes bruscos ("catch-up").
 - **Visión (UseVision)**: Hook `useVision` permite capturar frames de cámara o pantalla, con throttling agresivo para no saturar el WebSocket.
@@ -43,11 +46,11 @@ Anteriormente, en `frontend/src/hooks/useLiveAPI.ts`, existía una conexión err
 Originalmente, Kizuna solo transmitía audio.
 **Estado Actual**: Se ha implementado el pipeline de visión. El frontend captura frames (JPEG comprimido) y el backend (`audio_session.py`) los enruta a la sesión multimodal de Gemini, permitiendo a la IA "ver" y comentar sobre el entorno.
 
-### 🟡 Estado de Transición: Memoria Epistémica Híbrida (Local/Nube)
-Actualmente, se ha implementado una solución **semi-aplicada** que sienta las bases para el futuro RAG en la nube.
-- **Implementación Actual**: Se utiliza `LocalSoulRepository` (basado en JSON) para simular la estructura de datos de un Grafo de Conocimiento.
-- **Persistencia**: `SleepManager` y `Redis` aseguran que la consolidación de memoria (sueños) ocurra de manera confiable al terminar la sesión.
-- **Estrategia**: El sistema funciona 100% local para desarrollo ágil, pero la arquitectura (`SoulRepository` interface) está diseñada para cambiar a **Google Cloud Spanner**.
+### ✅ SOLUCIONADO: Memoria Epistémica Híbrida (Local Vector Parity)
+Originalmente una simulación simple.
+**Estado Actual**: Se ha implementado `LocalSoulRepository` con soporte completo para vectores (embeddings) y búsqueda por similitud de coseno.
+- **Implementación Actual**: Grafo JSON + Embeddings locales.
+- **Persistencia**: `SleepManager` y `Redis` aseguran la consolidación.
 
 --------------------------------------------------------------------------------
 
@@ -61,8 +64,8 @@ El sistema actual cumple con el objetivo de latencia total (boca-a-oído) de 400
 3. **Frontend (Speaker)**: WebSocket -> Decode Base64 -> Jitter Buffer (Dynamic) -> AudioContext.destination.
 
 ### B. Sistema de Memoria Epistémica (Deep Memory) - (✅ IMPLEMENTADO - FASE LOCAL)
-La infraestructura para que Kizuna recuerde hechos está activa en modo Local:
-1. **RAG Contextual**: `SoulAssembler` recupera episodios recientes y sueños pasados.
+La infraestructura para que Kizuna recuerde hechos está activa con capacidades vectoriales:
+1. **RAG Contextual**: `SoulAssembler` recupera episodios recientes y sueños pasados usando búsqueda semántica.
 2. **Mente Subconsciente**: `SubconsciousMind` analiza en segundo plano usando un "Waterfall" de modelos para robustez.
 3. **Bio-Feedback**: Ingesta de señales biológicas (BPM) para modular la respuesta emocional en tiempo real.
 
