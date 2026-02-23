@@ -148,11 +148,36 @@ class LocalSoulRepository(SoulRepository):
         """Async save using aiofiles."""
         await self._write_to_disk()
 
+    @staticmethod
+    def _sync_save_worker(path: Path, data: dict):
+        """
+        Synchronous worker for file I/O to be run in a separate thread.
+        This isolates CPU-bound JSON serialization and blocking I/O.
+        """
+        temp_path = path.with_suffix(".tmp")
+        try:
+            # Ensure directory exists
+            path.parent.mkdir(parents=True, exist_ok=True)
+
+            # CPU-bound serialization + Blocking I/O
+            with open(temp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, default=str)
+
+            # Atomic replacement (Blocking)
+            os.replace(temp_path, path)
+        except Exception as e:
+            logger.error(f"Failed to save graph database to {path}: {e}")
+            if temp_path.exists():
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
+
     async def _write_to_disk(self):
         # Helper to dump pydantic models to dict
         def to_dict_list(models):
              return [m.model_dump(mode='json') for m in models]
-
+        # 1. Prepare Data (Fast in-memory construction)
         data = {
             "users": to_dict_list(self.users.values()),
             "agents": to_dict_list(self.agents.values()),
@@ -178,30 +203,12 @@ class LocalSoulRepository(SoulRepository):
             }
         }
 
-        # Ensure directory exists
-        self.data_path.parent.mkdir(parents=True, exist_ok=True)
-
-        temp_path = self.data_path.with_suffix(".tmp")
+        # 2. Offload Serialization & I/O to Thread Pool
         try:
-            # Serialize to string first (CPU bound, but usually fast enough for JSON)
-            # For extremely large graphs, this should also be offloaded to an executor.
-            data_str = json.dumps(data, indent=2, default=str)
-
-            async with aiofiles.open(temp_path, "w", encoding="utf-8") as f:
-                await f.write(data_str)
-
-            # Use run_in_executor for atomic replace to be truly non-blocking
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, os.replace, temp_path, self.data_path)
-
+            await loop.run_in_executor(None, self._sync_save_worker, self.data_path, data)
         except Exception as e:
-            logger.error(f"Failed to save graph database: {e}")
-            if temp_path.exists():
-                # Cleanup also async/non-blocking ideally, but unlink is fast.
-                try:
-                    temp_path.unlink()
-                except:
-                    pass
+            logger.error(f"Async save failed: {e}")
 
     async def get_or_create_user(self, user_id: str, name: str = "Anonymous") -> UserNode:
         async with self.lock:
