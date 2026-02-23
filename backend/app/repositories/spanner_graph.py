@@ -587,3 +587,13 @@ class SpannerSoulRepository(SoulRepository):
         except Exception as e:
             logger.error(f"Failed to fetch recent episodes: {e}")
             return []
+
+    async def get_relevant_episodes(self, user_id: str, query: str, limit: int = 5) -> List[MemoryEpisodeNode]:
+        """
+        Placeholder for Semantic Search in Spanner (Phase 3.2).
+        Requires `embedding_service` and vector index on `Episode` nodes.
+        """
+        # raise NotImplementedError("Spanner vector search for episodes pending")
+        # Returning empty list to prevent runtime crashes during transition
+        logger.warning(f"Spanner get_relevant_episodes not implemented yet for query: {query}")
+        return []

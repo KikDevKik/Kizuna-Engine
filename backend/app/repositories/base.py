@@ -72,6 +72,11 @@ class SoulRepository(ABC):
         """Retrieve the most recent short-term memory episodes."""
         pass
 
+    @abstractmethod
+    async def get_relevant_episodes(self, user_id: str, query: str, limit: int = 5) -> List[MemoryEpisodeNode]:
+        """Retrieve relevant episodes for a user based on semantic similarity."""
+        pass
+
     # --- Evolution Phase 1: Ontology & Archetypes ---
 
     @abstractmethod
