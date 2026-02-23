@@ -365,7 +365,15 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                       // CREATE NEW CARD CONTENT
                       <div className="flex flex-col items-center justify-center h-full gap-4 text-electric-blue">
                         <div className="shape-shard-create p-6 bg-electric-blue/10 flex items-center justify-center hover:bg-electric-blue/20 transition-colors duration-300">
-                          <Plus size={48} />
+                          {/* UI HOTFIX: Constrained Container for Void Portal */}
+                          <div className="w-16 h-16 relative flex items-center justify-center overflow-hidden shrink-0">
+                            <div className="ritual-void-portal">
+                              <div className="void-ring" />
+                              <div className="void-ring" />
+                              <div className="void-ring" />
+                              <div className="void-core" />
+                            </div>
+                          </div>
                         </div>
                         <h2 className="font-monumental text-xl tracking-widest text-center">FORGE NEW SOUL</h2>
                       </div>

@@ -102,6 +102,26 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
                 try:
                     payload = json.loads(text)
 
+                    # TRUE ECHO PROTOCOL: Handle Native Transcript
+                    if payload.get("type") == "native_transcript":
+                        transcript_text = payload.get("text")
+                        if transcript_text:
+                            logger.info(f"🎤 Native Transcript: {transcript_text}")
+
+                            # a) Append to Global Transcript Buffer
+                            if transcript_buffer is not None:
+                                transcript_buffer.append(f"User: {transcript_text}")
+
+                            # b) Push to Subconscious (Emotion Analysis)
+                            if transcript_queue:
+                                try:
+                                    transcript_queue.put_nowait(transcript_text)
+                                except Exception as e:
+                                    logger.warning(f"Failed to queue native transcript: {e}")
+
+                            # c) DO NOT forward to Gemini (Prevent Double Processing)
+                            continue
+
                     # Capture User Text (if provided)
                     if transcript_buffer is not None:
                         # Assuming 'text' type or implicit text in payload
