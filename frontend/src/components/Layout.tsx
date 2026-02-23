@@ -4,9 +4,10 @@ import '../KizunaHUD.css';
 
 interface LayoutProps {
   children: ReactNode;
+  showScanlines?: boolean;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children }) => {
+export const Layout: React.FC<LayoutProps> = ({ children, showScanlines = false }) => {
   const rawMouseX = useMotionValue(typeof window !== "undefined" ? window.innerWidth / 2 : 0);
   const rawMouseY = useMotionValue(typeof window !== "undefined" ? window.innerHeight / 2 : 0);
 
@@ -35,6 +36,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="kizuna-engine-viewport">
+      {/* Global Overlays */}
+      {showScanlines && <div className="global-overlay-scanlines" />}
+
       {/* ESTRATO -10: FONDO ABISAL */}
       <motion.div
         className="layer-abyssal-background"
