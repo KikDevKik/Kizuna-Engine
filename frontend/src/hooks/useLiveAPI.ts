@@ -24,12 +24,21 @@ export const useLiveAPI = (): UseLiveAPI => {
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioManagerRef = useRef<AudioStreamManager | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null); // TRUE ECHO: Native Speech Recognition
   const volumeRef = useRef<number>(0);
   const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Forgemaster Upgrades
+  const lastFrameTime = useRef<number>(0);
+  const currentAgentId = useRef<string | null>(null);
+  const shouldReconnect = useRef<boolean>(false);
+  const reconnectAttempts = useRef<number>(0);
+  const connectRef = useRef<((id: string) => Promise<void>) | null>(null);
+
   const disconnect = useCallback(() => {
     console.log('Disconnecting Live API...');
+    shouldReconnect.current = false; // Prevent auto-reconnect
 
     if (connectionTimeoutRef.current) {
         clearTimeout(connectionTimeoutRef.current);
@@ -61,6 +70,7 @@ export const useLiveAPI = (): UseLiveAPI => {
   // TRUE ECHO PROTOCOL: Native Browser Speech Recognition
   useEffect(() => {
     if (connected && wsRef.current) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
         if (SpeechRecognition) {
@@ -69,6 +79,7 @@ export const useLiveAPI = (): UseLiveAPI => {
             recognition.interimResults = false;
             recognition.lang = 'en-US';
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             recognition.onresult = (event: any) => {
                 const lastResult = event.results[event.results.length - 1];
                 if (lastResult.isFinal) {
@@ -84,6 +95,7 @@ export const useLiveAPI = (): UseLiveAPI => {
                 }
             };
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             recognition.onerror = (event: any) => {
                 // benign errors like 'no-speech' are common
                 if (event.error !== 'no-speech') {
@@ -99,7 +111,7 @@ export const useLiveAPI = (): UseLiveAPI => {
                  if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
                      try {
                          recognition.start();
-                     } catch (e) {
+                     } catch {
                          // Ignore if already started
                      }
                  }
@@ -136,8 +148,15 @@ export const useLiveAPI = (): UseLiveAPI => {
   const connect = useCallback(async (agentId: string) => {
     if (!agentId) return;
 
+    // Forgemaster: Setup Reconnection State
+    currentAgentId.current = agentId;
+    shouldReconnect.current = true;
+    reconnectAttempts.current = 0;
+
     // Cleanup any existing connection
+    // Note: disconnect() sets shouldReconnect to false, so we must reset it after.
     disconnect();
+    shouldReconnect.current = true;
 
     setStatus('connecting');
 
@@ -163,6 +182,9 @@ export const useLiveAPI = (): UseLiveAPI => {
             clearTimeout(connectionTimeoutRef.current);
             connectionTimeoutRef.current = null;
         }
+
+        // Reset reconnect attempts on successful connection
+        reconnectAttempts.current = 0;
 
         try {
             // Initialize Audio Manager
@@ -221,7 +243,7 @@ export const useLiveAPI = (): UseLiveAPI => {
             clearTimeout(connectionTimeoutRef.current);
             connectionTimeoutRef.current = null;
         }
-        setStatus('error');
+        // Don't set status here, let onclose handle it
       };
 
       ws.onclose = (event) => {
@@ -231,23 +253,36 @@ export const useLiveAPI = (): UseLiveAPI => {
             connectionTimeoutRef.current = null;
         }
 
-        // Handle Abnormal Closures (1006, 1011) by setting Error state
-        // This gives UI feedback that connection was dropped, rather than just "stopped".
-        if (event.code === 1006 || event.code === 1011) {
-            console.warn("Abnormal closure. Setting status to error.");
+        // Silent Grace: Auto-Reconnect logic
+        if (shouldReconnect.current) {
+             console.warn(`Abnormal closure. Attempting silent reconnection... (Attempt ${reconnectAttempts.current + 1})`);
 
-            // Clean up without resetting status to 'disconnected' (which disconnect() does)
-            if (wsRef.current) {
-                wsRef.current = null;
-            }
-            if (audioManagerRef.current) {
-                audioManagerRef.current.cleanup();
-                audioManagerRef.current = null;
-            }
-            setConnected(false);
-            setIsAiSpeaking(false);
-            setStatus('error');
+             // Clean up resources locally without triggering full disconnect logic that wipes state
+             if (wsRef.current) { wsRef.current = null; }
+             if (audioManagerRef.current) { audioManagerRef.current.cleanup(); audioManagerRef.current = null; }
+
+             setConnected(false);
+             setIsAiSpeaking(false);
+             setStatus('connecting'); // Keep UI in "connecting" state
+
+             // Backoff: 1s, 2s, 4s, 8s, 10s
+             const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000);
+
+             if (reconnectAttempts.current < 5) {
+                 reconnectAttempts.current += 1;
+                 setTimeout(() => {
+                     if (currentAgentId.current && shouldReconnect.current && connectRef.current) {
+                         // Recursive call safely via closure using ref
+                         connectRef.current(currentAgentId.current);
+                     }
+                 }, delay);
+             } else {
+                 console.error("Max reconnection attempts reached.");
+                 setStatus('error');
+                 shouldReconnect.current = false;
+             }
         } else {
+            // Normal disconnect
             disconnect();
         }
       };
@@ -264,6 +299,13 @@ export const useLiveAPI = (): UseLiveAPI => {
 
   const sendImage = useCallback((base64: string) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      // Forgemaster: Visual Heartbeat (2s throttle)
+      const now = Date.now();
+      if (now - lastFrameTime.current < 2000) {
+          return;
+      }
+      lastFrameTime.current = now;
+
       const payload = {
         type: "image",
         data: base64
@@ -285,6 +327,11 @@ export const useLiveAPI = (): UseLiveAPI => {
         audioManagerRef.current.removeSystemAudioTrack();
     }
   }, []);
+
+  // Keep connectRef up to date
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   // Cleanup on unmount
   useEffect(() => {

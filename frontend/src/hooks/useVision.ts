@@ -111,6 +111,7 @@ export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
       isMounted = false;
       stopStream();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]); // Removed onReset from deps to avoid re-running on callback change
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -130,8 +131,8 @@ export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
     const canvas = canvasRef.current;
 
     // Use actual video dimensions for capture
-    // Aggressive Compression: Scale down to max width 480px
-    const MAX_WIDTH = 480;
+    // Forgemaster Standard: Scale down to max width 640px
+    const MAX_WIDTH = 640;
     const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
 
     canvas.width = video.videoWidth * scale;
@@ -142,7 +143,7 @@ export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Convert to JPEG base64 via Blob (Async)
+    // Convert to JPEG base64 via Blob (Async) - Quality 0.8
     return new Promise((resolve) => {
         canvas.toBlob((blob) => {
             if (!blob) {
@@ -156,7 +157,7 @@ export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
                 resolve(base64data.split(',')[1]);
             };
             reader.readAsDataURL(blob);
-        }, 'image/jpeg', 0.5);
+        }, 'image/jpeg', 0.8);
     });
   }, [isReady]);
 
