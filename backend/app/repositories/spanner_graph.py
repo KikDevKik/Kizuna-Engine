@@ -8,7 +8,8 @@ except ImportError:
 from ..repositories.base import SoulRepository
 from ..models.graph import (
     UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode,
-    DreamNode, ShadowEdge, ArchetypeNode, GlobalDreamNode, EmbodiesEdge
+    DreamNode, ShadowEdge, ArchetypeNode, GlobalDreamNode, EmbodiesEdge,
+    SystemConfigNode
 )
 import logging
 from core.config import settings
@@ -597,3 +598,67 @@ class SpannerSoulRepository(SoulRepository):
         # Returning empty list to prevent runtime crashes during transition
         logger.warning(f"Spanner get_relevant_episodes not implemented yet for query: {query}")
         return []
+
+    # --- Evolution Phase 2: System Config (Spanner) ---
+
+    async def get_system_config(self) -> SystemConfigNode:
+        """Fetch the System Configuration Node."""
+        def query_tx(snapshot):
+            query = "GRAPH FinetuningGraph MATCH (s:SystemConfig {id: 'system-config'}) RETURN s.core_directive, s.affinity_matrix, s.default_triggers, s.sentiment_resonance_matrix, s.reflection_base_chance, s.reflection_neuroticism_multiplier"
+            results = snapshot.execute_sql(query)
+            for row in results:
+                affinity_matrix = json.loads(row[1]) if row[1] else []
+                default_triggers = json.loads(row[2]) if row[2] else {}
+                sentiment_matrix = json.loads(row[3]) if row[3] else {}
+
+                return SystemConfigNode(
+                    core_directive=row[0],
+                    affinity_matrix=affinity_matrix,
+                    default_triggers=default_triggers,
+                    sentiment_resonance_matrix=sentiment_matrix,
+                    reflection_base_chance=float(row[4]) if row[4] is not None else 0.2,
+                    reflection_neuroticism_multiplier=float(row[5]) if row[5] is not None else 0.6
+                )
+            return SystemConfigNode() # Default
+
+        try:
+            with self.database.snapshot() as snapshot:
+                return query_tx(snapshot)
+        except Exception as e:
+            logger.error(f"Failed to fetch System Config from Spanner: {e}")
+            return SystemConfigNode() # Fallback to default
+
+    async def update_system_config(self, config: SystemConfigNode) -> None:
+        """Update the System Configuration Node."""
+        def update_tx(transaction):
+            query = """
+                GRAPH FinetuningGraph
+                MERGE (s:SystemConfig {id: 'system-config'})
+                SET s.core_directive = @core_directive,
+                    s.affinity_matrix = @affinity_matrix,
+                    s.default_triggers = @default_triggers,
+                    s.sentiment_resonance_matrix = @sentiment_resonance_matrix,
+                    s.reflection_base_chance = @reflection_base_chance,
+                    s.reflection_neuroticism_multiplier = @reflection_neuroticism_multiplier
+            """
+            transaction.execute_update(query, params={
+                "core_directive": config.core_directive,
+                "affinity_matrix": json.dumps(config.affinity_matrix),
+                "default_triggers": json.dumps(config.default_triggers),
+                "sentiment_resonance_matrix": json.dumps(config.sentiment_resonance_matrix),
+                "reflection_base_chance": config.reflection_base_chance,
+                "reflection_neuroticism_multiplier": config.reflection_neuroticism_multiplier
+            }, param_types={
+                "core_directive": spanner.param_types.STRING,
+                "affinity_matrix": spanner.param_types.STRING,
+                "default_triggers": spanner.param_types.STRING,
+                "sentiment_resonance_matrix": spanner.param_types.STRING,
+                "reflection_base_chance": spanner.param_types.FLOAT64,
+                "reflection_neuroticism_multiplier": spanner.param_types.FLOAT64
+            })
+
+        try:
+            self.database.run_in_transaction(update_tx)
+        except Exception as e:
+            logger.error(f"Failed to update System Config in Spanner: {e}")
+            raise
