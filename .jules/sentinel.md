@@ -14,3 +14,8 @@
 **Vulnerability:** Several endpoints in `backend/app/routers/agents.py` were catching generic `Exception` and returning `str(e)` in the 500 response, potentially leaking stack traces or internal paths.
 **Learning:** Defaulting to `detail=str(e)` is convenient for debugging but dangerous in production.
 **Prevention:** Always use a generic "Internal Server Error" message for 500 responses. Log the actual exception with `logger.exception` (which includes stack trace) for internal observability.
+
+## 2025-05-24 - [CRITICAL] Unprotected System Endpoints in Production
+**Vulnerability:** The `/api/system/*` endpoints (including `purge-memories` and `config`) were missing the `Depends(get_current_user)` dependency. This meant that even in Production mode (where `GCP_PROJECT_ID` is set), these sensitive endpoints were accessible without any authentication.
+**Learning:** Adding a global `get_current_user` dependency to `FastAPI` app or relying on middleware is often safer than adding it to individual routers, but if using router-level dependencies, one must ensure *every* sensitive router includes it.
+**Prevention:** Audit all routers to ensure they include the authentication dependency. Consider using `APIRouter(dependencies=[Depends(get_current_user)])` for sensitive routers to enforce auth on all routes within that router.

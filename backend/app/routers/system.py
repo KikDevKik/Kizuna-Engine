@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.repositories.base import SoulRepository
 from app.repositories.local_graph import LocalSoulRepository
-from app.dependencies import get_repository
+from app.dependencies import get_repository, get_current_user
 from app.models.graph import SystemConfigNode
 import logging
 
@@ -10,7 +10,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/system", tags=["System Control"])
 
 @router.get("/config", response_model=SystemConfigNode)
-async def get_system_config(repo: SoulRepository = Depends(get_repository)):
+async def get_system_config(
+    repo: SoulRepository = Depends(get_repository),
+    current_user: str = Depends(get_current_user)
+):
     """
     Returns the current System Configuration (Core Directive & Affinity Matrix).
     """
@@ -21,7 +24,11 @@ async def get_system_config(repo: SoulRepository = Depends(get_repository)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/config", response_model=SystemConfigNode)
-async def update_system_config(config: SystemConfigNode, repo: SoulRepository = Depends(get_repository)):
+async def update_system_config(
+    config: SystemConfigNode,
+    repo: SoulRepository = Depends(get_repository),
+    current_user: str = Depends(get_current_user)
+):
     """
     Updates the System Configuration.
     """
@@ -33,7 +40,10 @@ async def update_system_config(config: SystemConfigNode, repo: SoulRepository = 
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/purge-memories")
-async def purge_memories(repo: SoulRepository = Depends(get_repository)):
+async def purge_memories(
+    repo: SoulRepository = Depends(get_repository),
+    current_user: str = Depends(get_current_user)
+):
     """
     SCORCHED EARTH: Wipes all episodic memory and dreams.
     This action is irreversible.
