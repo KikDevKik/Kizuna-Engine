@@ -10,7 +10,8 @@ from datetime import datetime
 from .base import SoulRepository
 from ..models.graph import (
     UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode,
-    DreamNode, ShadowEdge, ArchetypeNode, GlobalDreamNode, EmbodiesEdge
+    DreamNode, ShadowEdge, ArchetypeNode, GlobalDreamNode, EmbodiesEdge,
+    SystemConfigNode
 )
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,9 @@ class LocalSoulRepository(SoulRepository):
         self.archetypes: Dict[str, ArchetypeNode] = {}
         self.embodies: Dict[str, List[EmbodiesEdge]] = {} # {agent_id: [EmbodiesEdge]}
         self.global_dream: GlobalDreamNode = GlobalDreamNode()
+
+        # Evolution Phase 2: System Config
+        self.system_config: SystemConfigNode = SystemConfigNode()
 
     async def initialize(self) -> None:
         """Load the graph from JSON."""
@@ -102,6 +106,13 @@ class LocalSoulRepository(SoulRepository):
 
                 if "global_dream" in data:
                     self.global_dream = GlobalDreamNode(**data["global_dream"])
+
+                # Hydrate System Config (Phase 2)
+                if "system_config" in data:
+                    self.system_config = SystemConfigNode(**data["system_config"])
+                else:
+                    # Default values (matches previous hardcoded constants)
+                    self.system_config = SystemConfigNode()
 
                 # Hydrate Embodies
                 self.embodies = {}
@@ -197,6 +208,7 @@ class LocalSoulRepository(SoulRepository):
             },
             "archetypes": to_dict_list(self.archetypes.values()),
             "global_dream": self.global_dream.model_dump(mode='json'),
+            "system_config": self.system_config.model_dump(mode='json'),
             "embodies": {
                 aid: [e.model_dump(mode='json') for e in edges]
                 for aid, edges in self.embodies.items()
@@ -567,4 +579,18 @@ class LocalSoulRepository(SoulRepository):
             self.global_dream.themes = themes
             self.global_dream.intensity = intensity
             self.global_dream.last_updated = datetime.now()
+            await self._save()
+
+    # --- Evolution Phase 2: System Config (Local) ---
+
+    async def get_system_config(self) -> SystemConfigNode:
+        """Fetch the System Configuration (Singleton)."""
+        async with self.lock:
+            # Already initialized in __init__ or load()
+            return self.system_config
+
+    async def update_system_config(self, config: SystemConfigNode) -> None:
+        """Update the System Configuration."""
+        async with self.lock:
+            self.system_config = config
             await self._save()

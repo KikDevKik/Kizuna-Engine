@@ -105,3 +105,15 @@ class SoulRepository(ABC):
     async def update_global_dream(self, themes: List[str], intensity: float) -> None:
         """Update Singleton Global Dream."""
         pass
+
+    # --- Evolution Phase 2: System Config (Ontological Decoupling) ---
+
+    @abstractmethod
+    async def get_system_config(self) -> 'SystemConfigNode':
+        """Fetch the System Configuration Node."""
+        pass
+
+    @abstractmethod
+    async def update_system_config(self, config: 'SystemConfigNode') -> None:
+        """Update the System Configuration Node."""
+        pass
