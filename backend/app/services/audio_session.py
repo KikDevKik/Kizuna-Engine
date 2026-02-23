@@ -191,10 +191,6 @@ async def receive_from_gemini(
     - Intercepts <user_log>...</user_log> to log user speech.
     - Strips internal monologue (**...**) from transcripts.
     """
-    # Turn State
-    turn_buffer = ""
-    user_log_processed = False
-
     try:
         while True:
             try:
@@ -223,57 +219,7 @@ async def receive_from_gemini(
 
                             # Handle Text (if interleaved or final transcript)
                             if part.text:
-                                text_chunk = part.text
-
-                                # --- Echo Protocol Logic ---
-                                text_to_process = ""
-
-                                if user_log_processed:
-                                    # Regular processing
-                                    text_to_process = text_chunk
-                                else:
-                                    # Buffering for User Log
-                                    turn_buffer += text_chunk
-
-                                    # Check for <user_log> block
-                                    match = re.search(r'<user_log>(.*?)</user_log>', turn_buffer, re.DOTALL)
-                                    if match:
-                                        user_text = match.group(1).strip()
-                                        logger.info(f"🎤 User Log Detected: {user_text}")
-
-                                        # Log User Speech
-                                        if transcript_buffer is not None:
-                                            transcript_buffer.append(f"User: {user_text}")
-
-                                        # Feed Subconscious Mind (User Voice via Echo Protocol)
-                                        # Pollution Fix: Only user input goes here.
-                                        if transcript_queue:
-                                            try:
-                                                transcript_queue.put_nowait(user_text)
-                                            except Exception as e:
-                                                logger.warning(f"Failed to queue user transcript: {e}")
-
-                                        # Remove the block from buffer
-                                        text_to_process = turn_buffer.replace(match.group(0), "")
-
-                                        # Mark processed
-                                        user_log_processed = True
-                                        turn_buffer = "" # Clear buffer
-                                    else:
-                                        # No complete match yet.
-                                        # Check if buffer starts with part of the tag
-                                        if turn_buffer.strip().startswith("<user_log>") or turn_buffer.strip().startswith("<"):
-                                            # Wait for more chunks (Simple heuristic)
-                                            # Warning: If user_log never closes, we might stall text output.
-                                            # But "ALWAYS begin" directive is strong.
-                                            # If buffer gets too long without close, we might abort?
-                                            # For now, assume model compliance or short logs.
-                                            continue
-                                        else:
-                                            # Doesn't look like a log start, assume missed/ignored instruction
-                                            text_to_process = turn_buffer
-                                            user_log_processed = True
-                                            turn_buffer = ""
+                                text_to_process = part.text
 
                                 # --- Clean Internal Monologue ---
                                 # Strip <thinking>...</thinking> (Cognitive Exhaust)
@@ -315,10 +261,6 @@ async def receive_from_gemini(
                     # Handle turn completion
                     if server_content.turn_complete:
                         logger.info("Gemini -> Client: Turn complete signal.")
-
-                        # Reset Turn State
-                        turn_buffer = ""
-                        user_log_processed = False
 
                         try:
                             await websocket.send_json({"type": "turn_complete"})

@@ -134,8 +134,8 @@ function App() {
               <div className="mt-12 pointer-events-auto">
                 <button
                   onClick={handleToggleConnection}
-                  disabled={status === 'connecting' || !selectedAgentId}
-                  className={`kizuna-shard-btn-wrapper ${!selectedAgentId ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
+                  disabled={status === 'connecting'}
+                  className={`kizuna-shard-btn-wrapper ${!selectedAgentId ? 'opacity-50 grayscale' : ''}`}
                 >
                   <span className="kizuna-shard-btn-inner">
                     {status === 'connecting' ? (
