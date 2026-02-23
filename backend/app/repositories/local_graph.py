@@ -395,6 +395,8 @@ class LocalSoulRepository(SoulRepository):
         Consolidate memories for the user (Event-Driven Debounce).
         Simulates compressing recent episodes.
         """
+        # PHASE 1: Identification (Lock held)
+        raw_episodes = []
         async with self.lock:
             ep_ids = self.experienced.get(user_id, [])
             if not ep_ids:
@@ -404,7 +406,6 @@ class LocalSoulRepository(SoulRepository):
             # Simulate LLM Clustering & Compression (Mock)
             # Find all unprocessed episodes (valence != 999.0)
             # We use 999.0 to mark 'Archived' since 0.0 is valid Neutral valence.
-            raw_episodes = []
             for eid in ep_ids:
                 ep = self.episodes.get(eid)
                 if ep and abs(ep.emotional_valence) <= 1.0: # Valid range -1.0 to 1.0
@@ -414,25 +415,51 @@ class LocalSoulRepository(SoulRepository):
                 logger.info("No RAW episodes to consolidate.")
                 return
 
-            logger.info(f"Compressing {len(raw_episodes)} raw episodes into Long-Term Memory...")
+            # NOTE: We hold references to `raw_episodes`. If another thread modifies them,
+            # we see the changes. We release the lock now to allow other operations.
 
-            if dream_generator:
-                # Lucid Dreaming Protocol
-                try:
-                    dream_node = await dream_generator(raw_episodes)
-                    self.dreams[dream_node.id] = dream_node
+        logger.info(f"Compressing {len(raw_episodes)} raw episodes into Long-Term Memory...")
 
-                    # Link Shadow Edge
-                    edge = ShadowEdge(source_id=user_id, target_id=dream_node.id)
-                    if user_id not in self.shadows:
-                        self.shadows[user_id] = []
-                    self.shadows[user_id].append(edge)
-                    logger.info(f"✨ Generated Dream: {dream_node.theme} (Intensity: {dream_node.intensity})")
-                except Exception as e:
-                    logger.error(f"Failed to generate dream: {e}")
-            else:
+        # PHASE 2: Generation (Lock released - Async IO)
+        dream_node = None
+        fallback_mode = False
+
+        if dream_generator:
+            # Lucid Dreaming Protocol
+            try:
+                # 🏰 BASTION SHIELD: Execute slow network call OUTSIDE the lock to prevent deadlock
+                dream_node = await dream_generator(raw_episodes)
+            except Exception as e:
+                logger.error(f"Failed to generate dream: {e}")
+        else:
+            fallback_mode = True
+
+        # PHASE 3: Commit (Lock re-acquired)
+        async with self.lock:
+            # Re-verify existence (Race Condition with Purge)
+            # Only process episodes that still exist AND are not already archived (Race Condition: Double Process)
+            valid_episodes = [
+                ep for ep in raw_episodes
+                if ep.id in self.episodes and abs(ep.emotional_valence) <= 1.0
+            ]
+
+            if not valid_episodes:
+                logger.warning(f"Consolidation aborted for {user_id}: Episodes no longer valid (Purged/Archived?).")
+                return
+
+            if dream_node:
+                self.dreams[dream_node.id] = dream_node
+
+                # Link Shadow Edge
+                edge = ShadowEdge(source_id=user_id, target_id=dream_node.id)
+                if user_id not in self.shadows:
+                    self.shadows[user_id] = []
+                self.shadows[user_id].append(edge)
+                logger.info(f"✨ Generated Dream: {dream_node.theme} (Intensity: {dream_node.intensity})")
+
+            elif fallback_mode:
                 # Fallback: Create Summary Episode (The "Dream")
-                summary_text = f"User interaction summary: {len(raw_episodes)} events consolidated."
+                summary_text = f"User interaction summary: {len(valid_episodes)} events consolidated."
                 summary_node = MemoryEpisodeNode(
                     summary=summary_text,
                     emotional_valence=1.0 # Consolidated/Refined
@@ -447,7 +474,7 @@ class LocalSoulRepository(SoulRepository):
             # NOTE: Must be done BEFORE archiving episodes so we have the correct valence.
 
             # Calculate Average Valence (-1.0 to 1.0)
-            avg_valence = sum(ep.emotional_valence for ep in raw_episodes) / len(raw_episodes)
+            avg_valence = sum(ep.emotional_valence for ep in valid_episodes) / len(valid_episodes)
 
             # FIX: We need to know the agent.
             # `save_episode` links User->Episode.
@@ -462,7 +489,7 @@ class LocalSoulRepository(SoulRepository):
 
             for agent_id, resonance in user_resonances.items():
                 agent_eps = []
-                for ep in raw_episodes:
+                for ep in valid_episodes:
                     if ep.id in resonance.shared_memories:
                         agent_eps.append(ep)
                 if agent_eps:
@@ -498,10 +525,11 @@ class LocalSoulRepository(SoulRepository):
 
             # 3. Mark Raw Episodes as archived (or delete them to save space)
             # We use 999.0 to indicate processed/archived state
-            for ep in raw_episodes:
+            for ep in valid_episodes:
                 ep.emotional_valence = 999.0 # Archived state
 
-            await self._save()
+            # Shield the save operation as it's critical state persistence
+            await asyncio.shield(self._save())
 
     async def get_last_dream(self, user_id: str) -> Optional[DreamNode]:
         """Retrieve the last dream generated for this user."""
