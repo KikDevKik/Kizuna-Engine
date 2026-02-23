@@ -352,7 +352,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                             e.stopPropagation();
                             setAgentToDelete(agent);
                           }}
-                          className="p-2 text-vintage-navy hover:text-alert-red transition-colors opacity-50 hover:opacity-100"
+                          className="p-2 text-electric-blue hover:text-alert-red transition-colors opacity-50 hover:opacity-100"
                           title="Terminate Soul"
                           aria-label={`Delete agent ${agent.name}`}
                         >
@@ -401,7 +401,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                         </div>
 
                         <div className="mt-4">
-                          <div className="w-full h-[1px] bg-white/10 my-2" />
+                          <div className="w-full h-[1px] bg-electric-blue/30 my-2" />
                           <div className="flex justify-between items-end">
                              <span className="font-technical text-2xl text-electric-blue">
                                 {agent.systemStatus === 'ONLINE' ? '100%' : '---'}
