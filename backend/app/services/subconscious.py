@@ -111,21 +111,25 @@ class SubconsciousMind:
                         # Persist Insight (Phase 3)
                         if self.repository:
                             try:
-                                # Dynamic Resonance Update
-                                delta = 0
-                                trigger_word = "Emotion"
-
-                                # Simple heuristic for now, but could be trait-driven later
+                                # Dynamic Resonance Update (Ontological Decoupling)
+                                delta = 0.0
                                 hint_lower = hint.lower()
-                                if "happy" in hint_lower or "excited" in hint_lower:
-                                    delta = 1
-                                    trigger_word = "Positivity"
-                                elif "angry" in hint_lower:
-                                    delta = 0 # No penalty, just neutral/handling
-                                    trigger_word = "Conflict"
-                                elif "sad" in hint_lower:
-                                    delta = 1 # Comforting is bonding
-                                    trigger_word = "Vulnerability"
+
+                                # 1. Fetch Logic
+                                system_config = await self.repository.get_system_config()
+                                agent = await self.repository.get_agent(agent_id)
+
+                                # 2. Determine Matrix (Agent Override > System Default)
+                                matrix = system_config.sentiment_resonance_matrix
+                                if agent and agent.emotional_resonance_matrix:
+                                    matrix = agent.emotional_resonance_matrix
+
+                                # 3. Calculate Delta
+                                # We iterate and take the FIRST match to prevent stacking/explosions.
+                                for keyword, d_val in matrix.items():
+                                    if keyword in hint_lower:
+                                        delta = d_val
+                                        break
 
                                 if delta != 0:
                                     await self.repository.update_resonance(user_id, agent_id, delta)

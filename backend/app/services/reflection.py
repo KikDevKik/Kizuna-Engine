@@ -6,6 +6,7 @@ from asyncio import Queue
 from datetime import datetime
 from core.config import settings
 from ..models.graph import AgentNode
+from ..repositories.base import SoulRepository
 
 # Try import genai
 try:
@@ -25,15 +26,30 @@ class ReflectionMind:
     Operates as the Agent's internal monologue/conscience.
     """
     def __init__(self):
+        self.repository: SoulRepository | None = None
         self.client = None
         if genai and settings.GEMINI_API_KEY:
             self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+    def set_repository(self, repo: SoulRepository):
+        self.repository = repo
 
     async def start(self, ai_transcript_queue: Queue, injection_queue: Queue, agent: AgentNode):
         """
         Main loop for the Reflection Mind.
         """
         logger.info(f"🪞 Reflection Mind activated for Agent: {agent.name}")
+
+        # Fetch Throttling Config (Once per session startup to avoid IO in loop)
+        base_chance = 0.2
+        multiplier = 0.6
+        if self.repository:
+            try:
+                config = await self.repository.get_system_config()
+                base_chance = config.reflection_base_chance
+                multiplier = config.reflection_neuroticism_multiplier
+            except Exception as e:
+                logger.warning(f"Failed to fetch SystemConfig for ReflectionMind: {e}")
 
         try:
             while True:
@@ -44,15 +60,12 @@ class ReflectionMind:
                     if not text_segment:
                         continue
 
-                    # Throttling Logic (Trait-Based)
+                    # Throttling Logic (Trait-Based & Configurable)
                     # "neuroticism" (0.0 - 1.0): High = more reflection. Low = less.
                     # Default to 0.5 (Moderate) if missing.
                     neuroticism = agent.traits.get("neuroticism", 0.5)
 
-                    # Base chance: 0.2 + (0.6 * neuroticism)
-                    # Low neuroticism (0.0) -> 20% chance
-                    # High neuroticism (1.0) -> 80% chance
-                    reflection_chance = 0.2 + (0.6 * neuroticism)
+                    reflection_chance = base_chance + (multiplier * neuroticism)
 
                     if random.random() > reflection_chance:
                         # Skip reflection this turn to save latency/tokens and avoid overthinking
@@ -87,14 +100,16 @@ class ReflectionMind:
 
         if self.client and not mock_mode:
             try:
-                # Dynamic Prompt Loading
-                prompt_template = (
-                    "You are the inner voice/conscience of {name}. Read your own recent spoken output below.\n"
-                    "Based on your lore ({base_instruction}) and your personality traits ({traits}), are you staying true to yourself?\n"
-                    "Are you sounding too robotic, too formal, or drifting from your character?\n"
-                    "If you feel you are losing your 'vibe', give yourself a quick, in-character mental slap (max 10 words).\n"
-                    "If you are acting naturally, return nothing."
-                )
+                # Dynamic Prompt Loading (Zero Hardcoding)
+                prompt_template = agent.reflection_prompt
+                # Fallback safety (should be covered by Pydantic default)
+                if not prompt_template:
+                     prompt_template = (
+                        "You are the inner voice/conscience of {name}. Read your own recent spoken output below.\n"
+                        "Based on your lore ({base_instruction}) and your personality traits ({traits}), are you staying true to yourself?\n"
+                        "If you feel you are losing your 'vibe', give yourself a quick, in-character mental slap (max 10 words).\n"
+                        "If you are acting naturally, return nothing."
+                     )
 
                 system_instruction = prompt_template.format(
                     name=agent.name,
