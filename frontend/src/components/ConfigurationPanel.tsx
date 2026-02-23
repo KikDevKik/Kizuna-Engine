@@ -103,7 +103,12 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
                 <Settings size={18} />
                 <span>CONFIGURATION NEXUS // SYSTEM LEVEL 0</span>
               </div>
-              <button onClick={onClose} className="text-electric-blue/60 hover:text-electric-blue">
+              <button
+                type="button"
+                aria-label="Close configuration panel"
+                onClick={onClose}
+                className="text-electric-blue/60 hover:text-electric-blue"
+              >
                 <X size={20} />
               </button>
             </div>
@@ -116,13 +121,14 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
                   THE SOUL MATRIX
                 </h3>
                 <div className="bg-vintage-navy/10 p-4 border border-electric-blue/20">
-                  <label className="block text-xs font-technical text-electric-blue mb-2">
+                  <label htmlFor="core-directive-input" className="block text-xs font-technical text-electric-blue mb-2">
                     CORE DIRECTIVE (IMMUTABLE INSTRUCTION SET)
                   </label>
                   {isLoading ? (
                     <div className="text-electric-blue animate-pulse">Loading Matrix...</div>
                   ) : (
                     <textarea
+                      id="core-directive-input"
                       value={coreDirective}
                       onChange={(e) => setCoreDirective(e.target.value)}
                       className="w-full h-48 bg-abyssal-black text-electric-blue font-mono text-sm p-4 border border-vintage-navy focus:border-electric-blue outline-none resize-none"
@@ -130,6 +136,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
                   )}
                   <div className="flex justify-end mt-4">
                     <button
+                      type="button"
                       onClick={handleSaveConfig}
                       disabled={isSaving || isLoading}
                       className="kizuna-shard-btn-wrapper"
@@ -158,6 +165,10 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
                     </div>
                   </div>
                   <button
+                    type="button"
+                    role="switch"
+                    aria-checked={showScanlines}
+                    aria-label="Toggle CRT scanline emulation"
                     onClick={() => setShowScanlines(!showScanlines)}
                     className={`px-4 py-2 border ${showScanlines ? 'border-electric-blue bg-electric-blue/20 text-electric-blue' : 'border-vintage-navy text-gray-500'} font-technical transition-all`}
                   >
@@ -182,6 +193,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
                        </div>
                     </div>
                     <button
+                       type="button"
                        onClick={handleWipeGraph}
                        className="px-4 py-2 bg-alert-red/10 border border-alert-red text-alert-red font-technical hover:bg-alert-red/20 transition-all"
                     >
