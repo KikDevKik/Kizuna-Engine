@@ -3,11 +3,13 @@ import logging
 import asyncio
 import aiofiles
 import os
+import math
 from typing import List, Optional, Dict
 from pathlib import Path
 from datetime import datetime
 
 from .base import SoulRepository
+from ..services.embedding import embedding_service
 from ..models.graph import (
     UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode,
     DreamNode, ShadowEdge, ArchetypeNode, GlobalDreamNode, EmbodiesEdge,
@@ -274,12 +276,34 @@ class LocalSoulRepository(SoulRepository):
             logger.info(f"Resonance updated for User {user_id} -> Agent {agent_id}: {new_affinity}")
             return resonance
 
+    @staticmethod
+    def _cosine_similarity(v1: List[float], v2: List[float]) -> float:
+        """
+        Calculates the Cosine Similarity between two vectors.
+        Range: -1.0 to 1.0 (where 1.0 is identical).
+        """
+        if not v1 or not v2 or len(v1) != len(v2):
+            return 0.0
+
+        dot_product = sum(a * b for a, b in zip(v1, v2))
+        magnitude_v1 = math.sqrt(sum(a * a for a in v1))
+        magnitude_v2 = math.sqrt(sum(b * b for b in v2))
+
+        if magnitude_v1 == 0 or magnitude_v2 == 0:
+            return 0.0
+
+        return dot_product / (magnitude_v1 * magnitude_v2)
+
     async def save_episode(self, user_id: str, agent_id: str, summary: str, valence: float, raw_transcript: Optional[str] = None) -> MemoryEpisodeNode:
+        # Generate embedding asynchronously (outside lock to avoid blocking)
+        embedding = await embedding_service.embed_text(summary)
+
         async with self.lock:
             episode = MemoryEpisodeNode(
                 summary=summary,
                 emotional_valence=valence,
-                raw_transcript=raw_transcript
+                raw_transcript=raw_transcript,
+                embedding=embedding
             )
             self.episodes[episode.id] = episode
 
@@ -307,36 +331,43 @@ class LocalSoulRepository(SoulRepository):
 
     async def get_relevant_facts(self, user_id: str, query: str, limit: int = 5) -> List[FactNode]:
         """
-        Mock Vector Search.
-        In Phase 3.2 (Spanner), this will use vector embeddings.
-        Here, we do a simple keyword match.
+        Semantic Search using Cosine Similarity.
+        Replaces basic keyword matching with local vector search.
         """
         if user_id not in self.knows:
             return []
 
+        # 1. Generate Query Vector
+        query_vector = await embedding_service.embed_text(query)
+        if not query_vector:
+            logger.warning("Failed to generate embedding for query in local RAG.")
+            return []
+
         user_fact_ids = self.knows[user_id]
-        relevant = []
+        scored_facts = []
 
-        query_terms = set(query.lower().split())
-
+        # 2. Iterate and Rank
         for fact_id in user_fact_ids:
             fact = self.facts.get(fact_id)
-            if not fact:
+            if not fact or not fact.embedding:
+                # Skip facts without embeddings (pre-vector era)
                 continue
 
-            # Basic keyword matching
-            content_terms = set(fact.content.lower().split())
-            if query_terms.intersection(content_terms):
-                relevant.append(fact)
+            similarity = self._cosine_similarity(query_vector, fact.embedding)
+            scored_facts.append((similarity, fact))
 
-            if len(relevant) >= limit:
-                break
+        # 3. Sort by Similarity (Descending)
+        scored_facts.sort(key=lambda x: x[0], reverse=True)
 
-        return relevant
+        # 4. Return Top K
+        return [item[1] for item in scored_facts[:limit]]
 
     async def save_fact(self, user_id: str, content: str, category: str) -> FactNode:
+        # Generate embedding asynchronously
+        embedding = await embedding_service.embed_text(content)
+
         async with self.lock:
-            fact = FactNode(content=content, category=category)
+            fact = FactNode(content=content, category=category, embedding=embedding)
             self.facts[fact.id] = fact
 
             if user_id not in self.knows:
@@ -535,6 +566,40 @@ class LocalSoulRepository(SoulRepository):
             result.sort(key=lambda x: x.timestamp)
 
             return result
+
+    async def get_relevant_episodes(self, user_id: str, query: str, limit: int = 5) -> List[MemoryEpisodeNode]:
+        """
+        Semantic Search for Long-Term Memory (Episodes).
+        Uses local cosine similarity.
+        """
+        if user_id not in self.experienced:
+            return []
+
+        # 1. Generate Query Vector
+        query_vector = await embedding_service.embed_text(query)
+        if not query_vector:
+            logger.warning("Failed to generate embedding for query in local Episode RAG.")
+            return []
+
+        user_episode_ids = self.experienced[user_id]
+        scored_episodes = []
+
+        # 2. Iterate and Rank
+        for eid in user_episode_ids:
+            ep = self.episodes.get(eid)
+            # We filter out archived episodes (valence=999.0) if we only want active memory,
+            # but usually RAG should search ALL history including archived ones.
+            # However, for now, let's search everything that has an embedding.
+            if not ep or not ep.embedding:
+                continue
+
+            similarity = self._cosine_similarity(query_vector, ep.embedding)
+            scored_episodes.append((similarity, ep))
+
+        # 3. Sort by Similarity (Descending)
+        scored_episodes.sort(key=lambda x: x[0], reverse=True)
+
+        return [item[1] for item in scored_episodes[:limit]]
 
     # --- Evolution Phase 1: Ontology & Archetypes (Mock for Local) ---
 
