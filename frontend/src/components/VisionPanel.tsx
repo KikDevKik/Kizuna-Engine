@@ -45,7 +45,7 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage,
   useEffect(() => {
     if (!connected || !isReady || visionMode === 'off') return;
 
-    // Argus: Muestreo Inteligente (2.5s heartbeat)
+    // Argus: Muestreo Inteligente (2.0s heartbeat)
     const interval = setInterval(async () => {
       const frame = await captureFrame();
       if (frame) {
@@ -54,7 +54,7 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage,
         setPulse(true);
         setTimeout(() => setPulse(false), 200);
       }
-    }, 2500);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, [connected, isReady, visionMode, captureFrame, sendImage]);

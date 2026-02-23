@@ -34,7 +34,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
         } else {
             addLog("BIO: Error transmitting");
         }
-    } catch (e) {
+    } catch {
         addLog(`BIO: Network Error`);
     }
   };
@@ -54,7 +54,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
           api.sendImage(frame);
           addLog("AUTO-SYNC: Frame sent");
         }
-      }, 2500);
+      }, 2000);
     }
     return () => clearInterval(interval);
   }, [autoSync, isCameraReady, api.connected, captureFrame, api]);
@@ -135,7 +135,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
                     className={`kizuna-shard-btn-wrapper flex-1 ${autoSync ? '!bg-alert-red' : ''}`}
                   >
                     <div className={`kizuna-shard-btn-inner gap-2 ${autoSync ? '!text-alert-red bg-alert-red/10' : ''}`}>
-                      <Activity size={16} /> {autoSync ? 'STOP SYNC' : 'AUTO SYNC (2.5s)'}
+                      <Activity size={16} /> {autoSync ? 'STOP SYNC' : 'AUTO SYNC (2.0s)'}
                     </div>
                   </button>
                 </div>
