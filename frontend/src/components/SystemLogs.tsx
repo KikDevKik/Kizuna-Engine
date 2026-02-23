@@ -30,7 +30,7 @@ export const SystemLogs = React.memo(() => {
   }, []);
 
   return (
-    <div className="fixed bottom-4 left-4 z-0 pointer-events-none opacity-80">
+    <div className="fixed bottom-12 left-4 z-0 pointer-events-none opacity-80">
       <div className="font-log font-technical text-xs text-electric-blue tracking-widest mb-1 border-b border-electric-blue/30 w-32 drop-shadow-[0_0_5px_rgba(0,209,255,0.5)]">
         SYS.LOG //
       </div>
