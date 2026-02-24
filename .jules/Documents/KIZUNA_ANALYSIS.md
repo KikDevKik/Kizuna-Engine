@@ -3,7 +3,7 @@
 Este documento analiza el estado actual de Kizuna Engine, identifica problemas críticos en la implementación y describe la arquitectura de la "Simulación de Realidad Multi-Agente".
 
 ## 1. Arquitectura Actual (Estado Actual)
-La arquitectura actual es un sistema de simulación autónoma respaldado por un Grafo de Conocimiento Temporal (GraphRAG), operando sobre un stream multimodal full-duplex.
+La arquitectura actual es un sistema de simulación autónoma respaldado por un Grafo de Conocimiento Temporal (GraphRAG), operando sobre un stream multimodal full-duplex y un Event Loop asíncrono blindado.
 
 ### Backend (backend/app/)
 - **Tecnología**: Python, FastAPI, Uvicorn, google-genai SDK.
@@ -11,6 +11,9 @@ La arquitectura actual es un sistema de simulación autónoma respaldado por un 
     - `audio_session.send_to_gemini`: Streaming de audio upstream.
     - `audio_session.receive_from_gemini`: Streaming downstream.
     - `subconscious_mind.start`: Análisis paralelo de sentimientos.
+- **Estabilidad (The Bastion)**:
+    - **Asyncio Shield**: `SleepManager` protege la escritura de memorias (`repository.save_episode`) con `asyncio.shield()`, asegurando integridad de datos ante desconexiones.
+    - **Deadlock Prevention**: `LocalSoulRepository` utiliza un patrón de "Unsafe Methods" (`_get_resonance_unsafe`) y "Split-Lock Strategies" para evitar bloqueos recursivos.
 - **Flujo de Datos**:
     1. **Recepción Multimodal (Client -> Gemini)**:
        - **Audio**: Recibe audio PCM (16kHz, 16-bit, mono) con buffering de ~100ms.
@@ -21,9 +24,9 @@ La arquitectura actual es un sistema de simulación autónoma respaldado por un 
 - **Model Waterfall**: Implementa estrategia de fallback (Cascada) en `SubconsciousMind` y `RitualService`. Si un modelo devuelve error 429 (Rate Limit), el sistema intenta automáticamente con el siguiente en la lista configurada (`settings.MODEL_SUBCONSCIOUS`), asegurando continuidad operativa.
 - **Memoria y Mente (The Soul Architect)**:
     - **Local Vector Parity**: `LocalSoulRepository` implementa búsqueda semántica utilizando similitud coseno y `embedding_service`, permitiendo RAG real sin dependencias externas pesadas.
-    - **RAG (Soul Assembler)**: Inyecta episodios recientes (`MemoryEpisodeNode`) y el último sueño (`DreamNode`) en el prompt del sistema al iniciar sesión.
-    - **Ontological Decoupling**: La configuración del sistema y matrices de afinidad se cargan dinámicamente desde `SystemConfigNode` en el grafo, desacoplando datos de código.
-    - **Sleep Manager**: Gestiona el ciclo de sueño REM. Persiste la intención de consolidación en Redis (`sleep_intent:*`) y asegura que las memorias se guarden incluso ante reinicios o desconexiones, con un timeout de shutdown de 10s.
+    - **RAG (Soul Assembler)**: Inyecta episodios recientes (`MemoryEpisodeNode`), eventos de mundo (`CollectiveEventNode`) y el último sueño (`DreamNode`) en el prompt del sistema.
+    - **Semantic Bridge**: `SubconsciousMind` detecta similitudes semánticas en tiempo real e inyecta "Flashbacks" (`SYSTEM_HINT`) en la conversación.
+    - **Sleep Manager**: Gestiona el ciclo de sueño REM. Persiste la intención de consolidación en Redis (`sleep_intent:*`) con un sistema de "Rescue Protocol" en background.
 
 ### Frontend (frontend/src/) - The Forgemaster
 - **Tecnología**: React, TypeScript, Vite.
@@ -32,7 +35,7 @@ La arquitectura actual es un sistema de simulación autónoma respaldado por un 
 - **Gestión de Audio (AudioStreamManager)**:
     - **Jitter Buffer Dinámico**: Implementa un buffer elástico (objetivo 60ms). Si la latencia sube (>200ms), acelera la reproducción (1.05x) para alcanzar el tiempo real sin cortes bruscos ("catch-up").
 - **Visión (UseVision)**: Hook `useVision` permite capturar frames de cámara o pantalla, con throttling agresivo para no saturar el WebSocket.
-- **Estrategia de Conexión**: Implementa una filosofía de "Conexión Indestructible". No se desconecta automáticamente ante errores o eventos `onclose` del socket.
+- **Estrategia de Conexión**: Implementa una filosofía de "Conexión Indestructible" y "Silent Grace". No se muestra error al usuario ante caídas momentáneas.
 
 --------------------------------------------------------------------------------
 
@@ -72,22 +75,24 @@ Para que Kizuna "vea":
 --------------------------------------------------------------------------------
 
 ## 4. La Nueva Realidad: Simulación Multi-Agente (Temporal Knowledge Graph)
-El sistema ha evolucionado de un chatbot multimodal a una **Simulación de Realidad Autónoma** gestionada por 5 Titanes arquitectónicos.
+El sistema ha evolucionado de un chatbot multimodal a una **Simulación de Realidad Autónoma** gestionada por 6 Titanes arquitectónicos.
 
 ### A. Temporal Knowledge Graph (El Cerebro)
 La estructura de datos central ya no es una lista de mensajes, sino un Grafo Temporal (`backend/app/models/graph.py`):
-- **Nodos**: `UserNode`, `AgentNode` (con `traits` y `voice`), `MemoryEpisodeNode` (recuerdos), `DreamNode` (síntesis onírica), `SystemConfigNode` (directivas globales).
+- **Nodos**: `UserNode`, `AgentNode` (con `traits` y `social_battery`), `MemoryEpisodeNode` (recuerdos), `DreamNode` (síntesis onírica), `SystemConfigNode` (directivas globales), `CollectiveEventNode` (eventos de mundo).
 - **Aristas**: `ResonanceEdge` (afinidad emocional dinámica), `KnowsEdge` (hechos verificados), `ShadowEdge` (relación con sueños).
 
-### B. Ciclo de Vida Autónomo
+### B. Ciclo de Vida Autónomo & Simulación Offline
 - **Vigilia**: El `Forgemaster` (Frontend/Audio) gestiona la interacción en tiempo real.
-- **Reflexión**: El `Anthropologist` y `Soul Architect` analizan sentimientos y generan "Insights" en segundo plano mediante `SubconsciousMind`.
+- **Reflexión**: El `Anthropologist` gestiona la "Batería Social" (Decay & Drain) y la afinidad dinámica.
+- **Simulación Offline (Time-Skips)**: El `TimeSkipService` simula la vida de los agentes cuando el usuario no está (`CollectiveEventNode`), aplicando recarga de batería y decaimiento de afinidad (Curva del Olvido de Ebbinghaus).
 - **Sueño (Consolidación)**: El `SleepManager` y `Chief Architect` consolidan memorias a largo plazo y generan sueños (`DreamNode`) que influencian la personalidad futura.
 
-### C. Infraestructura de los 5 Titanes
+### C. Infraestructura de los 6 Titanes
 La arquitectura de código respeta ahora estrictamente la división de poderes:
-1. **The Forgemaster**: `frontend/`, `audio_session.py`, `vision_flow`.
-2. **The Chief Architect**: `graph.py`, `sleep_manager.py`.
-3. **The Anthropologist**: `AgentNode.traits`, `ResonanceEdge`.
-4. **The Soul Architect**: `soul_assembler.py`, `subconscious.py`.
-5. **The Chronicler**: Documentación y Sincronización de Lore.
+1. **The Forgemaster 🦾**: Frontend, Audio, Vision, WebSockets (`frontend/`, `audio_session.py`).
+2. **The Chief Architect 🏗️**: Grafo Temporal, Time-Skips, Ontología (`graph.py`, `time_skip.py`).
+3. **The Anthropologist 🌍**: Dinámicas Sociales, Batería Social, Límites (`subconscious.py` battery logic).
+4. **The Soul Architect 🕸️**: RAG, Memorias, Sueños, Puente Semántico (`soul_assembler.py`, `subconscious.py`).
+5. **The Bastion 🛡️**: Estabilidad, Seguridad, Asyncio Shield (`session_manager.py`, `sleep_manager.py`).
+6. **The Chronicler 📜**: Documentación, Roadmap, Data Hygiene (`AGENTS.md`, `.jules/Documents/`).

@@ -33,24 +33,23 @@ Este documento detalla los pasos secuenciales para transformar la implementació
 ## Fase 5: Simulación Autónoma (El Gran Salto) [EN PROCESO]
 **Objetivo**: Transformar el sistema de un "Chatbot Reactivo" a una "Simulación Viva" que persiste y evoluciona incluso cuando el usuario no está presente.
 
-### 1. [CHIEF ARCHITECT] Saltos Temporales Offline (Time-Skips)
-- **Estado**: Pendiente.
+### 1. [CHIEF ARCHITECT] Saltos Temporales Offline (Time-Skips) [✅ COMPLETADO]
+- **Estado**: Completado.
 - **Descripción**: Simular el paso del tiempo cuando el usuario regresa tras una ausencia larga.
-- **Acción**:
-    - Calcular `delta_time` al reconectar.
-    - Generar "Eventos Offline" (e.g., "Kizuna leyó un libro", "Kizuna durmió").
-    - Inyectar estos eventos en el `MemoryEpisodeNode` como contexto narrativo.
+- **Implementación**:
+    - `TimeSkipService` calcula `delta_time` y genera `CollectiveEventNode` estocásticos.
+    - Se inyecta contexto de fondo en el prompt del sistema al reconectar.
 
-### 2. [ANTHROPOLOGIST] Límites y Dinámicas entre Agentes
-- **Estado**: Pendiente.
+### 2. [ANTHROPOLOGIST] Límites y Dinámicas entre Agentes [✅ COMPLETADO]
+- **Estado**: Completado.
 - **Descripción**: Permitir que múltiples agentes interactúen entre sí sin intervención directa del usuario.
-- **Acción**:
-    - Definir protocolo de "Inter-Agent Messaging".
-    - Implementar "Social Battery" que decae con el tiempo.
+- **Implementación**:
+    - `Social Battery` implementada en `AgentNode` con decaimiento por turno y recarga offline.
+    - Decaimiento emocional (Ebbinghaus) aplicado a `ResonanceEdge`.
 
-### 3. [CHIEF ARCHITECT] Intercambio de Datos JSON-LD
+### 3. [CHIEF ARCHITECT] Intercambio de Datos JSON-LD [PRIORIDAD ALTA]
 - **Estado**: Pendiente.
-- **Descripción**: Estandarizar la exportación/importación de grafos de memoria.
+- **Descripción**: Estandarizar la exportación/importación de grafos de memoria para integración con MyWorld.
 - **Acción**:
     - Implementar esquema JSON-LD para `AgentNode` y `MemoryEpisodeNode`.
     - Permitir portabilidad de "Almas" entre instancias.
