@@ -203,6 +203,22 @@ async def receive_from_gemini(
 
                     if model_turn:
                         for part in model_turn.parts:
+
+                            # --- ANTHROPOLOGIST: HANG-UP INTERCEPTOR ---
+                            # Check text for [ACTION: HANGUP] before processing
+                            if part.text and "[ACTION: HANGUP]" in part.text:
+                                logger.warning(f"⛔ AGENT INITIATED HANG-UP: {part.text}")
+                                # Send a final polite close message (optional) or just kill it.
+                                # Requirement: "Physically hangs up".
+                                # We can send a control message so frontend knows WHY.
+                                await websocket.send_json({
+                                    "type": "control",
+                                    "action": "hangup",
+                                    "reason": "Agent initiated termination."
+                                })
+                                # Force disconnect
+                                raise WebSocketDisconnect(code=1000, reason="Agent Hangup")
+
                             # Handle Audio
                             if part.inline_data:
                                 # part.inline_data.data is bytes
