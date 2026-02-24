@@ -97,6 +97,7 @@ class CollectiveEventNode(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
     outcome: str # e.g., "FOUGHT", "BONDED", "IGNORED"
     summary: str # Narrative summary of the event
+    embedding: Optional[List[float]] = None # Vector embedding for RAG
 
 # ----------------------------------------------------
 

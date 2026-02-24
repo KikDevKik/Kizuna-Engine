@@ -74,18 +74,26 @@ class SubconsciousMind:
                     # Parallel Execution: Sentiment Analysis + Semantic Memory Retrieval
                     sentiment_task = asyncio.create_task(self._analyze_sentiment(full_text, agent_id))
                     memory_task = None
+                    event_task = None
                     if self.repository:
                         memory_task = asyncio.create_task(
                             self.repository.get_relevant_episodes(user_id, query=full_text, limit=1)
                         )
+                        if hasattr(self.repository, 'get_relevant_collective_events'):
+                            event_task = asyncio.create_task(
+                                self.repository.get_relevant_collective_events(query=full_text, limit=1)
+                            )
 
                     hint = await sentiment_task
                     episodes = []
+                    events = []
                     try:
                         if memory_task:
                             episodes = await memory_task
+                        if event_task:
+                            events = await event_task
                     except Exception as e:
-                        logger.error(f"Memory retrieval failed: {e}")
+                        logger.error(f"Memory/Event retrieval failed: {e}")
 
                     # --- 1. Memory Injection (The Semantic Bridge) ---
                     if episodes:
@@ -96,6 +104,19 @@ class SubconsciousMind:
                             f"{episode.summary}. Use this context naturally."
                         )
                         logger.info(f"🧠 Memory Retrieved: {episode.summary}")
+                        await injection_queue.put({
+                            "text": whisper,
+                            "turn_complete": False
+                        })
+
+                    # --- 1.5 World Event Injection ---
+                    if events:
+                        event = events[0]
+                        whisper = (
+                            f"SYSTEM_HINT: 🌍 [World History]: The user's current topic relates to a past world event: "
+                            f"{event.summary} (Outcome: {event.outcome}). Use this context."
+                        )
+                        logger.info(f"🌍 World Event Retrieved: {event.summary}")
                         await injection_queue.put({
                             "text": whisper,
                             "turn_complete": False
@@ -368,7 +389,9 @@ class SubconsciousMind:
                 prompt_template = (
                     "Synthesize these memories into a surreal dream concept. "
                     "Return JSON with keys: theme (str), intensity (0.0-1.0), surrealism_level (0.0-1.0).\n\n"
-                    "CRITICAL: You MUST retain all specific proper nouns, technical terms, names of songs, media, or projects mentioned by the user. Never generalize specific entities. Act as a precise archivist.\n\n"
+                    "CRITICAL: You MUST explicitly list specific Entity tags (Names, Locations, Factions) at the end of the 'theme'.\n"
+                    "Format the 'theme' string as: '...dream narrative... \\n\\nEntities: [List of Names, Locations, Factions]'\n"
+                    "Act as a precise archivist.\n\n"
                     "Memories:\n{summary_text}"
                 )
 
