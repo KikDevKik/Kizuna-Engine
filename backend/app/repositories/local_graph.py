@@ -834,6 +834,20 @@ class LocalSoulRepository(SoulRepository):
             events.sort(key=lambda x: x.timestamp, reverse=True)
             return events[:limit]
 
+    async def get_agent_collective_events(self, agent_id: str, limit: int = 5) -> List[CollectiveEventNode]:
+        """
+        Retrieve collective events where the specific agent was a participant.
+        """
+        async with self.lock:
+            # Filter by agent_id in participants
+            relevant_events = [
+                e for e in self.collective_events.values()
+                if agent_id in e.participants
+            ]
+            # Sort by timestamp desc
+            relevant_events.sort(key=lambda x: x.timestamp, reverse=True)
+            return relevant_events[:limit]
+
     async def get_relevant_collective_events(self, query: str, limit: int = 5) -> List[CollectiveEventNode]:
         """
         Semantic Search for Collective Events (World History).
