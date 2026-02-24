@@ -13,7 +13,8 @@ from ..services.embedding import embedding_service
 from ..models.graph import (
     UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode,
     DreamNode, ShadowEdge, ArchetypeNode, GlobalDreamNode, EmbodiesEdge,
-    SystemConfigNode
+    SystemConfigNode,
+    LocationNode, FactionNode, CollectiveEventNode, AgentAffinityEdge
 )
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,13 @@ class LocalSoulRepository(SoulRepository):
 
         # Evolution Phase 2: System Config
         self.system_config: SystemConfigNode = SystemConfigNode()
+
+        # Evolution Phase 3: Multi-Agent Reality
+        self.locations: Dict[str, LocationNode] = {}
+        self.factions: Dict[str, FactionNode] = {}
+        self.collective_events: Dict[str, CollectiveEventNode] = {}
+        # {source_id: {target_id: AgentAffinityEdge}}
+        self.agent_affinities: Dict[str, Dict[str, AgentAffinityEdge]] = {}
 
     async def initialize(self) -> None:
         """Load the graph from JSON."""
@@ -120,6 +128,29 @@ class LocalSoulRepository(SoulRepository):
                 self.embodies = {}
                 for aid, edges in data.get("embodies", {}).items():
                     self.embodies[aid] = [EmbodiesEdge(**e) for e in edges]
+
+                # Hydrate Locations (Phase 3)
+                for l in data.get("locations", []):
+                    node = LocationNode(**l)
+                    self.locations[node.id] = node
+
+                # Hydrate Factions (Phase 3)
+                for fc in data.get("factions", []):
+                    node = FactionNode(**fc)
+                    self.factions[node.id] = node
+
+                # Hydrate Collective Events (Phase 3)
+                for ce in data.get("collective_events", []):
+                    node = CollectiveEventNode(**ce)
+                    self.collective_events[node.id] = node
+
+                # Hydrate Agent Affinities (Phase 3)
+                # Stored as a flat list in JSON, hydrated into nested dict
+                for af in data.get("agent_affinities", []):
+                    edge = AgentAffinityEdge(**af)
+                    if edge.source_agent_id not in self.agent_affinities:
+                        self.agent_affinities[edge.source_agent_id] = {}
+                    self.agent_affinities[edge.source_agent_id][edge.target_agent_id] = edge
 
                 logger.info(f"Graph Database loaded: {len(self.users)} Users, {len(self.agents)} Agents.")
 
@@ -214,7 +245,16 @@ class LocalSoulRepository(SoulRepository):
             "embodies": {
                 aid: [e.model_dump(mode='json') for e in edges]
                 for aid, edges in self.embodies.items()
-            }
+            },
+            # Phase 3 Data
+            "locations": to_dict_list(self.locations.values()),
+            "factions": to_dict_list(self.factions.values()),
+            "collective_events": to_dict_list(self.collective_events.values()),
+            "agent_affinities": [
+                edge.model_dump(mode='json')
+                for s_dict in self.agent_affinities.values()
+                for edge in s_dict.values()
+            ]
         }
 
         # 2. Offload Serialization & I/O to Thread Pool
@@ -233,6 +273,13 @@ class LocalSoulRepository(SoulRepository):
             self.users[user_id] = new_user
             await self._save()
             return new_user
+
+    async def update_user_last_seen(self, user_id: str):
+        """Updates the last_seen timestamp for a user."""
+        async with self.lock:
+            if user_id in self.users:
+                self.users[user_id].last_seen = datetime.now()
+                await self._save()
 
     async def get_agent(self, agent_id: str) -> Optional[AgentNode]:
         # Agents are usually pre-seeded, but let's check
@@ -711,3 +758,66 @@ class LocalSoulRepository(SoulRepository):
         async with self.lock:
             self.system_config = config
             await self._save()
+
+    # --- Evolution Phase 3: Simulated Multi-Agent Reality (Local) ---
+
+    async def get_or_create_location(self, name: str, type: str, description: str) -> LocationNode:
+        async with self.lock:
+            # Check if exists by name (simple deduplication)
+            for loc in self.locations.values():
+                if loc.name == name:
+                    return loc
+
+            loc = LocationNode(name=name, type=type, description=description)
+            self.locations[loc.id] = loc
+            await self._save()
+            return loc
+
+    async def record_collective_event(self, event: CollectiveEventNode):
+        async with self.lock:
+            self.collective_events[event.id] = event
+            await self._save()
+
+    async def get_agent_affinity(self, source_id: str, target_id: str) -> AgentAffinityEdge:
+        async with self.lock:
+            source_map = self.agent_affinities.get(source_id, {})
+            if target_id in source_map:
+                return source_map[target_id]
+
+            # Create default affinity
+            new_edge = AgentAffinityEdge(source_agent_id=source_id, target_agent_id=target_id)
+            if source_id not in self.agent_affinities:
+                self.agent_affinities[source_id] = {}
+            self.agent_affinities[source_id][target_id] = new_edge
+            await self._save()
+            return new_edge
+
+    async def update_agent_affinity(self, source_id: str, target_id: str, delta: float) -> AgentAffinityEdge:
+        async with self.lock:
+            # Re-implement get logic inside lock to avoid double lock
+            source_map = self.agent_affinities.get(source_id, {})
+            if target_id in source_map:
+                edge = source_map[target_id]
+            else:
+                 edge = AgentAffinityEdge(source_agent_id=source_id, target_agent_id=target_id)
+                 if source_id not in self.agent_affinities:
+                     self.agent_affinities[source_id] = {}
+                 self.agent_affinities[source_id][target_id] = edge
+
+            new_val = max(0.0, min(100.0, edge.affinity + delta))
+            edge.affinity = new_val
+            edge.last_interaction = datetime.now()
+
+            await self._save()
+            return edge
+
+    async def get_recent_collective_events(self, limit: int = 5) -> List[CollectiveEventNode]:
+        async with self.lock:
+            # Sort by timestamp desc
+            events = list(self.collective_events.values())
+            events.sort(key=lambda x: x.timestamp, reverse=True)
+            return events[:limit]
+
+    async def get_all_locations(self) -> List[LocationNode]:
+        async with self.lock:
+            return list(self.locations.values())

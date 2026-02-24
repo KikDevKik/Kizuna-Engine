@@ -13,6 +13,7 @@ from app.services.soul_assembler import assemble_soul
 from app.services.subconscious import subconscious_mind
 from app.services.reflection import reflection_mind
 from app.services.sleep_manager import SleepManager
+from app.services.time_skip import TimeSkipService
 from app.services.cache import cache
 from app.repositories.base import SoulRepository
 from app.dependencies import verify_user_logic
@@ -27,9 +28,10 @@ class SessionManager:
     Encapsulates authentication, agent retrieval, Gemini connection, and cleanup.
     """
 
-    def __init__(self, soul_repo: SoulRepository, sleep_manager: SleepManager):
+    def __init__(self, soul_repo: SoulRepository, sleep_manager: SleepManager, time_skip_service: TimeSkipService):
         self.soul_repo = soul_repo
         self.sleep_manager = sleep_manager
+        self.time_skip_service = time_skip_service
 
     async def handle_session(
         self, websocket: WebSocket, agent_id: str | None, token: str | None
@@ -58,7 +60,13 @@ class SessionManager:
             return
 
         # Ensure user exists in Graph
-        await self.soul_repo.get_or_create_user(user_id)
+        user = await self.soul_repo.get_or_create_user(user_id)
+
+        # 🕰️ Temporal Engine: Simulate Offline Reality (Phase 3)
+        try:
+             await self.time_skip_service.simulate_background_life(user)
+        except Exception as e:
+             logger.error(f"Time-Skip Simulation Failed: {e}")
 
         # Phase 4: Waking Up
         await self.sleep_manager.cancel_sleep(user_id)
@@ -185,6 +193,10 @@ class SessionManager:
             logger.error(f"Unexpected error managing Gemini Session: {e}")
         finally:
             logger.info("WebSocket session closed.")
+
+            # Update Last Seen (Phase 3)
+            if hasattr(self.soul_repo, 'update_user_last_seen'):
+                await self.soul_repo.update_user_last_seen(user_id)
 
             # Full Session Persistence (Master Session Logger)
             # Decoupled to SleepManager to avoid ASGI Deadlock

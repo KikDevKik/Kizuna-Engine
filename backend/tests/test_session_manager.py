@@ -4,6 +4,7 @@ from fastapi import WebSocket
 
 from app.services.session_manager import SessionManager
 from app.services.sleep_manager import SleepManager
+from app.services.time_skip import TimeSkipService
 from app.repositories.base import SoulRepository
 
 
@@ -11,7 +12,8 @@ from app.repositories.base import SoulRepository
 async def test_session_manager_reject_origin():
     repo_mock = Mock(spec=SoulRepository)
     sleep_mock = Mock(spec=SleepManager)
-    manager = SessionManager(repo_mock, sleep_mock)
+    time_skip_mock = Mock(spec=TimeSkipService)
+    manager = SessionManager(repo_mock, sleep_mock, time_skip_mock)
 
     websocket = AsyncMock(spec=WebSocket)
     websocket.headers = {"origin": "http://evil.com"}
@@ -29,7 +31,8 @@ async def test_session_manager_reject_origin():
 async def test_session_manager_reject_no_agent():
     repo_mock = Mock(spec=SoulRepository)
     sleep_mock = Mock(spec=SleepManager)
-    manager = SessionManager(repo_mock, sleep_mock)
+    time_skip_mock = Mock(spec=TimeSkipService)
+    manager = SessionManager(repo_mock, sleep_mock, time_skip_mock)
 
     websocket = AsyncMock(spec=WebSocket)
     websocket.headers = {"origin": "http://localhost:5173"}
@@ -52,7 +55,10 @@ async def test_session_manager_success_flow():
     sleep_mock.cancel_sleep = AsyncMock()
     sleep_mock.schedule_sleep = AsyncMock()
 
-    manager = SessionManager(repo_mock, sleep_mock)
+    time_skip_mock = Mock(spec=TimeSkipService)
+    time_skip_mock.simulate_background_life = AsyncMock()
+
+    manager = SessionManager(repo_mock, sleep_mock, time_skip_mock)
 
     websocket = AsyncMock(spec=WebSocket)
     websocket.headers = {"origin": "http://localhost:5173"}
@@ -93,6 +99,7 @@ async def test_session_manager_success_flow():
 
         # Verify flow
         repo_mock.get_or_create_user.assert_called_with("user1")
+        time_skip_mock.simulate_background_life.assert_called()
         sleep_mock.cancel_sleep.assert_called_with("user1")
         websocket.accept.assert_called()
         gemini_mock.connect.assert_called()
