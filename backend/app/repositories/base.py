@@ -3,7 +3,7 @@ from typing import List, Optional, Dict
 from datetime import datetime
 from ..models.graph import (
     UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode,
-    DreamNode, ArchetypeNode, GlobalDreamNode
+    DreamNode, ArchetypeNode, GlobalDreamNode, CollectiveEventNode
 )
 
 class SoulRepository(ABC):
@@ -75,6 +75,16 @@ class SoulRepository(ABC):
     @abstractmethod
     async def get_relevant_episodes(self, user_id: str, query: str, limit: int = 5) -> List[MemoryEpisodeNode]:
         """Retrieve relevant episodes for a user based on semantic similarity."""
+        pass
+
+    @abstractmethod
+    async def get_recent_collective_events(self, limit: int = 5) -> List[CollectiveEventNode]:
+        """Retrieve the most recent collective events (world history)."""
+        pass
+
+    @abstractmethod
+    async def get_relevant_collective_events(self, query: str, limit: int = 5) -> List[CollectiveEventNode]:
+        """Retrieve relevant collective events based on semantic similarity (RAG)."""
         pass
 
     # --- Evolution Phase 1: Ontology & Archetypes ---

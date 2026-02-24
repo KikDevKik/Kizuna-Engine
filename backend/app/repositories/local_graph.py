@@ -774,6 +774,10 @@ class LocalSoulRepository(SoulRepository):
             return loc
 
     async def record_collective_event(self, event: CollectiveEventNode):
+        # Generate embedding asynchronously
+        embedding = await embedding_service.embed_text(event.summary)
+        event.embedding = embedding
+
         async with self.lock:
             self.collective_events[event.id] = event
             await self._save()
@@ -817,6 +821,32 @@ class LocalSoulRepository(SoulRepository):
             events = list(self.collective_events.values())
             events.sort(key=lambda x: x.timestamp, reverse=True)
             return events[:limit]
+
+    async def get_relevant_collective_events(self, query: str, limit: int = 5) -> List[CollectiveEventNode]:
+        """
+        Semantic Search for Collective Events (World History).
+        """
+        # 1. Generate Query Vector
+        query_vector = await embedding_service.embed_text(query)
+        if not query_vector:
+            logger.warning("Failed to generate embedding for query in local Event RAG.")
+            return []
+
+        scored_events = []
+
+        async with self.lock:
+            # 2. Iterate and Rank
+            for event in self.collective_events.values():
+                if not event.embedding:
+                    continue
+
+                similarity = self._cosine_similarity(query_vector, event.embedding)
+                scored_events.append((similarity, event))
+
+        # 3. Sort by Similarity (Descending)
+        scored_events.sort(key=lambda x: x[0], reverse=True)
+
+        return [item[1] for item in scored_events[:limit]]
 
     async def get_all_locations(self) -> List[LocationNode]:
         async with self.lock:
