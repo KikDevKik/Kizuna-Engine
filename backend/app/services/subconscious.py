@@ -67,31 +67,58 @@ class SubconsciousMind:
                         continue
 
                     # Analyze (Real or Mock)
-                    # Parallel Execution: Sentiment Analysis + Semantic Memory Retrieval
+                    # Parallel Execution: Sentiment Analysis + Semantic Memory Retrieval + Collective Event Retrieval
                     sentiment_task = asyncio.create_task(self._analyze_sentiment(full_text, agent_id))
                     memory_task = None
+                    world_task = None
+
                     if self.repository:
                         memory_task = asyncio.create_task(
                             self.repository.get_relevant_episodes(user_id, query=full_text, limit=1)
                         )
+                        if hasattr(self.repository, 'get_relevant_collective_events'):
+                            world_task = asyncio.create_task(
+                                self.repository.get_relevant_collective_events(query=full_text, limit=1)
+                            )
 
                     hint = await sentiment_task
                     episodes = []
+                    world_events = []
+
                     try:
                         if memory_task:
                             episodes = await memory_task
                     except Exception as e:
                         logger.error(f"Memory retrieval failed: {e}")
 
+                    try:
+                        if world_task:
+                            world_events = await world_task
+                    except Exception as e:
+                        logger.error(f"World event retrieval failed: {e}")
+
                     # --- 1. Memory Injection (The Semantic Bridge) ---
+                    # 1a. Personal Memories
                     if episodes:
-                        # We found a relevant memory from the past
                         episode = episodes[0]
                         whisper = (
                             f"SYSTEM_HINT: 🧠 [Flashback]: The user's current topic relates to a past memory: "
                             f"{episode.summary}. Use this context naturally."
                         )
                         logger.info(f"🧠 Memory Retrieved: {episode.summary}")
+                        await injection_queue.put({
+                            "text": whisper,
+                            "turn_complete": False
+                        })
+
+                    # 1b. World Events (Collective Unconscious)
+                    if world_events:
+                        event = world_events[0]
+                        whisper = (
+                            f"SYSTEM_HINT: 🌍 [World History]: The user's current topic relates to a background event: "
+                            f"{event.summary} ({event.type} at {event.timestamp}). Use this context naturally."
+                        )
+                        logger.info(f"🌍 World Event Retrieved: {event.summary}")
                         await injection_queue.put({
                             "text": whisper,
                             "turn_complete": False
