@@ -145,7 +145,7 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         f"{episode_context}\n\n"
         f"{multi_agent_context}\n\n"
         f"--- INTERNAL MONOLOGUE PROTOCOL ---\n"
-        f"Whenever you generate a response, you must wrap your internal reasoning or planning inside [THOUGHT] and [/THOUGHT] tags. Everything outside these tags will be considered your actual spoken dialogue."
+        f"CRITICAL DIRECTIVE: You MUST wrap ANY internal reasoning in [THOUGHT] tags. Do not output raw English reasoning without them."
     )
 
     logger.info(f"Soul assembled for {agent.name} (ID: {agent_id}) with affinity {affinity_level} and battery {battery}%.")
