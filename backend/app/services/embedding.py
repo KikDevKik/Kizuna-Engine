@@ -16,9 +16,8 @@ class EmbeddingService:
         self.mock_mode = settings.MOCK_GEMINI
 
         # Priority list of models to try
+        # Removed deprecated text-embedding-004 models which were causing latency/timeouts
         self.models = [
-            "models/text-embedding-004",
-            "text-embedding-004",
             "models/gemini-embedding-001",
             "gemini-embedding-001"
         ]
@@ -43,7 +42,7 @@ class EmbeddingService:
         Returns a list of floats, or empty list on failure.
         """
         if self.mock_mode:
-            # Return dummy 768-dim vector (standard for text-embedding-004)
+            # Return dummy 768-dim vector (standard for gemini-embedding-001)
             return [0.0] * 768
 
         if not self.client:
