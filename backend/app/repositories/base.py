@@ -83,6 +83,14 @@ class SoulRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_agent_collective_events(self, agent_id: str, limit: int = 5) -> List[CollectiveEventNode]:
+        """
+        Retrieve collective events where the specific agent was a participant.
+        Strictly filtered for narrative injection.
+        """
+        pass
+
+    @abstractmethod
     async def get_relevant_collective_events(self, query: str, limit: int = 5) -> List[CollectiveEventNode]:
         """Retrieve relevant collective events based on semantic similarity (RAG)."""
         pass

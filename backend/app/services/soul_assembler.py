@@ -103,19 +103,17 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
 
     # 6. Fetch Background Reality (Time-Skip Events)
     background_context = ""
-    if hasattr(repository, 'get_recent_collective_events'):
-        events = await repository.get_recent_collective_events(limit=5)
+    # ARCHITECT UPDATE: Strictly filtered narrative injection (only events the agent participated in)
+    if hasattr(repository, 'get_agent_collective_events'):
+        events = await repository.get_agent_collective_events(agent_id, limit=5)
         if events:
-            # Reverse to show oldest to newest? Or keeps newest top?
-            # Usually narrative flows forward. But get_recent returns newest first (desc).
-            # Let's reverse for chronological reading in prompt.
+            # Sort chronological for narrative flow
             events_chronological = sorted(events, key=lambda x: x.timestamp)
             lines = [f"- [{e.type}] {e.summary} ({e.outcome})" for e in events_chronological]
             background_context = (
-                f"--- WHILE YOU WERE AWAY (BACKGROUND SIMULATION) ---\n"
-                f"The world continued without you. These events happened in the background:\n"
+                f"--- WHILE THE USER WAS OFFLINE (EPISODIC MEMORY) ---\n"
+                f"While the user was away, you lived a life in the background. Synthesize these events into your backstory naturally if relevant:\n"
                 + "\n".join(lines) + "\n"
-                "You may choose to mention these casually if relevant, or gossip about them."
             )
 
     # --- Anthropologist: Multi-Agent Stub ---

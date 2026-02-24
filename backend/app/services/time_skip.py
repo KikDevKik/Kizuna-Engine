@@ -7,7 +7,8 @@ from uuid import uuid4
 
 from ..repositories.base import SoulRepository
 from ..models.graph import (
-    CollectiveEventNode, LocationNode, AgentAffinityEdge, UserNode
+    CollectiveEventNode, LocationNode, AgentAffinityEdge, UserNode,
+    IntentType, EphemeralIntent
 )
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,8 @@ class TimeSkipService:
 
         # Hardcoded Shadow Agents (Procedural NPCs)
         self.shadow_agents = [
-            "Stranger_01", "Bartender_X", "Cyber_Ronin", "Neon_Rat", "Corp_Drone"
+            "Stranger_01", "Bartender_X", "Cyber_Ronin", "Neon_Rat", "Corp_Drone",
+            "The_Glitch", "Null_Entity", "System_Daemon"
         ]
 
         # Default Locations (if graph is empty)
@@ -40,6 +42,27 @@ class TimeSkipService:
             ("Sector 4 Plaza", "public", "A busy intersection under the holographic sky."),
             ("The Old Server Room", "hidden", "A quiet, humming sanctuary of ancient tech.")
         ]
+
+        # Intent Outcome Matrix
+        # Maps Intent -> List of (Probability, Outcome, ValenceDelta, SummaryTemplate)
+        self.outcome_matrix = {
+            IntentType.SUPPORT: [
+                (0.7, "BONDED", 5.0, "{p1} and {p2} had a deep heart-to-heart at {loc}."),
+                (1.0, "CHATTED", 1.0, "{p1} and {p2} shared a drink at {loc} and caught up.")
+            ],
+            IntentType.CONFLICT: [
+                (0.4, "FOUGHT", -10.0, "{p1} and {p2} nearly came to blows at {loc} over a misunderstanding."),
+                (1.0, "ARGUED", -5.0, "{p1} and {p2} got into a heated debate at {loc}.")
+            ],
+            IntentType.GOSSIP: [
+                (0.5, "SHARED_SECRETS", 2.0, "{p1} whispered secrets to {p2} at {loc}."),
+                (1.0, "RUMOR_MILL", 0.5, "{p1} and {p2} were seen gossiping at {loc}.")
+            ],
+            IntentType.AVOID: [
+                (0.8, "IGNORED", -1.0, "{p1} saw {p2} at {loc} but deliberately looked away."),
+                (1.0, "AWKWARD", -2.0, "{p1} and {p2} had an awkward run-in at {loc}.")
+            ]
+        }
 
     async def simulate_background_life(self, user: UserNode) -> List[CollectiveEventNode]:
         """
@@ -57,7 +80,6 @@ class TimeSkipService:
         minutes_passed = delta.total_seconds() / 60.0
 
         # --- Anthropologist: Battery Recharge & Emotional Decay ---
-        # Run this regardless of min_delta, but scale by time.
         await self._apply_anthropologist_protocols(user.id, minutes_passed)
 
         if minutes_passed < self.min_delta_minutes:
@@ -67,13 +89,12 @@ class TimeSkipService:
         logger.info(f"🕰️ Time-Skip: User away for {minutes_passed:.1f}m. Simulating background reality...")
 
         # Determine number of events (Logarithmic scale or simple caps)
-        # e.g., 1 event per hour, max 5
         num_events = int(minutes_passed / 60)
-        num_events = max(1, min(num_events, self.max_events)) # Always generate at least 1 if > min_delta
+        num_events = max(1, min(num_events, self.max_events))
 
         events = []
         for _ in range(num_events):
-            event = await self._generate_stochastic_event()
+            event = await self._generate_stochastic_event(user.id)
             if event:
                 events.append(event)
 
@@ -86,28 +107,24 @@ class TimeSkipService:
         if minutes_passed <= 0:
             return
 
-        # 1. Fetch all agents (to recharge battery)
-        # We assume repository exposes direct agent access or iterate known ones
+        # Fetch known agents (Simulated Reality only affects active nodes)
+        # We need access to internal repo structure or add a method.
+        # Assuming LocalSoulRepository has .agents
         agents = []
         if hasattr(self.repository, 'agents'):
             agents = list(self.repository.agents.values())
 
         for agent in agents:
             # --- Battery Recharge ---
-            # Linear Recharge
             recharge_amount = (minutes_passed / 60.0) * self.battery_recharge_per_hour
-
             if agent.social_battery < 100.0:
-                old_battery = agent.social_battery
                 agent.social_battery = min(100.0, agent.social_battery + recharge_amount)
                 agent.last_battery_update = datetime.now()
-                logger.info(f"🔋 Recharged {agent.name}: {old_battery:.1f}% -> {agent.social_battery:.1f}% (+{recharge_amount:.1f}%)")
                 # Persist Agent State
                 if hasattr(self.repository, 'create_agent'):
                      await self.repository.create_agent(agent)
 
             # --- Emotional Decay (Ebbinghaus) ---
-            # Decay user resonance towards baseline (50.0)
             resonance = await self.repository.get_resonance(user_id, agent.id)
             if resonance:
                 await self._apply_decay_to_resonance(resonance, agent, minutes_passed)
@@ -115,96 +132,108 @@ class TimeSkipService:
     async def _apply_decay_to_resonance(self, resonance, agent, minutes_passed: float):
         """
         Applies Exponential Decay to affinity.
-        Formula: NewAffinity = Baseline + (Current - Baseline) * e^(-lambda * t)
         """
         BASELINE = 50.0
         current_affinity = resonance.affinity_level
 
-        # If already at baseline, skip
         if abs(current_affinity - BASELINE) < 0.1:
             return
 
-        # Decay Rate (Lambda)
-        # Default 0.1 per hour? Let's use agent's trait.
-        # agent.emotional_decay_rate is likely ~0.1
         decay_rate = getattr(agent, 'emotional_decay_rate', 0.1)
-
-        # Convert minutes to hours for the formula
         hours_passed = minutes_passed / 60.0
 
-        # Math: Decay
-        # difference = current - baseline
-        # new_difference = difference * exp(-rate * time)
         difference = current_affinity - BASELINE
         decay_factor = math.exp(-decay_rate * hours_passed)
         new_difference = difference * decay_factor
-
         new_affinity = BASELINE + new_difference
 
-        # Apply
         delta = new_affinity - current_affinity
         if abs(delta) > 0.1:
-            resonance.affinity_level = new_affinity
-            logger.info(f"📉 Emotional Decay for {agent.name}: {current_affinity:.2f} -> {new_affinity:.2f} (Delta: {delta:.2f})")
-            # Persist (using existing method which handles saving)
-            # Actually get_resonance returns the object reference in LocalSoulRepo, so we just need to trigger save.
-            # But the Repo interface requires update_resonance usually taking a delta.
-            # Let's try to update explicitly via repository to be safe.
-            # However, update_resonance adds a delta. We know the delta.
-            await self.repository.update_resonance(resonance.source_id, resonance.target_id, delta)
+            if hasattr(self.repository, 'update_resonance'):
+                await self.repository.update_resonance(resonance.source_id, resonance.target_id, delta)
 
-
-    async def _generate_stochastic_event(self) -> Optional[CollectiveEventNode]:
+    async def _generate_stochastic_event(self, user_id: str) -> Optional[CollectiveEventNode]:
         """
-        Generates a single event using probability matrices.
+        Generates a single event using Intent Vectors.
         """
-        # 1. Fetch Agents
-        # We need access to all agents. LocalSoulRepository has self.agents but
-        # the base interface might not expose 'get_all_agents'.
-        # We'll assume we can access repo.agents directly if it's LocalSoulRepository
-        # or we might need to add a method. For now, accessing .agents dict if available.
+        # 1. Identify Valid Participants
+        # Filter agents by checking if user has interacted with them (Resonance Exists)
+        # This keeps the world focused on the user's circle.
+        valid_agents = []
+        if hasattr(self.repository, 'agents') and hasattr(self.repository, 'resonances'):
+            user_resonances = self.repository.resonances.get(user_id, {})
+            known_agent_ids = list(user_resonances.keys())
+            # Ensure they exist in agent list (sanity check)
+            for aid in known_agent_ids:
+                if aid in self.repository.agents:
+                    valid_agents.append(self.repository.agents[aid])
 
-        agents = []
-        if hasattr(self.repository, 'agents'):
-            agents = list(self.repository.agents.values())
+        if not valid_agents:
+            # Fallback if user is new: Use random agents from repo
+             if hasattr(self.repository, 'agents'):
+                 valid_agents = list(self.repository.agents.values())
 
-        if not agents:
+        if not valid_agents:
             return None
 
         # 2. Select Participants (2-3)
         num_participants = random.randint(2, 3)
         participants = []
+        real_agents = []
 
-        # Mix Real Agents and Shadow Agents
-        # 70% chance of Real Agent, 30% Shadow
-        for _ in range(num_participants):
-            if agents and random.random() < 0.7:
-                agent = random.choice(agents)
-                participants.append(agent.id) # Use ID
+        # At least one real agent is required for a meaningful event
+        primary_agent = random.choice(valid_agents)
+        participants.append(primary_agent.id)
+        real_agents.append(primary_agent)
+
+        # Fill the rest
+        for _ in range(num_participants - 1):
+            if random.random() < 0.6: # 60% chance of another known agent
+                other = random.choice(valid_agents)
+                if other.id not in participants:
+                    participants.append(other.id)
+                    real_agents.append(other)
+                else:
+                    # Fallback to shadow
+                    shadow = random.choice(self.shadow_agents)
+                    if shadow not in participants:
+                        participants.append(shadow)
             else:
-                participants.append(random.choice(self.shadow_agents))
+                shadow = random.choice(self.shadow_agents)
+                if shadow not in participants:
+                    participants.append(shadow)
 
-        # Deduplicate
-        participants = list(set(participants))
-        if len(participants) < 2:
-            return None # Need at least 2 for interaction
+        # 3. Calculate Intent (Ephemeral)
+        # We only calculate intent between the first two participants for simplicity
+        # If both are real, we check their affinity.
+        p1_id = participants[0]
+        p2_id = participants[1]
 
-        # 3. Select Location
+        intent_type = IntentType.GOSSIP # Default
+
+        if len(real_agents) >= 2 and p2_id == real_agents[1].id:
+            # Real-to-Real Interaction
+            intent_type = await self._calculate_intent(real_agents[0], real_agents[1])
+        else:
+            # Real-to-Shadow Interaction (Randomized based on Agent Traits?)
+            # Simplified: Random
+            intent_type = random.choice(list(IntentType))
+
+        # 4. Resolve Outcome
+        outcome_data = self._resolve_outcome(intent_type)
+        if not outcome_data:
+            return None
+
+        outcome, valence_delta, summary_template = outcome_data
+
+        # 5. Select Location
         location = await self._get_random_location()
 
-        # 4. Roll for Event Type & Outcome
-        # Matrix: Type -> Outcome probabilities
-        event_type = self._roll_event_type()
-        outcome, summary_template = self._roll_outcome(event_type)
-
-        # 5. Format Summary
-        # Resolve names
+        # 6. Format Summary
         participant_names = []
-        real_agent_ids = []
         for pid in participants:
             if hasattr(self.repository, 'agents') and pid in self.repository.agents:
                 participant_names.append(self.repository.agents[pid].name)
-                real_agent_ids.append(pid)
             else:
                 participant_names.append(pid) # Shadow agent name
 
@@ -214,26 +243,67 @@ class TimeSkipService:
             loc=location.name
         )
 
-        # 6. Create Event Node
+        # 7. Create Event Node
         event = CollectiveEventNode(
-            type=event_type,
+            type=intent_type.value, # Event Type maps to Intent Type
             location_id=location.id,
             participants=participants,
             outcome=outcome,
             summary=summary,
-            timestamp=datetime.now() - timedelta(minutes=random.randint(1, 60)) # Random time in last hour
+            timestamp=datetime.now() - timedelta(minutes=random.randint(1, 60))
         )
 
-        # 7. Apply Consequence (Update Affinity)
-        # Only between Real Agents
-        if len(real_agent_ids) >= 2:
-             await self._apply_affinity_shift(real_agent_ids[0], real_agent_ids[1], outcome)
+        # 8. Apply Consequence (Update Affinity)
+        if len(real_agents) >= 2:
+             await self._apply_affinity_shift(real_agents[0].id, real_agents[1].id, valence_delta)
 
-        # 8. Persist
+        # 9. Persist
         if hasattr(self.repository, 'record_collective_event'):
             await self.repository.record_collective_event(event)
 
         return event
+
+    async def _calculate_intent(self, agent_a, agent_b) -> IntentType:
+        """
+        Determines the ephemeral intent based on existing affinity.
+        """
+        affinity_edge = await self.repository.get_agent_affinity(agent_a.id, agent_b.id)
+        affinity = affinity_edge.affinity
+
+        # Weighted Probability based on Affinity
+        # Low Affinity -> High conflict chance
+        # High Affinity -> High support chance
+
+        roll = random.random()
+
+        if affinity < 30.0:
+            if roll < 0.6: return IntentType.CONFLICT
+            if roll < 0.9: return IntentType.AVOID
+            return IntentType.GOSSIP # Bad mouthing?
+        elif affinity > 70.0:
+            if roll < 0.7: return IntentType.SUPPORT
+            if roll < 0.9: return IntentType.GOSSIP
+            return IntentType.CONFLICT # Lovers quarrel?
+        else:
+            # Neutral
+            if roll < 0.4: return IntentType.GOSSIP
+            if roll < 0.7: return IntentType.SUPPORT
+            if roll < 0.9: return IntentType.AVOID
+            return IntentType.CONFLICT
+
+    def _resolve_outcome(self, intent: IntentType):
+        """Returns (Outcome, ValenceDelta, SummaryTemplate)"""
+        possibilities = self.outcome_matrix.get(intent)
+        if not possibilities:
+            return None
+
+        roll = random.random()
+        for threshold, outcome, delta, template in possibilities:
+            if roll <= threshold:
+                return outcome, delta, template
+
+        # Fallback to last
+        return possibilities[-1][1:]
 
     async def _get_random_location(self) -> LocationNode:
         """Fetches a random location or creates one if none exist."""
@@ -249,47 +319,14 @@ class TimeSkipService:
         if hasattr(self.repository, 'get_or_create_location'):
             return await self.repository.get_or_create_location(name, ltype, desc)
 
-        # Fallback (Shouldn't happen with correct Repo)
         return LocationNode(name="The Void", description="Unknown space", type="void")
 
-    def _roll_event_type(self) -> str:
-        roll = random.random()
-        if roll < 0.5: return "SOCIAL"
-        if roll < 0.8: return "CONFLICT"
-        return "COLLABORATION"
-
-    def _roll_outcome(self, event_type: str) -> tuple[str, str]:
-        """Returns (Outcome, SummaryTemplate)"""
-        roll = random.random()
-
-        if event_type == "SOCIAL":
-            if roll < 0.2: return "AWKWARD", "{p1} ran into {p2} at {loc}, but the conversation died instantly."
-            if roll < 0.8: return "CHATTED", "{p1} and {p2} shared a drink at {loc} and gossiped."
-            return "BONDED", "{p1} and {p2} had a deep heart-to-heart at {loc}."
-
-        if event_type == "CONFLICT":
-            if roll < 0.6: return "ARGUED", "{p1} and {p2} got into a heated debate at {loc}."
-            return "FOUGHT", "{p1} and {p2} nearly came to blows at {loc} over a misunderstanding."
-
-        if event_type == "COLLABORATION":
-            if roll < 0.3: return "FAILED", "{p1} and {p2} tried to fix a glitch at {loc} but made it worse."
-            return "SUCCEEDED", "{p1} and {p2} successfully hacked a terminal at {loc} together."
-
-        return "UNKNOWN", "{p1} saw {p2} at {loc}."
-
-    async def _apply_affinity_shift(self, agent_a: str, agent_b: str, outcome: str):
-        """Updates Agent-to-Agent affinity based on outcome."""
-        delta = 0.0
-        if outcome in ["BONDED", "SUCCEEDED"]: delta = 5.0
-        elif outcome in ["CHATTED"]: delta = 1.0
-        elif outcome in ["AWKWARD", "FAILED"]: delta = -2.0
-        elif outcome in ["ARGUED"]: delta = -5.0
-        elif outcome in ["FOUGHT"]: delta = -10.0
-
+    async def _apply_affinity_shift(self, agent_a: str, agent_b: str, delta: float):
+        """Updates Agent-to-Agent affinity."""
         if delta != 0.0:
             if hasattr(self.repository, 'update_agent_affinity'):
                 await self.repository.update_agent_affinity(agent_a, agent_b, delta)
-                # Bi-directional?
+                # Bi-directional update for symmetry in this simple model
                 await self.repository.update_agent_affinity(agent_b, agent_a, delta)
 
 # Singleton Instance (Initialized in main.py)

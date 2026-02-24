@@ -2,6 +2,7 @@ from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import uuid4
+from enum import Enum
 
 # --- Nodes ---
 
@@ -98,6 +99,24 @@ class CollectiveEventNode(BaseModel):
     outcome: str # e.g., "FOUGHT", "BONDED", "IGNORED"
     summary: str # Narrative summary of the event
     embedding: Optional[List[float]] = None # Vector embedding for RAG
+
+# --- Phase 3.1: Ephemeral Intents (Time-Skip Engine) ---
+
+class IntentType(str, Enum):
+    SUPPORT = "SUPPORT"
+    CONFLICT = "CONFLICT"
+    GOSSIP = "GOSSIP"
+    AVOID = "AVOID"
+
+class EphemeralIntent(BaseModel):
+    """
+    Transient vector for Time-Skip calculation.
+    Not persisted in Graph.
+    """
+    source_id: str
+    target_id: str
+    type: IntentType
+    strength: float = 1.0 # 0.0 to 1.0
 
 # ----------------------------------------------------
 
