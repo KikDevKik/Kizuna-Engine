@@ -118,9 +118,10 @@ class SessionManager:
                 logger.info(f"Gemini session started for {agent_id}.")
 
                 # Phase 2: Initialize Subconscious Channels
-                transcript_queue = asyncio.Queue()
-                reflection_queue = asyncio.Queue()
-                injection_queue = asyncio.Queue()
+                # 🏰 BASTION: Set maxsize to prevent memory leaks if consumers stall
+                transcript_queue = asyncio.Queue(maxsize=50)
+                reflection_queue = asyncio.Queue(maxsize=20)
+                injection_queue = asyncio.Queue(maxsize=20)
 
                 # Manage bidirectional streams and subconscious concurrently
                 # If either task fails (e.g. disconnect), the TaskGroup will cancel the others.

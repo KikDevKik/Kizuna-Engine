@@ -9,7 +9,7 @@ from ..repositories.base import SoulRepository
 from ..models.graph import (
     UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode,
     DreamNode, ShadowEdge, ArchetypeNode, GlobalDreamNode, EmbodiesEdge,
-    SystemConfigNode
+    SystemConfigNode, CollectiveEventNode
 )
 import logging
 from core.config import settings
@@ -662,3 +662,14 @@ class SpannerSoulRepository(SoulRepository):
         except Exception as e:
             logger.error(f"Failed to update System Config in Spanner: {e}")
             raise
+
+    # --- Evolution Phase 3: Collective Events (Stubs for now) ---
+
+    async def get_recent_collective_events(self, limit: int = 5) -> List[CollectiveEventNode]:
+        return []
+
+    async def get_agent_collective_events(self, agent_id: str, limit: int = 5) -> List[CollectiveEventNode]:
+        return []
+
+    async def get_relevant_collective_events(self, query: str, limit: int = 5) -> List[CollectiveEventNode]:
+        return []

@@ -104,10 +104,13 @@ class SubconsciousMind:
                             f"{episode.summary}. Use this context naturally."
                         )
                         logger.info(f"🧠 Memory Retrieved: {episode.summary}")
-                        await injection_queue.put({
-                            "text": whisper,
-                            "turn_complete": False
-                        })
+                        try:
+                            injection_queue.put_nowait({
+                                "text": whisper,
+                                "turn_complete": False
+                            })
+                        except asyncio.QueueFull:
+                            pass
 
                     # --- 1.5 World Event Injection ---
                     if events:
@@ -117,10 +120,13 @@ class SubconsciousMind:
                             f"{event.summary} (Outcome: {event.outcome}). Use this context."
                         )
                         logger.info(f"🌍 World Event Retrieved: {event.summary}")
-                        await injection_queue.put({
-                            "text": whisper,
-                            "turn_complete": False
-                        })
+                        try:
+                            injection_queue.put_nowait({
+                                "text": whisper,
+                                "turn_complete": False
+                            })
+                        except asyncio.QueueFull:
+                            pass
 
                     # --- 2. Sentiment Insight ---
                     if hint:
@@ -131,7 +137,10 @@ class SubconsciousMind:
                             "text": f"SYSTEM_HINT: {hint}",
                             "turn_complete": False
                         }
-                        await injection_queue.put(payload)
+                        try:
+                            injection_queue.put_nowait(payload)
+                        except asyncio.QueueFull:
+                            logger.warning("⚠️ Injection Queue Full! Dropping Subconscious Insight.")
 
                         # Persist Insight (Phase 3)
                         if self.repository:
@@ -233,10 +242,13 @@ class SubconsciousMind:
 
             if hint:
                 logger.info(f"🪫 Battery Drain: {old_battery:.1f}% -> {new_battery:.1f}% (Hint: {hint})")
-                await injection_queue.put({
-                    "text": hint,
-                    "turn_complete": False
-                })
+                try:
+                    injection_queue.put_nowait({
+                        "text": hint,
+                        "turn_complete": False
+                    })
+                except asyncio.QueueFull:
+                    logger.warning("⚠️ Injection Queue Full! Dropping Battery Warning (Critical).")
 
         except Exception as e:
             logger.error(f"Failed to process battery drain: {e}")
@@ -253,11 +265,15 @@ class SubconsciousMind:
             # Thresholds could be user-specific in future
             if bpm > 110:
                 hint = f"SYSTEM_HINT: User's Heart Rate is HIGH ({bpm} BPM). They might be stressed or excited. Check tone."
-                await queue.put({"text": hint, "turn_complete": False})
+                try:
+                    queue.put_nowait({"text": hint, "turn_complete": False})
+                except asyncio.QueueFull: pass
                 logger.info(f"❤️ Bio-Signal Injected: {hint}")
             elif bpm < 55:
                  hint = f"SYSTEM_HINT: User's Heart Rate is LOW ({bpm} BPM). They are very calm or possibly tired."
-                 await queue.put({"text": hint, "turn_complete": False})
+                 try:
+                     queue.put_nowait({"text": hint, "turn_complete": False})
+                 except asyncio.QueueFull: pass
                  logger.info(f"💙 Bio-Signal Injected: {hint}")
 
     async def _analyze_sentiment(self, text: str, agent_id: str = None) -> str | None:
@@ -299,16 +315,23 @@ class SubconsciousMind:
 
                 for model in models:
                     try:
-                        response = await self.client.aio.models.generate_content(
-                            model=model,
-                            contents=text,
-                            config=types.GenerateContentConfig(
-                                system_instruction=types.Content(
-                                    parts=[types.Part(text=system_instruction)]
+                        # 🏰 BASTION: Timeout Enforcement
+                        response = await asyncio.wait_for(
+                            self.client.aio.models.generate_content(
+                                model=model,
+                                contents=text,
+                                config=types.GenerateContentConfig(
+                                    system_instruction=types.Content(
+                                        parts=[types.Part(text=system_instruction)]
+                                    )
                                 )
-                            )
+                            ),
+                            timeout=10.0
                         )
                         break # Success
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Subconscious inference timed out on {model}.")
+                        continue
                     except (httpx.RemoteProtocolError, httpx.ConnectError) as e:
                         logger.debug(f"Subconscious inference network error on {model}: {e}")
                         continue
@@ -411,16 +434,23 @@ class SubconsciousMind:
                 response = None
                 for model in models:
                     try:
-                        response = await self.client.aio.models.generate_content(
-                            model=model, # Or SUBCONSCIOUS if DREAM model not defined
-                            contents=summary_text,
-                            config=types.GenerateContentConfig(
-                                system_instruction=types.Content(
-                                    parts=[types.Part(text=system_instruction)]
+                        # 🏰 BASTION: Timeout Enforcement
+                        response = await asyncio.wait_for(
+                            self.client.aio.models.generate_content(
+                                model=model, # Or SUBCONSCIOUS if DREAM model not defined
+                                contents=summary_text,
+                                config=types.GenerateContentConfig(
+                                    system_instruction=types.Content(
+                                        parts=[types.Part(text=system_instruction)]
+                                    )
                                 )
-                            )
+                            ),
+                            timeout=15.0 # Dreams take longer
                         )
                         break
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Dream generation timed out on {model}.")
+                        continue
                     except Exception as e:
                         if genai_errors and isinstance(e, genai_errors.ClientError) and e.code == 429:
                             logger.info(f"Dream Model {model} quota exhausted. Falling back...")

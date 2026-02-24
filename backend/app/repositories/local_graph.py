@@ -4,9 +4,10 @@ import asyncio
 import aiofiles
 import os
 import math
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from pathlib import Path
 from datetime import datetime
+import numpy as np
 
 from .base import SoulRepository
 from ..services.embedding import embedding_service
@@ -338,22 +339,51 @@ class LocalSoulRepository(SoulRepository):
             return resonance
 
     @staticmethod
-    def _cosine_similarity(v1: List[float], v2: List[float]) -> float:
+    def _vector_search(query_vector: List[float], candidates: List[Any], limit: int) -> List[Any]:
         """
-        Calculates the Cosine Similarity between two vectors.
-        Range: -1.0 to 1.0 (where 1.0 is identical).
+        Performs Batched Cosine Similarity Search using Numpy.
+        Run this in a thread to release GIL.
         """
-        if not v1 or not v2 or len(v1) != len(v2):
-            return 0.0
+        if not candidates or not query_vector:
+            return []
 
-        dot_product = sum(a * b for a, b in zip(v1, v2))
-        magnitude_v1 = math.sqrt(sum(a * a for a in v1))
-        magnitude_v2 = math.sqrt(sum(b * b for b in v2))
+        # Filter candidates with valid embeddings
+        valid_candidates = [c for c in candidates if c.embedding and len(c.embedding) == len(query_vector)]
+        if not valid_candidates:
+            return []
 
-        if magnitude_v1 == 0 or magnitude_v2 == 0:
-            return 0.0
+        try:
+            # 1. Prepare Data
+            # Stack embeddings into Matrix (N, D)
+            embeddings = [c.embedding for c in valid_candidates]
+            matrix = np.array(embeddings, dtype=np.float32)
+            query = np.array(query_vector, dtype=np.float32)
 
-        return dot_product / (magnitude_v1 * magnitude_v2)
+            # 2. Normalize Matrix (L2 Norm along axis 1)
+            norm_matrix = np.linalg.norm(matrix, axis=1, keepdims=True)
+            norm_matrix[norm_matrix == 0] = 1e-10  # Avoid div/0
+            normalized_matrix = matrix / norm_matrix
+
+            # 3. Normalize Query
+            norm_query = np.linalg.norm(query)
+            if norm_query == 0:
+                return []
+            normalized_query = query / norm_query
+
+            # 4. Dot Product (Cosine Similarity)
+            # (N, D) @ (D,) -> (N,)
+            scores = np.dot(normalized_matrix, normalized_query)
+
+            # 5. Top K
+            # argsort gives indices of sorted elements (ascending)
+            # We take the last 'limit' elements and reverse them
+            top_k_indices = np.argsort(scores)[-limit:][::-1]
+
+            return [valid_candidates[i] for i in top_k_indices]
+
+        except Exception as e:
+            logger.error(f"Vector math error in _vector_search: {e}")
+            return []
 
     async def save_episode(self, user_id: str, agent_id: str, summary: str, valence: float, raw_transcript: Optional[str] = None) -> MemoryEpisodeNode:
         # Generate embedding asynchronously (outside lock to avoid blocking)
@@ -404,24 +434,16 @@ class LocalSoulRepository(SoulRepository):
             logger.warning("Failed to generate embedding for query in local RAG.")
             return []
 
+        # 2. Snapshot Candidates (Main Thread)
         user_fact_ids = self.knows[user_id]
-        scored_facts = []
-
-        # 2. Iterate and Rank
+        candidates = []
         for fact_id in user_fact_ids:
             fact = self.facts.get(fact_id)
-            if not fact or not fact.embedding:
-                # Skip facts without embeddings (pre-vector era)
-                continue
+            if fact:
+                candidates.append(fact)
 
-            similarity = self._cosine_similarity(query_vector, fact.embedding)
-            scored_facts.append((similarity, fact))
-
-        # 3. Sort by Similarity (Descending)
-        scored_facts.sort(key=lambda x: x[0], reverse=True)
-
-        # 4. Return Top K
-        return [item[1] for item in scored_facts[:limit]]
+        # 3. Vector Search (Threaded)
+        return await asyncio.to_thread(self._vector_search, query_vector, candidates, limit)
 
     async def save_fact(self, user_id: str, content: str, category: str) -> FactNode:
         # Generate embedding asynchronously
@@ -694,25 +716,16 @@ class LocalSoulRepository(SoulRepository):
             logger.warning("Failed to generate embedding for query in local Episode RAG.")
             return []
 
+        # 2. Snapshot Candidates
         user_episode_ids = self.experienced[user_id]
-        scored_episodes = []
-
-        # 2. Iterate and Rank
+        candidates = []
         for eid in user_episode_ids:
             ep = self.episodes.get(eid)
-            # We filter out archived episodes (valence=999.0) if we only want active memory,
-            # but usually RAG should search ALL history including archived ones.
-            # However, for now, let's search everything that has an embedding.
-            if not ep or not ep.embedding:
-                continue
+            if ep:
+                candidates.append(ep)
 
-            similarity = self._cosine_similarity(query_vector, ep.embedding)
-            scored_episodes.append((similarity, ep))
-
-        # 3. Sort by Similarity (Descending)
-        scored_episodes.sort(key=lambda x: x[0], reverse=True)
-
-        return [item[1] for item in scored_episodes[:limit]]
+        # 3. Vector Search (Threaded)
+        return await asyncio.to_thread(self._vector_search, query_vector, candidates, limit)
 
     # --- Evolution Phase 1: Ontology & Archetypes (Mock for Local) ---
 
@@ -858,21 +871,12 @@ class LocalSoulRepository(SoulRepository):
             logger.warning("Failed to generate embedding for query in local Event RAG.")
             return []
 
-        scored_events = []
-
+        # 2. Snapshot Candidates
         async with self.lock:
-            # 2. Iterate and Rank
-            for event in self.collective_events.values():
-                if not event.embedding:
-                    continue
+            candidates = list(self.collective_events.values())
 
-                similarity = self._cosine_similarity(query_vector, event.embedding)
-                scored_events.append((similarity, event))
-
-        # 3. Sort by Similarity (Descending)
-        scored_events.sort(key=lambda x: x[0], reverse=True)
-
-        return [item[1] for item in scored_events[:limit]]
+        # 3. Vector Search (Threaded)
+        return await asyncio.to_thread(self._vector_search, query_vector, candidates, limit)
 
     async def get_all_locations(self) -> List[LocationNode]:
         async with self.lock:

@@ -82,7 +82,10 @@ class ReflectionMind:
                             "text": f"SYSTEM_HINT: [{agent.name} Inner Voice]: {correction}",
                             "turn_complete": False
                         }
-                        await injection_queue.put(payload)
+                        try:
+                            injection_queue.put_nowait(payload)
+                        except asyncio.QueueFull:
+                            logger.warning("⚠️ Injection Queue Full! Dropping Reflection.")
 
                 except Exception:
                     logger.exception("🪞 Reflection Mind iteration error. Recovering...")
@@ -128,16 +131,23 @@ class ReflectionMind:
 
                 for model in models:
                     try:
-                        response = await self.client.aio.models.generate_content(
-                            model=model,
-                            contents=text,
-                            config=types.GenerateContentConfig(
-                                system_instruction=types.Content(
-                                    parts=[types.Part(text=system_instruction)]
+                        # 🏰 BASTION: Timeout Enforcement
+                        response = await asyncio.wait_for(
+                            self.client.aio.models.generate_content(
+                                model=model,
+                                contents=text,
+                                config=types.GenerateContentConfig(
+                                    system_instruction=types.Content(
+                                        parts=[types.Part(text=system_instruction)]
+                                    )
                                 )
-                            )
+                            ),
+                            timeout=8.0 # Reflection should be fast
                         )
                         break
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Reflection inference timed out on {model}.")
+                        continue
                     except (httpx.RemoteProtocolError, httpx.ConnectError) as e:
                         logger.debug(f"Reflection inference network error on {model}: {e}")
                         continue

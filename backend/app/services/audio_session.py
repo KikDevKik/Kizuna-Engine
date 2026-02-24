@@ -116,6 +116,8 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
                             if transcript_queue:
                                 try:
                                     transcript_queue.put_nowait(transcript_text)
+                                except asyncio.QueueFull:
+                                    logger.warning("⚠️ Transcript Queue Full! Dropping user text for Subconscious.")
                                 except Exception as e:
                                     logger.warning(f"Failed to queue native transcript: {e}")
 
@@ -137,6 +139,8 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
                              if transcript_queue:
                                  try:
                                      transcript_queue.put_nowait(user_content)
+                                 except asyncio.QueueFull:
+                                     logger.warning("⚠️ Transcript Queue Full! Dropping user text.")
                                  except Exception as e:
                                      logger.warning(f"Failed to queue user text transcript: {e}")
 
@@ -171,8 +175,8 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
              raise e
 
         logger.error(f"Error sending to Gemini: {e}")
-        # Don't re-raise to avoid crashing the whole session manager task group
-        return
+        # 🏰 BASTION: Fail Fast. If audio upstream dies, the session is zombie. Kill it.
+        raise e
 
 async def receive_from_gemini(
     websocket: WebSocket,
@@ -275,6 +279,8 @@ async def receive_from_gemini(
                                 if reflection_queue:
                                     try:
                                         reflection_queue.put_nowait(clean_text)
+                                    except asyncio.QueueFull:
+                                        logger.debug("Reflection Queue Full. Dropping introspection.")
                                     except Exception as e:
                                         logger.warning(f"Failed to queue reflection: {e}")
 
@@ -319,5 +325,5 @@ async def receive_from_gemini(
 
     except Exception as e:
         logger.error(f"Error receiving from Gemini: {e}")
-        # Don't re-raise
-        return
+        # 🏰 BASTION: Fail Fast. If audio downstream dies, the session is deaf. Kill it.
+        raise e
