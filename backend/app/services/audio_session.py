@@ -245,6 +245,16 @@ async def receive_from_gemini(
                             if part.text:
                                 text_to_process = part.text
 
+                                # --- Heuristic CoT Filter (English Monologue Detector) ---
+                                # Gemini Live often ignores [THOUGHT] tags and streams raw English CoT before the Spanish audio.
+                                # If the text looks like internal reasoning, drop it immediately.
+                                stripped_text = text_to_process.strip()
+                                # Common CoT starters observed in logs
+                                cot_starters = ("Okay,", "So,", "I ", "The user", "Alright,", "Let me", "Based on", "Thinking:")
+                                if stripped_text.startswith(cot_starters) or (len(stripped_text) > 20 and "user" in stripped_text.lower() and "context" in stripped_text.lower()):
+                                    logger.debug(f"🛑 Dropped Potential CoT/Monologue: {stripped_text[:50]}...")
+                                    continue
+
                                 # --- Clean Internal Monologue ---
                                 # Strip [THOUGHT]...[/THOUGHT] (Chain of Thought)
                                 text_to_process = re.sub(r'\[THOUGHT\].*?\[/THOUGHT\]', '', text_to_process, flags=re.DOTALL)
