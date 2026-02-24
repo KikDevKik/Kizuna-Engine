@@ -246,7 +246,10 @@ async def receive_from_gemini(
                                 text_to_process = part.text
 
                                 # --- Clean Internal Monologue ---
-                                # Strip <thinking>...</thinking> (Cognitive Exhaust)
+                                # Strip [THOUGHT]...[/THOUGHT] (Chain of Thought)
+                                text_to_process = re.sub(r'\[THOUGHT\].*?\[/THOUGHT\]', '', text_to_process, flags=re.DOTALL)
+
+                                # Strip <thinking>...</thinking> (Cognitive Exhaust - Legacy)
                                 # Archibald's Clean-up: Prevent internal monologue from leaking to TTS/DB.
                                 text_to_process = re.sub(r'<thinking>.*?</thinking>', '', text_to_process, flags=re.DOTALL)
 

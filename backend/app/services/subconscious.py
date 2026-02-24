@@ -415,6 +415,7 @@ class SubconsciousMind:
                     "CRITICAL: You MUST explicitly list specific Entity tags (Names, Locations, Factions) at the end of the 'theme'.\n"
                     "Format the 'theme' string as: '...dream narrative... \\n\\nEntities: [List of Names, Locations, Factions]'\n"
                     "Act as a precise archivist.\n\n"
+                    "SAFETY OVERRIDE: If the provided transcript is extremely short, empty, or contains no meaningful interaction, do not hallucinate existential narratives. Simply return a basic entity summary: 'Routine offline rest'.\n\n"
                     "Memories:\n{summary_text}"
                 )
 
