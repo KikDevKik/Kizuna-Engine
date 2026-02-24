@@ -23,6 +23,12 @@ class AgentNode(BaseModel):
     native_language: str = "Unknown"
     known_languages: List[str] = Field(default_factory=list)
 
+    # Anthropologist Protocol: Social Battery & Decay
+    social_battery: float = 100.0 # 0.0 to 100.0
+    last_battery_update: datetime = Field(default_factory=datetime.now)
+    drain_rate: float = 1.0 # Multiplier (e.g., Introvert=1.5, Extrovert=0.8)
+    emotional_decay_rate: float = 0.1 # Multiplier for Ebbinghaus Decay
+
     # Dynamic Prompts (Zero Hardcoding)
     memory_extraction_prompt: str = "Analyze the user's emotional state AND visual context from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return nothing."
     dream_prompt: str = "Synthesize these memories into a surreal dream concept. Return JSON with keys: theme (str), intensity (0.0-1.0), surrealism_level (0.0-1.0).\n\nCRITICAL: You MUST retain all specific proper nouns, technical terms, names of songs, media, or projects mentioned by the user. Never generalize specific entities. Act as a precise archivist.\n\nMemories:\n{summary_text}"

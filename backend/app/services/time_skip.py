@@ -1,5 +1,6 @@
 import logging
 import random
+import math
 from datetime import datetime, timedelta
 from typing import List, Optional
 from uuid import uuid4
@@ -25,6 +26,9 @@ class TimeSkipService:
         self.min_delta_minutes = 10 # Minimum time away to trigger simulation
         self.max_events = 5 # Cap events to prevent flooding context
 
+        # Anthropologist Parameters
+        self.battery_recharge_per_hour = 20.0 # 20% recharge per hour of offline time
+
         # Hardcoded Shadow Agents (Procedural NPCs)
         self.shadow_agents = [
             "Stranger_01", "Bartender_X", "Cyber_Ronin", "Neon_Rat", "Corp_Drone"
@@ -40,6 +44,7 @@ class TimeSkipService:
     async def simulate_background_life(self, user: UserNode) -> List[CollectiveEventNode]:
         """
         Calculates time passed since user.last_seen and generates background events.
+        Also handles Social Battery Recharge and Emotional Decay.
         """
         now = datetime.now()
         last_seen = user.last_seen
@@ -50,6 +55,10 @@ class TimeSkipService:
 
         delta = now - last_seen
         minutes_passed = delta.total_seconds() / 60.0
+
+        # --- Anthropologist: Battery Recharge & Emotional Decay ---
+        # Run this regardless of min_delta, but scale by time.
+        await self._apply_anthropologist_protocols(user.id, minutes_passed)
 
         if minutes_passed < self.min_delta_minutes:
             logger.info(f"⏳ Time-Skip: Only {minutes_passed:.1f}m passed. No simulation needed.")
@@ -69,6 +78,81 @@ class TimeSkipService:
                 events.append(event)
 
         return events
+
+    async def _apply_anthropologist_protocols(self, user_id: str, minutes_passed: float):
+        """
+        Applies mathematical decay to emotions and recharges social batteries.
+        """
+        if minutes_passed <= 0:
+            return
+
+        # 1. Fetch all agents (to recharge battery)
+        # We assume repository exposes direct agent access or iterate known ones
+        agents = []
+        if hasattr(self.repository, 'agents'):
+            agents = list(self.repository.agents.values())
+
+        for agent in agents:
+            # --- Battery Recharge ---
+            # Linear Recharge
+            recharge_amount = (minutes_passed / 60.0) * self.battery_recharge_per_hour
+
+            if agent.social_battery < 100.0:
+                old_battery = agent.social_battery
+                agent.social_battery = min(100.0, agent.social_battery + recharge_amount)
+                agent.last_battery_update = datetime.now()
+                logger.info(f"🔋 Recharged {agent.name}: {old_battery:.1f}% -> {agent.social_battery:.1f}% (+{recharge_amount:.1f}%)")
+                # Persist Agent State
+                if hasattr(self.repository, 'create_agent'):
+                     await self.repository.create_agent(agent)
+
+            # --- Emotional Decay (Ebbinghaus) ---
+            # Decay user resonance towards baseline (50.0)
+            resonance = await self.repository.get_resonance(user_id, agent.id)
+            if resonance:
+                await self._apply_decay_to_resonance(resonance, agent, minutes_passed)
+
+    async def _apply_decay_to_resonance(self, resonance, agent, minutes_passed: float):
+        """
+        Applies Exponential Decay to affinity.
+        Formula: NewAffinity = Baseline + (Current - Baseline) * e^(-lambda * t)
+        """
+        BASELINE = 50.0
+        current_affinity = resonance.affinity_level
+
+        # If already at baseline, skip
+        if abs(current_affinity - BASELINE) < 0.1:
+            return
+
+        # Decay Rate (Lambda)
+        # Default 0.1 per hour? Let's use agent's trait.
+        # agent.emotional_decay_rate is likely ~0.1
+        decay_rate = getattr(agent, 'emotional_decay_rate', 0.1)
+
+        # Convert minutes to hours for the formula
+        hours_passed = minutes_passed / 60.0
+
+        # Math: Decay
+        # difference = current - baseline
+        # new_difference = difference * exp(-rate * time)
+        difference = current_affinity - BASELINE
+        decay_factor = math.exp(-decay_rate * hours_passed)
+        new_difference = difference * decay_factor
+
+        new_affinity = BASELINE + new_difference
+
+        # Apply
+        delta = new_affinity - current_affinity
+        if abs(delta) > 0.1:
+            resonance.affinity_level = new_affinity
+            logger.info(f"📉 Emotional Decay for {agent.name}: {current_affinity:.2f} -> {new_affinity:.2f} (Delta: {delta:.2f})")
+            # Persist (using existing method which handles saving)
+            # Actually get_resonance returns the object reference in LocalSoulRepo, so we just need to trigger save.
+            # But the Repo interface requires update_resonance usually taking a delta.
+            # Let's try to update explicitly via repository to be safe.
+            # However, update_resonance adds a delta. We know the delta.
+            await self.repository.update_resonance(resonance.source_id, resonance.target_id, delta)
+
 
     async def _generate_stochastic_event(self) -> Optional[CollectiveEventNode]:
         """

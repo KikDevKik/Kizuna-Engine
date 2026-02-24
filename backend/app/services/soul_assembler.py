@@ -47,6 +47,30 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
     # 4. Dynamic Modifiers based on Affinity (Granular 10-Level System)
     affinity_desc = get_affinity_modifier(affinity_level, system_config.affinity_matrix)
 
+    # --- Anthropologist Protocol: Social Battery & Hang-Up ---
+    social_battery_context = ""
+    # Defaults
+    battery = getattr(agent, 'social_battery', 100.0)
+
+    if battery <= 0:
+        social_battery_context = (
+            f"CRITICAL STATE: YOUR SOCIAL BATTERY IS DEAD (0%).\n"
+            f"You are completely exhausted and unwilling to talk. You must refuse to engage.\n"
+            f"INSTRUCTION: Say a short, final rejection (e.g., 'I'm done.', 'Go away.') and then append the token [ACTION: HANGUP].\n"
+            f"You CANNOT continue the conversation. Do not be polite."
+        )
+    elif battery < 20:
+        social_battery_context = (
+            f"WARNING: YOUR SOCIAL BATTERY IS LOW ({int(battery)}%).\n"
+            f"You are tired and irritable. Keep responses short. Complain about being tired.\n"
+            f"If the user is annoying, you may use [ACTION: HANGUP] to end the call."
+        )
+    else:
+        social_battery_context = (
+            f"SOCIAL BATTERY: {int(battery)}% (Healthy).\n"
+            f"You are energized. However, if the user becomes abusive or toxic, you have the right to end the call by saying [ACTION: HANGUP]."
+        )
+
     # 5. Fetch Deep Memory (The "File")
     last_dream = await repository.get_last_dream(user_id)
     dream_context = ""
@@ -94,6 +118,14 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
                 "You may choose to mention these casually if relevant, or gossip about them."
             )
 
+    # --- Anthropologist: Multi-Agent Stub ---
+    # In the future, this will inject specific vectors for other agents present.
+    multi_agent_context = (
+        "--- GROUP DYNAMICS ---\n"
+        "If other agents are mentioned or present, you must maintain separate emotional stances towards them.\n"
+        "Do not blend your feelings for the User with your feelings for others."
+    )
+
     # Construct the final prompt
     # We rename 'Role' to 'Archetype' to reduce its constraint on the relationship.
     full_instruction = (
@@ -108,10 +140,13 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         f"Current Affinity Level: {affinity_level:.1f}/100.0\n"
         f"Relational State: {affinity_desc}\n"
         f"NOTE: Your 'Relational State' dictates your intimacy and tone. It overrides any static personality traits regarding distance or formality.\n\n"
+        f"--- PSYCHOLOGICAL STATE ---\n"
+        f"{social_battery_context}\n\n"
         f"{dream_context}\n\n"
         f"{background_context}\n\n"
-        f"{episode_context}"
+        f"{episode_context}\n\n"
+        f"{multi_agent_context}"
     )
 
-    logger.info(f"Soul assembled for {agent.name} (ID: {agent_id}) with affinity {affinity_level}.")
+    logger.info(f"Soul assembled for {agent.name} (ID: {agent_id}) with affinity {affinity_level} and battery {battery}%.")
     return full_instruction

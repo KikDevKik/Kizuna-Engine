@@ -66,6 +66,10 @@ class SubconsciousMind:
                     if len(self.buffer) < 5 and not any(p in text_segment for p in ".!?"):
                         continue
 
+                    # --- Anthropologist: Dynamic Battery Drain ---
+                    # Drain occurs on every significant user turn processed by Subconscious.
+                    await self._process_battery_drain(user_id, agent_id, injection_queue)
+
                     # Analyze (Real or Mock)
                     # Parallel Execution: Sentiment Analysis + Semantic Memory Retrieval
                     sentiment_task = asyncio.create_task(self._analyze_sentiment(full_text, agent_id))
@@ -154,6 +158,67 @@ class SubconsciousMind:
             if user_id in self.active_sessions:
                 del self.active_sessions[user_id]
             logger.info("🧠 Subconscious Mind deactivated.")
+
+    async def _process_battery_drain(self, user_id: str, agent_id: str, injection_queue: Queue):
+        """
+        Calculates and applies social battery drain.
+        Injects warnings if battery is critical.
+        """
+        if not self.repository:
+            return
+
+        try:
+            agent = await self.repository.get_agent(agent_id)
+            if not agent:
+                return
+
+            # Base Drain: ~0.5% per turn?
+            # User wants ~2 hours to 0%. Assuming 1 turn per minute = 120 turns.
+            # 100 / 120 ~= 0.83% per turn.
+            BASE_DRAIN = 0.83
+            drain = BASE_DRAIN * getattr(agent, 'drain_rate', 1.0)
+
+            # Check for Affinity Bonus (Pause drain if High Affinity)
+            resonance = await self.repository.get_resonance(user_id, agent_id)
+            if resonance and resonance.affinity_level >= 80.0:
+                 # TODO: Check for 'Positive Context' (requires sentiment analysis of current turn)
+                 # For now, slow drain by 50% for high affinity
+                 drain *= 0.5
+
+            # Apply Drain
+            old_battery = agent.social_battery
+            new_battery = max(0.0, old_battery - drain)
+            agent.social_battery = new_battery
+            agent.last_battery_update = datetime.now()
+
+            # Persist
+            if hasattr(self.repository, 'create_agent'):
+                 # create_agent is used for seeding/updating in LocalRepo
+                 await self.repository.create_agent(agent)
+
+            # Inject Warnings at Thresholds
+            # We use ranges to avoid spamming every turn (e.g., only trigger once when crossing)
+            # But here we just check if we are currently low and inject a hint occasionally?
+            # Better: Inject a hint if we just crossed a threshold, or if battery is critically low (every few turns).
+            # Simplest for now: Always inject battery state if low, so LLM knows.
+
+            hint = ""
+            if new_battery <= 0:
+                hint = "SYSTEM_HINT: 🪫 [BATTERY DEAD]: Your social battery is 0%. You are exhausted. You MUST refuse to continue. Use [ACTION: HANGUP]."
+            elif new_battery < 15:
+                hint = f"SYSTEM_HINT: 🪫 [BATTERY CRITICAL: {int(new_battery)}%]: You are extremely drained. Be short, terse, and ask to end the conversation."
+            elif new_battery < 30 and int(new_battery) % 5 == 0:
+                hint = f"SYSTEM_HINT: 🔋 [BATTERY LOW: {int(new_battery)}%]: You are getting tired. Start wrapping up."
+
+            if hint:
+                logger.info(f"🪫 Battery Drain: {old_battery:.1f}% -> {new_battery:.1f}% (Hint: {hint})")
+                await injection_queue.put({
+                    "text": hint,
+                    "turn_complete": False
+                })
+
+        except Exception as e:
+            logger.error(f"Failed to process battery drain: {e}")
 
     async def process_bio_signal(self, user_id: str, data: dict):
         """Phase 3: Bio-Feedback Integration."""
