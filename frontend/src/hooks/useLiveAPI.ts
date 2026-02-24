@@ -7,6 +7,8 @@ export interface UseLiveAPI {
   connected: boolean;
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
   isAiSpeaking: boolean;
+  isSevered: boolean;
+  severanceReason: string | null;
   volumeRef: React.MutableRefObject<number>;
   lastAiMessage: string | null;
   connect: (agentId: string) => Promise<void>;
@@ -21,6 +23,8 @@ export const useLiveAPI = (): UseLiveAPI => {
   const [connected, setConnected] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [lastAiMessage, setLastAiMessage] = useState<string | null>(null);
+  const [isSevered, setIsSevered] = useState(false);
+  const [severanceReason, setSeveranceReason] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioManagerRef = useRef<AudioStreamManager | null>(null);
@@ -157,6 +161,8 @@ export const useLiveAPI = (): UseLiveAPI => {
     // Note: disconnect() sets shouldReconnect to false, so we must reset it after.
     disconnect();
     shouldReconnect.current = true;
+    setIsSevered(false);
+    setSeveranceReason(null);
 
     setStatus('connecting');
 
@@ -230,6 +236,15 @@ export const useLiveAPI = (): UseLiveAPI => {
             } else if (message.type === 'turn_complete') {
               console.log("Turn complete signal received.");
               setIsAiSpeaking(false);
+            } else if (message.type === 'control') {
+              // Phase 4: Handle Server-Side Control Messages (e.g. Hangup)
+              if (message.action === 'hangup') {
+                  console.warn(`Server initiated hangup: ${message.reason}`);
+                  setSeveranceReason(message.reason || "Connection Terminated by Host");
+                  setIsSevered(true);
+                  shouldReconnect.current = false;
+                  // Let onclose handle the cleanup, but prevent auto-reconnect
+              }
             }
           }
         } catch (e) {
@@ -346,6 +361,8 @@ export const useLiveAPI = (): UseLiveAPI => {
     connected,
     status,
     isAiSpeaking,
+    isSevered,
+    severanceReason,
     volumeRef,
     lastAiMessage,
     connect,
@@ -357,6 +374,8 @@ export const useLiveAPI = (): UseLiveAPI => {
     connected,
     status,
     isAiSpeaking,
+    isSevered,
+    severanceReason,
     lastAiMessage,
     connect,
     disconnect,

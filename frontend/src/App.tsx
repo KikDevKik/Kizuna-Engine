@@ -8,6 +8,7 @@ import { EpistemicPanel } from './components/EpistemicPanel';
 import { SystemLogs } from './components/SystemLogs';
 import { JulesSanctuary } from './components/JulesSanctuary';
 import { ConfigurationPanel } from './components/ConfigurationPanel';
+import { ConnectionSeveredModal } from './components/ConnectionSeveredModal';
 import { RitualProvider } from './contexts/RitualContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Power, Settings } from 'lucide-react';
@@ -15,7 +16,19 @@ import './KizunaHUD.css';
 
 function App() {
   const liveApi = useLiveAPI();
-  const { connected, status, volumeRef, isAiSpeaking, connect, disconnect, sendImage, addSystemAudio, removeSystemAudio } = liveApi;
+  const {
+    connected,
+    status,
+    volumeRef,
+    isAiSpeaking,
+    isSevered,
+    severanceReason,
+    connect,
+    disconnect,
+    sendImage,
+    addSystemAudio,
+    removeSystemAudio
+  } = liveApi;
 
   const [viewMode, setViewMode] = useState<'core' | 'roster'>('roster'); // Default to Roster to force selection
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -53,6 +66,15 @@ function App() {
         console.warn("No agent selected. Switching to Roster.");
         setViewMode('roster');
       }
+    }
+  };
+
+  const handleReboot = () => {
+    if (selectedAgentId) {
+      connect(selectedAgentId);
+    } else {
+      console.warn("Reboot requested but no agent selected.");
+      setViewMode('roster');
     }
   };
 
@@ -186,6 +208,25 @@ function App() {
         showScanlines={showScanlines}
         setShowScanlines={setShowScanlines}
       />
+
+      {/* CRITICAL ALERTS */}
+      <AnimatePresence>
+        {isSevered && (
+            <motion.div
+            key="modal-severed"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+            className="fixed inset-0 z-[100] pointer-events-auto"
+            >
+            <ConnectionSeveredModal
+                reason={severanceReason}
+                onReboot={handleReboot}
+            />
+            </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* FOOTER STATUS */}
       <footer className="fixed bottom-0 left-0 w-full p-4 flex justify-between items-end z-40 pointer-events-none opacity-80 text-[10px] font-technical text-vintage-navy">
