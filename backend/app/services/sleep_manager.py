@@ -133,13 +133,14 @@ class SleepManager:
                 transcript = data.get("transcript")
                 logger.info(f"Saving Full Session Transcript ({len(transcript)} chars) for {user_id} (Background)")
                 try:
-                    await self.repository.save_episode(
+                    # 🏰 BASTION SHIELD: Ensure transcript is saved even if timer is cancelled
+                    await asyncio.shield(self.repository.save_episode(
                         user_id=user_id,
                         agent_id=agent_id,
                         summary="Full Session Transcript",
                         valence=0.0,
                         raw_transcript=transcript
-                    )
+                    ))
                 except Exception as e:
                     logger.error(f"Failed to save Master Session Transcript in background: {e}")
 
@@ -174,13 +175,14 @@ class SleepManager:
             transcript = data.get("transcript")
             logger.info(f"Saving Full Session Transcript ({len(transcript)} chars) for {user_id} (Late Rescue)")
             try:
-                await self.repository.save_episode(
+                # 🏰 BASTION SHIELD: Protect rescue save
+                await asyncio.shield(self.repository.save_episode(
                     user_id=user_id,
                     agent_id=agent_id,
                     summary="Full Session Transcript",
                     valence=0.0,
                     raw_transcript=transcript
-                )
+                ))
             except Exception as e:
                 logger.error(f"Failed to save Master Session Transcript in consolidation: {e}")
 
@@ -217,13 +219,14 @@ class SleepManager:
                 transcript = data.get("transcript")
                 logger.info(f"🛑 Rescue Protocol: Saving pending transcript for {user_id}...")
                 try:
-                    await self.repository.save_episode(
+                    # 🏰 BASTION SHIELD: Protect shutdown rescue
+                    await asyncio.shield(self.repository.save_episode(
                         user_id=user_id,
                         agent_id=agent_id,
                         summary="Full Session Transcript",
                         valence=0.0,
                         raw_transcript=transcript
-                    )
+                    ))
                 except Exception as e:
                     logger.error(f"Failed to rescue transcript during shutdown: {e}")
 

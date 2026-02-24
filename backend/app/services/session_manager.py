@@ -196,7 +196,14 @@ class SessionManager:
 
             # Update Last Seen (Phase 3)
             if hasattr(self.soul_repo, 'update_user_last_seen'):
-                await self.soul_repo.update_user_last_seen(user_id)
+                try:
+                    # 🏰 BASTION SHIELD: Prevent hanging DB write from blocking socket release
+                    await asyncio.wait_for(
+                        self.soul_repo.update_user_last_seen(user_id),
+                        timeout=2.0
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to update last_seen for {user_id}: {e}")
 
             # Full Session Persistence (Master Session Logger)
             # Decoupled to SleepManager to avoid ASGI Deadlock

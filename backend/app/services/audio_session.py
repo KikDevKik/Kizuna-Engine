@@ -211,12 +211,16 @@ async def receive_from_gemini(
                                 # Send a final polite close message (optional) or just kill it.
                                 # Requirement: "Physically hangs up".
                                 # We can send a control message so frontend knows WHY.
-                                await websocket.send_json({
-                                    "type": "control",
-                                    "action": "hangup",
-                                    "reason": "Agent initiated termination."
-                                })
-                                # Force disconnect
+                                try:
+                                    await websocket.send_json({
+                                        "type": "control",
+                                        "action": "hangup",
+                                        "reason": "Agent initiated termination."
+                                    })
+                                except Exception as e:
+                                    logger.warning(f"Failed to send hangup control message: {e}")
+
+                                # Force disconnect (Triggers TaskGroup cancellation)
                                 raise WebSocketDisconnect(code=1000, reason="Agent Hangup")
 
                             # Handle Audio
@@ -288,6 +292,11 @@ async def receive_from_gemini(
 
             except asyncio.CancelledError:
                 logger.info("Receive loop cancelled (Graceful Shutdown).")
+                raise
+
+            except WebSocketDisconnect:
+                # 🏰 BASTION SHIELD: Ensure disconnects propagate to cancel TaskGroup
+                logger.info("WebSocket disconnected in receive loop.")
                 raise
 
             except Exception as e:

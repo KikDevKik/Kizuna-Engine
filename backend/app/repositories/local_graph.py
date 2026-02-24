@@ -291,24 +291,38 @@ class LocalSoulRepository(SoulRepository):
             self.agents[agent.id] = agent
             await self._save()
 
+    def _get_resonance_unsafe(self, user_id: str, agent_id: str) -> ResonanceEdge:
+        """
+        Internal unsafe method to get/create resonance without locking.
+        MUST be called within an acquired lock block.
+        """
+        user_resonances = self.resonances.get(user_id, {})
+        if agent_id in user_resonances:
+            return user_resonances[agent_id]
+
+        # Default Resonance (Starts at 10.0 - Stranger/Warm)
+        new_resonance = ResonanceEdge(source_id=user_id, target_id=agent_id, affinity_level=10.0)
+        if user_id not in self.resonances:
+            self.resonances[user_id] = {}
+        self.resonances[user_id][agent_id] = new_resonance
+        # Caller is responsible for saving if a new one was created, but usually caller saves anyway.
+        return new_resonance
+
     async def get_resonance(self, user_id: str, agent_id: str) -> ResonanceEdge:
         async with self.lock:
-            user_resonances = self.resonances.get(user_id, {})
-            if agent_id in user_resonances:
-                return user_resonances[agent_id]
-
-            # Default Resonance (Starts at 10.0 - Stranger/Warm)
-            # Was 50.0 (Friend/Neutral), but we want procedural growth starting from stranger.
-            new_resonance = ResonanceEdge(source_id=user_id, target_id=agent_id, affinity_level=10.0)
-            if user_id not in self.resonances:
-                self.resonances[user_id] = {}
-            self.resonances[user_id][agent_id] = new_resonance
+            resonance = self._get_resonance_unsafe(user_id, agent_id)
+            # If it was just created, we should save.
+            # Ideally _get_resonance_unsafe could return a tuple (resonance, created)
+            # But here we can just save unconditionally to be safe and simple, or check against clean state.
+            # For simplicity in this deadlock fix, we save.
             await self._save()
-            return new_resonance
+            return resonance
 
     async def update_resonance(self, user_id: str, agent_id: str, delta: float) -> ResonanceEdge:
         async with self.lock:
-            resonance = await self.get_resonance(user_id, agent_id)
+            # FIX: Deadlock avoided by using unsafe internal method
+            resonance = self._get_resonance_unsafe(user_id, agent_id)
+
             # Apply delta
             new_affinity = resonance.affinity_level + delta
 
@@ -782,31 +796,29 @@ class LocalSoulRepository(SoulRepository):
             self.collective_events[event.id] = event
             await self._save()
 
+    def _get_agent_affinity_unsafe(self, source_id: str, target_id: str) -> AgentAffinityEdge:
+        """Internal unsafe method for agent affinity."""
+        source_map = self.agent_affinities.get(source_id, {})
+        if target_id in source_map:
+            return source_map[target_id]
+
+        # Create default affinity
+        new_edge = AgentAffinityEdge(source_agent_id=source_id, target_agent_id=target_id)
+        if source_id not in self.agent_affinities:
+            self.agent_affinities[source_id] = {}
+        self.agent_affinities[source_id][target_id] = new_edge
+        return new_edge
+
     async def get_agent_affinity(self, source_id: str, target_id: str) -> AgentAffinityEdge:
         async with self.lock:
-            source_map = self.agent_affinities.get(source_id, {})
-            if target_id in source_map:
-                return source_map[target_id]
-
-            # Create default affinity
-            new_edge = AgentAffinityEdge(source_agent_id=source_id, target_agent_id=target_id)
-            if source_id not in self.agent_affinities:
-                self.agent_affinities[source_id] = {}
-            self.agent_affinities[source_id][target_id] = new_edge
+            edge = self._get_agent_affinity_unsafe(source_id, target_id)
             await self._save()
-            return new_edge
+            return edge
 
     async def update_agent_affinity(self, source_id: str, target_id: str, delta: float) -> AgentAffinityEdge:
         async with self.lock:
-            # Re-implement get logic inside lock to avoid double lock
-            source_map = self.agent_affinities.get(source_id, {})
-            if target_id in source_map:
-                edge = source_map[target_id]
-            else:
-                 edge = AgentAffinityEdge(source_agent_id=source_id, target_agent_id=target_id)
-                 if source_id not in self.agent_affinities:
-                     self.agent_affinities[source_id] = {}
-                 self.agent_affinities[source_id][target_id] = edge
+            # Use unsafe method to avoid code duplication and deadlock
+            edge = self._get_agent_affinity_unsafe(source_id, target_id)
 
             new_val = max(0.0, min(100.0, edge.affinity + delta))
             edge.affinity = new_val
