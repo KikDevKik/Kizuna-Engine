@@ -68,7 +68,7 @@ else:
 
             # Response modalities is set to AUDIO to ensure we get audio back.
             config = types.LiveConnectConfig(
-                response_modalities=[types.Modality.AUDIO],
+                response_modalities=["AUDIO"],
                 speech_config=speech_config,
                 system_instruction=types.Content(
                     parts=[types.Part(text=system_instruction)]
