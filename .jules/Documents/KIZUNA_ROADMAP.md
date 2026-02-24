@@ -4,112 +4,64 @@ Este documento detalla los pasos secuenciales para transformar la implementació
 
 --------------------------------------------------------------------------------
 
-## Fase 1: Estabilización Inmediata [COMPLETADO]
-**Objetivo**: Corregir errores críticos que rompen la inmersión y asegurar una base sólida para la comunicación bidireccional.
+## Fase 1: Estabilización Inmediata [✅ COMPLETADO]
+**Objetivo**: Corregir errores críticos y asegurar la base.
+- [x] Reparar Feedback Loop de Audio (Frontend).
+- [x] Verificar Configuración de Latencia (Backend).
+- [x] Prueba de Estrés "Indestructible".
 
-### 1. [FRONTEND] Reparar Feedback Loop de Audio (✅ Hecho)
-- **Acción**: Editar `frontend/src/hooks/useLiveAPI.ts`.
-- **Detalle**: Eliminar la línea `source.connect(ctx.destination)` en la configuración del micrófono.
-- **Estado**: Solucionado.
+## Fase 2: Percepción Multimodal [✅ COMPLETADO]
+**Objetivo**: Permitir que Kizuna "vea" el mundo.
+- [x] Implementar Captura de Video (`useVision`).
+- [x] Enviar Frames por WebSocket.
+- [x] Procesar Imágenes en Backend (Gemini).
 
-### 2. [BACKEND] Verificar Configuración de Latencia (✅ Hecho)
-- **Acción**: Confirmar que el buffer de audio en `backend/app/main.py` se mantenga en ~100ms (3200 bytes).
-- **Estado**: Verificado.
+## Fase 3: Memoria Epistémica y Mente [✅ COMPLETADO]
+**Objetivo**: Persistencia y análisis emocional.
+- [x] Grafo Local (`LocalSoulRepository`).
+- [x] Inyección de Contexto (`SoulAssembler`).
+- [x] Mente Subconsciente y Bio-Feedback (`SubconsciousMind`).
 
-### 3. [GENERAL] Prueba de Estrés de Conexión "Indestructible" (✅ Hecho)
-- **Acción**: Simular silencios largos (minutos) y ruidos repentinos.
-- **Estado**: Implementado.
-
---------------------------------------------------------------------------------
-
-## Fase 2: Percepción Multimodal (La Vista de Kizuna) [COMPLETADO]
-**Objetivo**: Permitir que Kizuna "vea" el mundo del usuario para comentar sobre su entorno (ropa, habitación, clima).
-
-### 1. [FRONTEND] Implementar Captura de Video (✅ Hecho)
-- **Acción**: Añadir un elemento `<video>` oculto y un `<canvas>` en el componente principal.
-- **Lógica**: Hook `useVision` captura frames de cámara o pantalla.
-- **Formato**: JPEG base64 (max 480px) con throttling para eficiencia.
-
-### 2. [FRONTEND] Enviar Frames por WebSocket (✅ Hecho)
-- **Acción**: Modificar el bucle de envío en `useLiveAPI.ts` / `useVision.ts`.
-- **Protocolo**: Enviar mensajes JSON: `{ "type": "image", "data": "base64_string..." }`.
-
-### 3. [BACKEND] Procesar Imágenes (✅ Hecho)
-- **Acción**: Actualizar `backend/app/services/audio_session.py`.
-- **Lógica**: Detectar mensajes de imagen y enrutarlos a la sesión Gemini con `mime_type: image/jpeg`.
+## Fase 4: Refinamiento del "Alma" [✅ COMPLETADO]
+**Objetivo**: Ecosistema procedural.
+- [x] Ensamblador de Almas y Plantillas.
+- [x] Centro de Comando y Forja de Almas (`AgentRoster`).
+- [x] Ciclo de Sueño REM (`SleepManager`).
 
 --------------------------------------------------------------------------------
 
-## Fase 3: Memoria Epistémica y "Mente" (Híbrido Local/Nube) [COMPLETADO]
-**Objetivo**: Implementar persistencia de memoria y análisis emocional en modo local (JSON Graph) como preparación para la infraestructura Cloud Spanner.
+## Fase 5: Simulación Autónoma (El Gran Salto) [EN PROCESO]
+**Objetivo**: Transformar el sistema de un "Chatbot Reactivo" a una "Simulación Viva" que persiste y evoluciona incluso cuando el usuario no está presente.
 
-### 1. [BACKEND] Implementar Grafo Local (✅ Hecho)
-- **Acción**: Implementación de `LocalSoulRepository`.
-- **Detalle**: Estructura de grafos completa (Usuarios, Agentes, Hechos, Resonancia, Episodios) persistida en JSON local.
+### 1. [CHIEF ARCHITECT] Saltos Temporales Offline (Time-Skips)
+- **Estado**: Pendiente.
+- **Descripción**: Simular el paso del tiempo cuando el usuario regresa tras una ausencia larga.
+- **Acción**:
+    - Calcular `delta_time` al reconectar.
+    - Generar "Eventos Offline" (e.g., "Kizuna leyó un libro", "Kizuna durmió").
+    - Inyectar estos eventos en el `MemoryEpisodeNode` como contexto narrativo.
 
-### 2. [BACKEND] Inyección de Contexto Dinámico (✅ Hecho)
-- **Acción**: Implementación de `SoulAssembler`.
-- **Lógica**: Construcción dinámica del system prompt basado en afinidad y episodios recientes.
+### 2. [ANTHROPOLOGIST] Límites y Dinámicas entre Agentes
+- **Estado**: Pendiente.
+- **Descripción**: Permitir que múltiples agentes interactúen entre sí sin intervención directa del usuario.
+- **Acción**:
+    - Definir protocolo de "Inter-Agent Messaging".
+    - Implementar "Social Battery" que decae con el tiempo.
 
-### 3. [BACKEND] Mente Subconsciente y Bio-Feedback (✅ Hecho)
-- **Acción**: Implementación de `SubconsciousMind`.
-- **Lógica**:
-    - **Análisis**: Proceso en segundo plano para detectar emociones y generar "Insights".
-    - **Model Waterfall**: Estrategia de fallback automática ante errores 429.
-    - **Bio-Feedback**: Ingesta de señales BPM para modular la respuesta del sistema.
-
---------------------------------------------------------------------------------
-
-## Fase 4: Refinamiento del "Alma" (Arquitectura de Almas Dinámicas) [COMPLETADO]
-**Objetivo**: Eliminar el hardcodeo de personalidades e implementar un ecosistema procedural.
-
-### 1. [BACKEND] Ensamblador de Almas y Plantillas (✅ Hecho)
-- **Acción**: Eliminar el system_instruction estático.
-- **Lógica**: Motor de Identidad = [ADN Base] + [Modificador de Afinidad] + [Memoria Epistémica].
-- **Estado**: `SoulAssembler` completamente operativo.
-
-### 2. [FRONTEND] Centro de Comando y Forja de Almas (✅ Hecho)
-- **Acción**: Construir el ecosistema visual de selección y creación.
-- **Componentes**: `AgentRoster` (Carrusel) y `SoulForge` (Modal de creación).
-- **Estética**: Implementación total del diseño "Dark Water".
-
-### 3. [BACKEND] Ciclo de Sueño REM (✅ Hecho)
-- **Acción**: Implementar `SleepManager` para consolidación de memoria.
-- **Lógica**: Debounce pattern para guardar recuerdos al desconectar.
-- **Persistencia**: Uso de Redis (`sleep_intent`) para asegurar integridad de datos entre reinicios.
+### 3. [CHIEF ARCHITECT] Intercambio de Datos JSON-LD
+- **Estado**: Pendiente.
+- **Descripción**: Estandarizar la exportación/importación de grafos de memoria.
+- **Acción**:
+    - Implementar esquema JSON-LD para `AgentNode` y `MemoryEpisodeNode`.
+    - Permitir portabilidad de "Almas" entre instancias.
 
 --------------------------------------------------------------------------------
 
-## Fase 5: Ascensión a la Nube (En Foco Actual)
-**Objetivo**: Migrar la infraestructura local validada a Google Cloud Platform para producción masiva.
+## Fase 6: Infraestructura y Escala (Horizonte)
+**Objetivo**: Migración a nube y optimización masiva.
 
-### 1. [CLOUD] Migración a Spanner (Pendiente)
-- **Acción**: Reemplazar `LocalSoulRepository` con `SpannerSoulRepository`.
-- **Estrategia**: La interfaz `SoulRepository` abstrae la implementación subyacente.
+### 1. [CLOUD] Migración a Spanner
+- **Acción**: Reemplazar `LocalSoulRepository` con `SpannerSoulRepository` para producción.
 
-### 2. [CLOUD] Despliegue de Redis (Pendiente)
+### 2. [CLOUD] Despliegue de Redis Distribuido
 - **Acción**: Activar caché distribuida en entorno de producción (GCP Memorystore).
-
---------------------------------------------------------------------------------
-
-## Fase 6: Refinamiento y Memoria Profunda (✅ COMPLETADO)
-**Objetivo**: Convertir el prototipo en un motor de producción robusto y con memoria semántica real.
-
-### 1. [BACKEND] Refactorización de Sesión (✅ Hecho)
-- **Acción**: Migrar la lógica de WebSocket inline en `main.py` a una clase dedicada `SessionManager`.
-- **Beneficio**: Mejor testabilidad y modularidad del ciclo de vida de la conexión.
-
-### 2. [BACKEND] RAG con Embeddings (Local Vector Parity) (✅ Hecho)
-- **Acción**: Implementar búsqueda vectorial real en `LocalSoulRepository` usando `embedding.py` y similitud coseno.
-- **Beneficio**: Reemplazar la búsqueda por palabras clave en `get_relevant_facts` con búsqueda semántica.
-
-### 3. [BACKEND] Desacople Ontológico (✅ Hecho)
-- **Acción**: Implementar `SystemConfigNode` en el grafo para almacenar configuración y directivas.
-- **Beneficio**: Permite ajustar el comportamiento del sistema sin tocar código.
-
-### 4. [FRONTEND] True Echo Protocol (✅ Hecho)
-- **Acción**: Implementar `SpeechRecognition` nativo en `useLiveAPI.ts`.
-- **Beneficio**: Reduce latencia de transcripción y mejora precisión al usar el modelo del dispositivo.
-
-### 5. [FRONTEND] Optimización de Audio (Pendiente)
-- **Acción**: Refinar el algoritmo de Jitter Buffer en `AudioStreamManager.ts` para manejar mejor redes inestables (packet loss concealment).
