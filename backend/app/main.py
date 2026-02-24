@@ -12,6 +12,7 @@ from app.services.session_manager import SessionManager
 from app.repositories.local_graph import LocalSoulRepository
 from app.models.graph import AgentNode
 from app.services.sleep_manager import SleepManager
+from app.services.time_skip import TimeSkipService
 from app.services.cache import cache
 from app.services.agent_service import agent_service
 from app.services.seeder import seed_data
@@ -26,8 +27,11 @@ logger = logging.getLogger(__name__)
 # Initialize Sleep Manager (Phase 4)
 sleep_manager = SleepManager(soul_repo)
 
+# Initialize Time Skip Service (The Architect's Temporal Engine)
+time_skip_service = TimeSkipService(soul_repo)
+
 # Initialize Session Manager (The Architect's Modularization)
-session_manager = SessionManager(soul_repo, sleep_manager)
+session_manager = SessionManager(soul_repo, sleep_manager, time_skip_service)
 
 
 # Lifecycle Event to load Graph

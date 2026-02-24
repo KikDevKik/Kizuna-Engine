@@ -9,6 +9,7 @@ class UserNode(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str = "Anonymous"
     created_at: datetime = Field(default_factory=datetime.now)
+    last_seen: datetime = Field(default_factory=datetime.now)
 
 class AgentNode(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
@@ -67,6 +68,31 @@ class ArchetypeNode(BaseModel):
     name: str  # e.g., "The Guardian", "The Jester"
     description: str
     triggers: dict = Field(default_factory=dict) # e.g., {"sad": {"response": "...", "valence_delta": 1.0}}
+
+# --- Phase 3: Simulated Multi-Agent Reality Nodes ---
+
+class LocationNode(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    name: str
+    description: str
+    type: str = "generic" # e.g., "bar", "park", "digital_void"
+
+class FactionNode(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    name: str
+    description: str
+    members: List[str] = Field(default_factory=list) # List of Agent IDs
+
+class CollectiveEventNode(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    type: str # e.g., "SOCIAL", "CONFLICT", "COLLABORATION"
+    location_id: Optional[str] = None
+    participants: List[str] = Field(default_factory=list) # List of Agent IDs (or names/strings for unknown agents)
+    timestamp: datetime = Field(default_factory=datetime.now)
+    outcome: str # e.g., "FOUGHT", "BONDED", "IGNORED"
+    summary: str # Narrative summary of the event
+
+# ----------------------------------------------------
 
 class GlobalDreamNode(BaseModel):
     id: str = "global-dream"
@@ -129,6 +155,12 @@ class ResonanceEdge(BaseModel):
     affinity_level: float = 50.0 # 0.0 to 100.0 (50.0 = Neutral)
     last_interaction: datetime = Field(default_factory=datetime.now)
     shared_memories: List[str] = Field(default_factory=list) # List of Episode IDs
+
+class AgentAffinityEdge(BaseModel):
+    source_agent_id: str
+    target_agent_id: str
+    affinity: float = 50.0 # 0-100
+    last_interaction: datetime = Field(default_factory=datetime.now)
 
 class ExperiencedEdge(BaseModel):
     source_id: str # User ID
