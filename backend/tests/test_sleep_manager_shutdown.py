@@ -1,68 +1,79 @@
 import pytest
 import asyncio
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 from app.services.sleep_manager import SleepManager
 
 @pytest.mark.asyncio
 async def test_shutdown_prevents_scheduling():
     # Mock dependencies
     repo_mock = Mock()
-    sleep_manager = SleepManager(repo_mock)
 
-    # Initial state
-    assert sleep_manager._is_shutting_down is False
-    assert len(sleep_manager.active_timers) == 0
+    # Patch cache globally for this test
+    with patch("app.services.sleep_manager.cache") as cache_mock:
+        cache_mock.set = AsyncMock()
+        cache_mock.delete = AsyncMock()
 
-    # 1. Schedule sleep normally
-    await sleep_manager.schedule_sleep("user_1")
-    assert "user_1" in sleep_manager.active_timers
-    assert len(sleep_manager.active_timers) == 1
+        sleep_manager = SleepManager(repo_mock)
 
-    # Verify task is running (or at least created)
-    task = sleep_manager.active_timers["user_1"]
-    assert not task.done()
+        # Initial state
+        assert sleep_manager._is_shutting_down is False
+        assert len(sleep_manager.active_timers) == 0
 
-    # 2. Shutdown the manager
-    await sleep_manager.shutdown()
+        # 1. Schedule sleep normally
+        await sleep_manager.schedule_sleep("user_1")
+        assert "user_1" in sleep_manager.active_timers
+        assert len(sleep_manager.active_timers) == 1
 
-    # Verify state after shutdown
-    assert sleep_manager._is_shutting_down is True
-    assert len(sleep_manager.active_timers) == 0  # Tasks should be cleared
+        # Verify task is running (or at least created)
+        task = sleep_manager.active_timers["user_1"]
+        assert not task.done()
 
-    # 3. Try to schedule sleep AFTER shutdown
-    await sleep_manager.schedule_sleep("user_2")
+        # 2. Shutdown the manager
+        await sleep_manager.shutdown()
 
-    # Verify NO new task was created
-    assert "user_2" not in sleep_manager.active_timers
-    assert len(sleep_manager.active_timers) == 0
+        # Verify state after shutdown
+        assert sleep_manager._is_shutting_down is True
+        assert len(sleep_manager.active_timers) == 0  # Tasks should be cleared
+
+        # 3. Try to schedule sleep AFTER shutdown
+        await sleep_manager.schedule_sleep("user_2")
+
+        # Verify NO new task was created
+        assert "user_2" not in sleep_manager.active_timers
+        assert len(sleep_manager.active_timers) == 0
 
 @pytest.mark.asyncio
 async def test_shutdown_triggers_consolidation():
     # Mock dependencies
     repo_mock = Mock()
-    sleep_manager = SleepManager(repo_mock)
 
-    # Mock _trigger_consolidation so we can verify it's called
-    sleep_manager._trigger_consolidation = AsyncMock()
+    with patch("app.services.sleep_manager.cache") as cache_mock:
+        cache_mock.set = AsyncMock()
+        cache_mock.delete = AsyncMock()
 
-    # Schedule a task
-    await sleep_manager.schedule_sleep("user_3", delay=10) # 10s delay
-    task = sleep_manager.active_timers["user_3"]
+        sleep_manager = SleepManager(repo_mock)
 
-    assert not task.done()
+        # Mock _trigger_consolidation so we can verify it's called
+        sleep_manager._trigger_consolidation = AsyncMock()
 
-    # Shutdown
-    await sleep_manager.shutdown()
+        # Schedule a task
+        await sleep_manager.schedule_sleep("user_3", delay=10) # 10s delay
+        task = sleep_manager.active_timers["user_3"]
 
-    # The timer task should be cancelled
-    assert task.cancelled()
+        assert not task.done()
 
-    # BUT consolidation should have been triggered immediately
-    sleep_manager._trigger_consolidation.assert_called_with("user_3")
+        # Shutdown
+        await sleep_manager.shutdown()
 
-    # And removed from active timers
-    assert "user_3" not in sleep_manager.active_timers
+        # The timer task should be cancelled
+        assert task.cancelled()
+
+        # BUT consolidation should have been triggered immediately
+        sleep_manager._trigger_consolidation.assert_called_with("user_3")
+
+        # And removed from active timers
+        assert "user_3" not in sleep_manager.active_timers
 
 if __name__ == "__main__":
     asyncio.run(test_shutdown_prevents_scheduling())
-    asyncio.run(test_shutdown_cancels_existing_tasks())
+    asyncio.run(test_shutdown_triggers_consolidation())
