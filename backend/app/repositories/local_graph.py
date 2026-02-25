@@ -3,6 +3,8 @@ import logging
 import asyncio
 import aiofiles
 import os
+import shutil
+import time
 import math
 from typing import List, Optional, Dict, Any
 from pathlib import Path
@@ -16,7 +18,8 @@ from ..models.graph import (
     DreamNode, ShadowEdge, ArchetypeNode, GlobalDreamNode, EmbodiesEdge,
     SystemConfigNode,
     LocationNode, FactionNode, CollectiveEventNode, AgentAffinityEdge,
-    GraphEdge, ParticipatedIn, OccurredAt, InteractedWith
+    GraphEdge, ParticipatedIn, OccurredAt, InteractedWith,
+    ExperiencedEdge, KnowsEdge
 )
 
 logger = logging.getLogger(__name__)
@@ -839,3 +842,231 @@ class LocalSoulRepository(SoulRepository):
                     last_time = ts
 
         return last_time
+
+    async def export_to_json_ld(self) -> Dict[str, Any]:
+        """
+        Exports the entire graph state to a standard JSON-LD flattened format.
+        Schema compliant with MyWorld / Kizuna Ontology.
+        """
+        async with self.lock:
+            graph_objects = []
+
+            # 1. Nodes
+            graph_objects.extend([n.to_json_ld() for n in self.users.values()])
+            graph_objects.extend([n.to_json_ld() for n in self.agents.values()])
+            graph_objects.extend([n.to_json_ld() for n in self.episodes.values()])
+            graph_objects.extend([n.to_json_ld() for n in self.facts.values()])
+            graph_objects.extend([n.to_json_ld() for n in self.dreams.values()])
+            graph_objects.extend([n.to_json_ld() for n in self.archetypes.values()])
+            graph_objects.extend([n.to_json_ld() for n in self.locations.values()])
+            graph_objects.extend([n.to_json_ld() for n in self.factions.values()])
+            graph_objects.extend([n.to_json_ld() for n in self.collective_events.values()])
+
+            # Singletons
+            graph_objects.append(self.global_dream.to_json_ld())
+            graph_objects.append(self.system_config.to_json_ld())
+
+            # 2. Edges
+            # Resonances
+            for u_dict in self.resonances.values():
+                for r in u_dict.values():
+                    graph_objects.append(r.to_json_ld())
+
+            # Shadows
+            for edges in self.shadows.values():
+                for s in edges:
+                    graph_objects.append(s.to_json_ld())
+
+            # Embodies
+            for edges in self.embodies.values():
+                for e in edges:
+                    graph_objects.append(e.to_json_ld())
+
+            # Agent Affinities
+            for s_dict in self.agent_affinities.values():
+                for a in s_dict.values():
+                    graph_objects.append(a.to_json_ld())
+
+            # Explicit Graph Edges
+            for edge in self.graph_edges:
+                graph_objects.append(edge.to_json_ld())
+
+            # Experienced (Derived to Explicit)
+            for uid, eps in self.experienced.items():
+                for eid in eps:
+                    edge = ExperiencedEdge(source_id=uid, target_id=eid)
+                    graph_objects.append(edge.to_json_ld())
+
+            # Knows (Derived to Explicit)
+            for uid, facts in self.knows.items():
+                for fid in facts:
+                    edge = KnowsEdge(source_id=uid, target_id=fid)
+                    graph_objects.append(edge.to_json_ld())
+
+            return {
+                "@context": "https://myworld.kizuna/ontology",
+                "@graph": graph_objects
+            }
+
+    async def import_from_json_ld(self, data: Dict[str, Any]) -> None:
+        """
+        Imports a JSON-LD graph, replacing the current state.
+        Performs a safety backup before overwriting.
+        Transactional: Validates entire dataset before applying changes.
+        """
+        if "@graph" not in data or not isinstance(data["@graph"], list):
+            raise ValueError("Invalid JSON-LD: Missing '@graph' array.")
+
+        # 1. Prepare Temporary State (Transactional Staging)
+        staging = {
+            "users": {},
+            "agents": {},
+            "episodes": {},
+            "facts": {},
+            "dreams": {},
+            "resonances": {},
+            "experienced": {},
+            "knows": {},
+            "shadows": {},
+            "archetypes": {},
+            "embodies": {},
+            "locations": {},
+            "factions": {},
+            "collective_events": {},
+            "agent_affinities": {},
+            "graph_edges": [],
+            "global_dream": GlobalDreamNode(),
+            "system_config": SystemConfigNode()
+        }
+
+        count = 0
+        try:
+            for item in data["@graph"]:
+                obj_type = item.get("@type")
+                if not obj_type:
+                    continue
+
+                if obj_type == "UserNode":
+                    node = UserNode(**item)
+                    staging["users"][node.id] = node
+                elif obj_type == "AgentNode":
+                    node = AgentNode(**item)
+                    staging["agents"][node.id] = node
+                elif obj_type == "MemoryEpisodeNode":
+                    node = MemoryEpisodeNode(**item)
+                    staging["episodes"][node.id] = node
+                elif obj_type == "FactNode":
+                    node = FactNode(**item)
+                    staging["facts"][node.id] = node
+                elif obj_type == "DreamNode":
+                    node = DreamNode(**item)
+                    staging["dreams"][node.id] = node
+                elif obj_type == "ArchetypeNode":
+                    node = ArchetypeNode(**item)
+                    staging["archetypes"][node.id] = node
+                elif obj_type == "LocationNode":
+                    node = LocationNode(**item)
+                    staging["locations"][node.id] = node
+                elif obj_type == "FactionNode":
+                    node = FactionNode(**item)
+                    staging["factions"][node.id] = node
+                elif obj_type == "CollectiveEventNode":
+                    node = CollectiveEventNode(**item)
+                    staging["collective_events"][node.id] = node
+                elif obj_type == "GlobalDreamNode":
+                    staging["global_dream"] = GlobalDreamNode(**item)
+                elif obj_type == "SystemConfigNode":
+                    staging["system_config"] = SystemConfigNode(**item)
+
+                # Edges
+                elif obj_type == "ResonanceEdge":
+                    edge = ResonanceEdge(**item)
+                    if edge.source_id not in staging["resonances"]:
+                        staging["resonances"][edge.source_id] = {}
+                    staging["resonances"][edge.source_id][edge.target_id] = edge
+
+                elif obj_type == "ShadowEdge":
+                    edge = ShadowEdge(**item)
+                    if edge.source_id not in staging["shadows"]:
+                        staging["shadows"][edge.source_id] = []
+                    staging["shadows"][edge.source_id].append(edge)
+
+                elif obj_type == "EmbodiesEdge":
+                    edge = EmbodiesEdge(**item)
+                    if edge.source_id not in staging["embodies"]:
+                        staging["embodies"][edge.source_id] = []
+                    staging["embodies"][edge.source_id].append(edge)
+
+                elif obj_type == "AgentAffinityEdge":
+                    edge = AgentAffinityEdge(**item)
+                    if edge.source_agent_id not in staging["agent_affinities"]:
+                        staging["agent_affinities"][edge.source_agent_id] = {}
+                    staging["agent_affinities"][edge.source_agent_id][edge.target_agent_id] = edge
+
+                elif obj_type == "ExperiencedEdge":
+                    edge = ExperiencedEdge(**item)
+                    if edge.source_id not in staging["experienced"]:
+                        staging["experienced"][edge.source_id] = []
+                    # Ensure no duplicates
+                    if edge.target_id not in staging["experienced"][edge.source_id]:
+                            staging["experienced"][edge.source_id].append(edge.target_id)
+
+                elif obj_type == "KnowsEdge":
+                    edge = KnowsEdge(**item)
+                    if edge.source_id not in staging["knows"]:
+                        staging["knows"][edge.source_id] = []
+                    if edge.target_id not in staging["knows"][edge.source_id]:
+                        staging["knows"][edge.source_id].append(edge.target_id)
+
+                elif obj_type in ["ParticipatedIn", "OccurredAt", "InteractedWith", "GraphEdge"]:
+                    if obj_type == "ParticipatedIn":
+                        staging["graph_edges"].append(ParticipatedIn(**item))
+                    elif obj_type == "OccurredAt":
+                        staging["graph_edges"].append(OccurredAt(**item))
+                    elif obj_type == "InteractedWith":
+                        staging["graph_edges"].append(InteractedWith(**item))
+                    else:
+                        staging["graph_edges"].append(GraphEdge(**item))
+
+                count += 1
+
+        except Exception as e:
+             logger.error(f"Import validation failed at item {count}: {e}")
+             raise ValueError(f"Import failed: Invalid data at item {count}. {str(e)}")
+
+        # 2. Safety Backup (Only if validation passed)
+        if self.data_path.exists():
+            timestamp = int(time.time())
+            backup_path = self.data_path.with_name(f"graph_backup_{timestamp}.json")
+            try:
+                shutil.copy2(self.data_path, backup_path)
+                logger.info(f"🛡️ Backup created at {backup_path}")
+            except Exception as e:
+                logger.error(f"Failed to create backup: {e}")
+                raise RuntimeError("Backup failed. Aborting import to protect data.")
+
+        async with self.lock:
+            # 3. Atomic Swap
+            self.users = staging["users"]
+            self.agents = staging["agents"]
+            self.episodes = staging["episodes"]
+            self.facts = staging["facts"]
+            self.dreams = staging["dreams"]
+            self.resonances = staging["resonances"]
+            self.experienced = staging["experienced"]
+            self.knows = staging["knows"]
+            self.shadows = staging["shadows"]
+            self.archetypes = staging["archetypes"]
+            self.embodies = staging["embodies"]
+            self.locations = staging["locations"]
+            self.factions = staging["factions"]
+            self.collective_events = staging["collective_events"]
+            self.agent_affinities = staging["agent_affinities"]
+            self.graph_edges = staging["graph_edges"]
+
+            self.global_dream = staging["global_dream"]
+            self.system_config = staging["system_config"]
+
+            # 4. Persist
+            await self._save()
+            logger.info(f"Import complete. Restored {count} nodes/edges.")
