@@ -6,7 +6,7 @@ import os
 import math
 from typing import List, Optional, Dict, Any
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy as np
 
 from .base import SoulRepository
@@ -761,3 +761,81 @@ class LocalSoulRepository(SoulRepository):
                     continue
                 results.append(edge)
             return results
+
+    async def get_active_peers(self, user_id: str, time_window_minutes: int = 15) -> List[AgentNode]:
+        """
+        Finds agents who have interacted with the user or participated in events with the user
+        within the given time window.
+        """
+        cutoff_time = datetime.now() - timedelta(minutes=time_window_minutes)
+        active_agent_ids = set()
+
+        async with self.lock:
+            # 1. Check direct interactions (InteractedWith)
+            for edge in self.graph_edges:
+                if edge.type == "interactedWith" and edge.timestamp >= cutoff_time:
+                    if edge.source_id == user_id:
+                        active_agent_ids.add(edge.target_id)
+                    elif edge.target_id == user_id:
+                        active_agent_ids.add(edge.source_id)
+
+            # 2. Check shared events (ParticipatedIn)
+            # First find events the user participated in recently
+            user_event_ids = set()
+            for edge in self.graph_edges:
+                if edge.type == "participatedIn" and edge.source_id == user_id and edge.timestamp >= cutoff_time:
+                    user_event_ids.add(edge.target_id)
+
+            # Then find other agents in those events
+            if user_event_ids:
+                for edge in self.graph_edges:
+                    if edge.type == "participatedIn" and edge.target_id in user_event_ids:
+                        if edge.source_id != user_id:
+                            active_agent_ids.add(edge.source_id)
+
+            # Retrieve Agent Nodes
+            results = []
+            for agent_id in active_agent_ids:
+                if agent_id in self.agents:
+                    results.append(self.agents[agent_id])
+            return results
+
+    async def get_last_interaction(self, user_id: str, agent_id: str) -> datetime:
+        """
+        Finds the timestamp of the last meaningful interaction (direct or shared event)
+        between a user and an agent.
+        """
+        last_time = datetime.min
+
+        async with self.lock:
+            # 1. Direct Interactions
+            for edge in self.graph_edges:
+                if edge.type == "interactedWith":
+                    # Check both directions
+                    is_relevant = (edge.source_id == user_id and edge.target_id == agent_id) or \
+                                  (edge.source_id == agent_id and edge.target_id == user_id)
+
+                    if is_relevant and edge.timestamp > last_time:
+                        last_time = edge.timestamp
+
+            # 2. Shared Events
+            # Find events for both
+            user_events = {} # event_id -> timestamp
+            agent_events = {} # event_id -> timestamp
+
+            for edge in self.graph_edges:
+                if edge.type == "participatedIn":
+                    if edge.source_id == user_id:
+                        user_events[edge.target_id] = edge.timestamp
+                    elif edge.source_id == agent_id:
+                        agent_events[edge.target_id] = edge.timestamp
+
+            # Find intersection
+            shared_event_ids = set(user_events.keys()) & set(agent_events.keys())
+            for eid in shared_event_ids:
+                # Use the later of the two timestamps (interaction completed)
+                ts = max(user_events[eid], agent_events[eid])
+                if ts > last_time:
+                    last_time = ts
+
+        return last_time

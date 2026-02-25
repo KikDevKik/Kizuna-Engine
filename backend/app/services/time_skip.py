@@ -141,8 +141,23 @@ class TimeSkipService:
         if abs(current_affinity - BASELINE) < 0.1:
             return
 
+        # --- Anthropologist Update: Precision Decay ---
+        # Instead of just using 'minutes_passed' since user login, use the ACTUAL last interaction time
+        # from the graph edges. This prevents decay from applying to active relationships.
+        decay_minutes = minutes_passed # Default fallback
+
+        if hasattr(self.repository, 'get_last_interaction'):
+            last_ts = await self.repository.get_last_interaction(resonance.source_id, agent.id)
+            if last_ts != datetime.min:
+                delta_ts = datetime.now() - last_ts
+                decay_minutes = delta_ts.total_seconds() / 60.0
+
+        # Don't decay if interaction was very recent (< 1 hour)
+        if decay_minutes < 60:
+            return
+
         decay_rate = getattr(agent, 'emotional_decay_rate', 0.1)
-        hours_passed = minutes_passed / 60.0
+        hours_passed = decay_minutes / 60.0
 
         difference = current_affinity - BASELINE
         decay_factor = math.exp(-decay_rate * hours_passed)
