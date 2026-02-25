@@ -18,7 +18,7 @@
 **Responsibilities**:
 *   **The World**: Defining the schema of `graph.py` (`AgentNode`, `MemoryEpisodeNode`, `CollectiveEventNode`).
 *   **Time**: Managing the flow of time and "Time-Skips" (`TimeSkipService`).
-*   **Interchange**: Handling JSON-LD import/export for MyWorld integration.
+*   **Interchange**: Handling JSON-LD import/export for MyWorld integration (PENDING API).
 *   **Ontology**: Defining `FactNode` types and `ArchetypeNode` structures.
 **Key Files**: `backend/app/models/graph.py`, `backend/app/services/time_skip.py`, `backend/app/repositories/base.py`.
 

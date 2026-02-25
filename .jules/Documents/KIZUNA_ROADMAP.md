@@ -48,11 +48,11 @@ Este documento detalla los pasos secuenciales para transformar la implementació
     - Decaimiento emocional (Ebbinghaus) aplicado a `ResonanceEdge`.
 
 ### 3. [CHIEF ARCHITECT] Intercambio de Datos JSON-LD [PRIORIDAD ALTA]
-- **Estado**: Pendiente.
+- **Estado**: En Progreso (Esquema Listo, API Pendiente).
 - **Descripción**: Estandarizar la exportación/importación de grafos de memoria para integración con MyWorld.
 - **Acción**:
-    - Implementar esquema JSON-LD para `AgentNode` y `MemoryEpisodeNode`.
-    - Permitir portabilidad de "Almas" entre instancias.
+    - [x] Implementar esquema JSON-LD para `AgentNode` y `MemoryEpisodeNode` (`JSONLDMixin` en `graph.py`).
+    - [ ] **Construir Endpoints de API (Router)** para importar y exportar estos datos.
 
 --------------------------------------------------------------------------------
 
