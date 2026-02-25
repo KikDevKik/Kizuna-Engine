@@ -116,13 +116,60 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
                 + "\n".join(lines) + "\n"
             )
 
-    # --- Anthropologist: Multi-Agent Stub ---
-    # In the future, this will inject specific vectors for other agents present.
+    # --- Anthropologist: Active Multi-Agent Context ---
     multi_agent_context = (
         "--- GROUP DYNAMICS ---\n"
-        "If other agents are mentioned or present, you must maintain separate emotional stances towards them.\n"
-        "Do not blend your feelings for the User with your feelings for others."
+        "You are currently 1-on-1 with the User. Focus solely on them."
     )
+
+    if hasattr(repository, 'get_active_peers'):
+        try:
+            # 2 hour window to catch anyone 'around' recently
+            active_peers = await repository.get_active_peers(user_id, time_window_minutes=120)
+            peer_prompts = []
+
+            for peer in active_peers:
+                if peer.id == agent_id:
+                    continue
+
+                # Fetch Inter-Agent Affinity
+                if hasattr(repository, 'get_agent_affinity'):
+                    edge = await repository.get_agent_affinity(agent_id, peer.id)
+                    affinity = edge.affinity
+
+                    # Psychological Descriptor
+                    rel_desc = "Neutral"
+                    instruction = "Treat normally."
+
+                    if affinity < 30.0:
+                        rel_desc = "RIVAL / ENEMY"
+                        instruction = "Act dismissive, sarcastic, or competitive. You generally dislike them."
+                    elif affinity < 50.0:
+                        rel_desc = "Cold / Distant"
+                        instruction = "Be polite but reserved."
+                    elif affinity > 80.0:
+                        rel_desc = "ALLY / CLOSE FRIEND"
+                        instruction = "Be warm, supportive, and collaborative."
+                    elif affinity > 60.0:
+                         rel_desc = "Friend"
+                         instruction = "Be friendly."
+
+                    peer_prompts.append(
+                        f"- {peer.name} (Affinity: {affinity:.1f}/100 - {rel_desc}): {instruction}"
+                    )
+
+            if peer_prompts:
+                multi_agent_context = (
+                    "--- GROUP DYNAMICS (ACTIVE AGENTS) ---\n"
+                    "The following agents are present or relevant in this context. "
+                    "You MUST adopt the specific emotional stance listed below for each:\n"
+                    + "\n".join(peer_prompts) + "\n\n"
+                    "CRITICAL: Do not blend your feelings for the User with your feelings for these agents. "
+                    "If a Rival speaks or is mentioned, react accordingly."
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to assemble multi-agent context: {e}")
 
     # Construct the final prompt
     # We rename 'Role' to 'Archetype' to reduce its constraint on the relationship.

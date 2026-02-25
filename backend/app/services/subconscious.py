@@ -70,6 +70,32 @@ class SubconsciousMind:
                     # Drain occurs on every significant user turn processed by Subconscious.
                     await self._process_battery_drain(user_id, agent_id, injection_queue)
 
+                    # --- Anthropologist: Multi-Agent Affinity Check ---
+                    if self.repository and hasattr(self.repository, 'get_active_peers'):
+                         try:
+                             active_peers = await self.repository.get_active_peers(user_id)
+                             for peer in active_peers:
+                                 if peer.id == agent_id:
+                                     continue
+
+                                 # Check affinity
+                                 affinity_edge = await self.repository.get_agent_affinity(agent_id, peer.id)
+                                 if affinity_edge.affinity < 30.0:
+                                     # Toxic/Rivalry Injection
+                                     whisper = (
+                                         f"SYSTEM_HINT: 💢 [Rival Present]: You have low affinity ({affinity_edge.affinity:.1f}) with {peer.name}. "
+                                         f"Act dismissive, competitive, or annoyed if they are mentioned."
+                                     )
+                                     try:
+                                         injection_queue.put_nowait({
+                                             "text": whisper,
+                                             "turn_complete": False
+                                         })
+                                     except asyncio.QueueFull:
+                                         pass
+                         except Exception as e:
+                             logger.error(f"Failed to process multi-agent affinity: {e}")
+
                     # Analyze (Real or Mock)
                     # Parallel Execution: Sentiment Analysis + Semantic Memory Retrieval
                     sentiment_task = asyncio.create_task(self._analyze_sentiment(full_text, agent_id))
@@ -202,18 +228,26 @@ class SubconsciousMind:
             if not agent:
                 return
 
-            # Base Drain: ~0.5% per turn?
-            # User wants ~2 hours to 0%. Assuming 1 turn per minute = 120 turns.
-            # 100 / 120 ~= 0.83% per turn.
+            # Base Drain
             BASE_DRAIN = 0.83
             drain = BASE_DRAIN * getattr(agent, 'drain_rate', 1.0)
+
+            # --- Multi-Agent Context Penalty ---
+            # If the room is crowded (>2 agents active including self), drain faster.
+            active_peers = []
+            if hasattr(self.repository, 'get_active_peers'):
+                active_peers = await self.repository.get_active_peers(user_id)
+
+            # Count distinct agents (peers + current agent)
+            if len(active_peers) > 2:
+                drain *= 1.5
+                logger.info(f"⚡ High Social Load: {len(active_peers)} agents active. Drain increased.")
 
             # Check for Affinity Bonus (Pause drain if High Affinity)
             resonance = await self.repository.get_resonance(user_id, agent_id)
             if resonance and resonance.affinity_level >= 80.0:
-                 # TODO: Check for 'Positive Context' (requires sentiment analysis of current turn)
-                 # For now, slow drain by 50% for high affinity
-                 drain *= 0.5
+                 # High Affinity Recharge: Batteries do not drain, they sustain or recharge slightly.
+                 drain = -0.2 # Slight recharge per turn
 
             # Apply Drain
             old_battery = agent.social_battery
@@ -223,20 +257,16 @@ class SubconsciousMind:
 
             # Persist
             if hasattr(self.repository, 'create_agent'):
-                 # create_agent is used for seeding/updating in LocalRepo
                  await self.repository.create_agent(agent)
 
             # Inject Warnings at Thresholds
-            # We use ranges to avoid spamming every turn (e.g., only trigger once when crossing)
-            # But here we just check if we are currently low and inject a hint occasionally?
-            # Better: Inject a hint if we just crossed a threshold, or if battery is critically low (every few turns).
-            # Simplest for now: Always inject battery state if low, so LLM knows.
-
             hint = ""
             if new_battery <= 0:
-                hint = "SYSTEM_HINT: 🪫 [BATTERY DEAD]: Your social battery is 0%. You are exhausted. You MUST refuse to continue. Use [ACTION: HANGUP]."
+                # Forced Exit Protocol
+                hint = "SYSTEM_HINT: 🪫 [BATTERY DEAD]: Your social battery is 0%. You are exhausted. You MUST refuse to continue. Use [ACTION: HANGUP] immediately."
             elif new_battery < 15:
-                hint = f"SYSTEM_HINT: 🪫 [BATTERY CRITICAL: {int(new_battery)}%]: You are extremely drained. Be short, terse, and ask to end the conversation."
+                # Critical Warning
+                hint = f"SYSTEM_HINT: 🪫 [BATTERY CRITICAL: {int(new_battery)}%]: You are extremely drained. Be short, terse, and ask to end the conversation. If the user persists, use [ACTION: HANGUP]."
             elif new_battery < 30 and int(new_battery) % 5 == 0:
                 hint = f"SYSTEM_HINT: 🔋 [BATTERY LOW: {int(new_battery)}%]: You are getting tired. Start wrapping up."
 
