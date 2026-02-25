@@ -3,7 +3,8 @@ from typing import List, Optional, Dict
 from datetime import datetime
 from ..models.graph import (
     UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode,
-    DreamNode, ArchetypeNode, GlobalDreamNode, CollectiveEventNode
+    DreamNode, ArchetypeNode, GlobalDreamNode, CollectiveEventNode,
+    GraphEdge
 )
 
 class SoulRepository(ABC):
@@ -139,4 +140,20 @@ class SoulRepository(ABC):
     @abstractmethod
     async def update_system_config(self, config: 'SystemConfigNode') -> None:
         """Update the System Configuration Node."""
+        pass
+
+    # --- Evolution Phase 3: Explicit Graph Edges ---
+
+    @abstractmethod
+    async def create_edge(self, edge: GraphEdge) -> None:
+        """
+        Creates an explicit edge in the graph (e.g., ParticipatedIn, OccurredAt).
+        """
+        pass
+
+    @abstractmethod
+    async def get_edges(self, source_id: str = None, target_id: str = None, type: str = None) -> List[GraphEdge]:
+        """
+        Retrieves edges based on source, target, or type.
+        """
         pass

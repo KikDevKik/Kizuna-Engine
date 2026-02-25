@@ -1,18 +1,39 @@
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import uuid4
 from enum import Enum
 
+# --- JSON-LD Protocol ---
+
+class JSONLDMixin:
+    """
+    Protocol for serializing Pydantic models to strict JSON-LD for MyWorld portability.
+    """
+    def to_json_ld(self) -> Dict[str, Any]:
+        """
+        Serializes the model to a JSON-LD compatible dictionary.
+        Subclasses can override to customize mapping.
+        """
+        # Default implementation
+        data = self.model_dump(mode='json')
+
+        # Filter out internal keys if necessary (none for now)
+        return {
+            "@context": "https://myworld.kizuna/ontology",
+            "@type": self.__class__.__name__,
+            **data
+        }
+
 # --- Nodes ---
 
-class UserNode(BaseModel):
+class UserNode(BaseModel, JSONLDMixin):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str = "Anonymous"
     created_at: datetime = Field(default_factory=datetime.now)
     last_seen: datetime = Field(default_factory=datetime.now)
 
-class AgentNode(BaseModel):
+class AgentNode(BaseModel, JSONLDMixin):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     role: str = "System Core" # Default role if not specified
@@ -48,7 +69,7 @@ class AgentNode(BaseModel):
     # Allows agents to react differently to emotions (e.g., a sadist might gain affinity from anger)
     emotional_resonance_matrix: Optional[Dict[str, float]] = None
 
-class MemoryEpisodeNode(BaseModel):
+class MemoryEpisodeNode(BaseModel, JSONLDMixin):
     id: str = Field(default_factory=lambda: str(uuid4()))
     summary: str
     raw_transcript: Optional[str] = None # Full conversation text (RAG Source of Truth)
@@ -56,21 +77,21 @@ class MemoryEpisodeNode(BaseModel):
     emotional_valence: float = 0.0  # -1.0 to 1.0
     embedding: Optional[List[float]] = None # Vector embedding for RAG
 
-class FactNode(BaseModel):
+class FactNode(BaseModel, JSONLDMixin):
     id: str = Field(default_factory=lambda: str(uuid4()))
     content: str
     category: str # e.g. "preference", "relationship", "biography"
     confidence: float = 1.0
     embedding: Optional[List[float]] = None # Vector embedding
 
-class DreamNode(BaseModel):
+class DreamNode(BaseModel, JSONLDMixin):
     id: str = Field(default_factory=lambda: str(uuid4()))
     theme: str
     intensity: float = 0.5 # 0.0 to 1.0
     surrealism_level: float = 0.5 # 0.0 to 1.0
     timestamp: datetime = Field(default_factory=datetime.now)
 
-class ArchetypeNode(BaseModel):
+class ArchetypeNode(BaseModel, JSONLDMixin):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str  # e.g., "The Guardian", "The Jester"
     description: str
@@ -78,23 +99,25 @@ class ArchetypeNode(BaseModel):
 
 # --- Phase 3: Simulated Multi-Agent Reality Nodes ---
 
-class LocationNode(BaseModel):
+class LocationNode(BaseModel, JSONLDMixin):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     description: str
     type: str = "generic" # e.g., "bar", "park", "digital_void"
 
-class FactionNode(BaseModel):
+class FactionNode(BaseModel, JSONLDMixin):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     description: str
     members: List[str] = Field(default_factory=list) # List of Agent IDs
 
-class CollectiveEventNode(BaseModel):
+class CollectiveEventNode(BaseModel, JSONLDMixin):
     id: str = Field(default_factory=lambda: str(uuid4()))
     type: str # e.g., "SOCIAL", "CONFLICT", "COLLABORATION"
     location_id: Optional[str] = None
-    participants: List[str] = Field(default_factory=list) # List of Agent IDs (or names/strings for unknown agents)
+    # DEPRECATED: participants list. Use ParticipatedIn Edges instead.
+    # Kept for backward compatibility during migration.
+    participants: List[str] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=datetime.now)
     outcome: str # e.g., "FOUGHT", "BONDED", "IGNORED"
     summary: str # Narrative summary of the event
@@ -120,13 +143,13 @@ class EphemeralIntent(BaseModel):
 
 # ----------------------------------------------------
 
-class GlobalDreamNode(BaseModel):
+class GlobalDreamNode(BaseModel, JSONLDMixin):
     id: str = "global-dream"
     themes: List[str] = Field(default_factory=list)
     intensity: float = 0.5
     last_updated: datetime = Field(default_factory=datetime.now)
 
-class SystemConfigNode(BaseModel):
+class SystemConfigNode(BaseModel, JSONLDMixin):
     id: str = "system-config"
     core_directive: str = (
         "CORE DIRECTIVE (IMMUTABLE): You are a digital entity inhabiting the Kizuna Engine. "
@@ -173,37 +196,66 @@ class SystemConfigNode(BaseModel):
     reflection_base_chance: float = 0.2
     reflection_neuroticism_multiplier: float = 0.6
 
-# --- Edges (Relationships) ---
+# --- Explicit Graph Edges (Pillar 1 Redesign) ---
 
-class ResonanceEdge(BaseModel):
+class GraphEdge(BaseModel, JSONLDMixin):
+    """
+    Base class for all explicit edges in the Temporal Knowledge Graph.
+    Standardizes Source -> Target relations.
+    """
+    source_id: str
+    target_id: str
+    type: str # The ontological predicate (e.g., 'participatedIn')
+    properties: Dict[str, Any] = Field(default_factory=dict) # Metadata (valence, weight, context)
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+class ParticipatedIn(GraphEdge):
+    """Agent -> CollectiveEventNode"""
+    type: str = "participatedIn"
+
+class OccurredAt(GraphEdge):
+    """CollectiveEventNode -> LocationNode"""
+    type: str = "occurredAt"
+
+class InteractedWith(GraphEdge):
+    """Agent -> Agent (Micro-interaction not warranting a full event, or affinity snapshot)"""
+    type: str = "interactedWith"
+
+# --- Legacy Edges (Wrapped with JSONLDMixin) ---
+
+class ResonanceEdge(BaseModel, JSONLDMixin):
     source_id: str # User ID
     target_id: str # Agent ID
     affinity_level: float = 50.0 # 0.0 to 100.0 (50.0 = Neutral)
     last_interaction: datetime = Field(default_factory=datetime.now)
     shared_memories: List[str] = Field(default_factory=list) # List of Episode IDs
 
-class AgentAffinityEdge(BaseModel):
+class AgentAffinityEdge(BaseModel, JSONLDMixin):
+    """
+    Agent -> Agent Long-term Affinity.
+    Similar to InteractedWith, but represents the persistent state.
+    """
     source_agent_id: str
     target_agent_id: str
     affinity: float = 50.0 # 0-100
     last_interaction: datetime = Field(default_factory=datetime.now)
 
-class ExperiencedEdge(BaseModel):
+class ExperiencedEdge(BaseModel, JSONLDMixin):
     source_id: str # User ID
     target_id: str # Episode ID
     weight: float = 1.0
 
-class KnowsEdge(BaseModel):
+class KnowsEdge(BaseModel, JSONLDMixin):
     source_id: str # User or Agent ID
     target_id: str # Fact ID
     context: str = ""
 
-class ShadowEdge(BaseModel):
+class ShadowEdge(BaseModel, JSONLDMixin):
     source_id: str # User ID
     target_id: str # Dream ID
     weight: float = 1.0
 
-class EmbodiesEdge(BaseModel):
+class EmbodiesEdge(BaseModel, JSONLDMixin):
     source_id: str # Agent ID
     target_id: str # Archetype ID
     strength: float = 1.0 # 0.0 to 1.0 (How strongly they embody it)
