@@ -242,11 +242,11 @@ class SleepManager:
         # Await all consolidations with timeout
         if consolidation_tasks:
             count = len(consolidation_tasks)
-            logger.info(f"🛑 Waiting for {count} consolidations to complete (Max 10s)...")
+            logger.info(f"🛑 Waiting for {count} consolidations to complete (Max 15s)...")
             try:
                 await asyncio.wait_for(
                     asyncio.gather(*consolidation_tasks, return_exceptions=True),
-                    timeout=10.0
+                    timeout=15.0
                 )
             except asyncio.TimeoutError:
                 logger.warning(f"⏳ Shutdown timed out. {count} memories might not be fully consolidated.")

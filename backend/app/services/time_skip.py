@@ -1,6 +1,7 @@
 import logging
 import random
 import math
+import asyncio
 from datetime import datetime, timedelta
 from typing import List, Optional
 from uuid import uuid4
@@ -122,7 +123,8 @@ class TimeSkipService:
                 agent.last_battery_update = datetime.now()
                 # Persist Agent State
                 if hasattr(self.repository, 'create_agent'):
-                     await self.repository.create_agent(agent)
+                     # 🏰 BASTION SHIELD: Protect battery state save
+                     await asyncio.shield(self.repository.create_agent(agent))
 
             # --- Emotional Decay (Ebbinghaus) ---
             resonance = await self.repository.get_resonance(user_id, agent.id)
@@ -150,7 +152,8 @@ class TimeSkipService:
         delta = new_affinity - current_affinity
         if abs(delta) > 0.1:
             if hasattr(self.repository, 'update_resonance'):
-                await self.repository.update_resonance(resonance.source_id, resonance.target_id, delta)
+                # 🏰 BASTION SHIELD: Protect resonance decay update
+                await asyncio.shield(self.repository.update_resonance(resonance.source_id, resonance.target_id, delta))
 
     async def _generate_stochastic_event(self, user_id: str) -> Optional[CollectiveEventNode]:
         """
@@ -259,7 +262,8 @@ class TimeSkipService:
 
         # 9. Persist
         if hasattr(self.repository, 'record_collective_event'):
-            await self.repository.record_collective_event(event)
+            # 🏰 BASTION SHIELD: Protect event recording
+            await asyncio.shield(self.repository.record_collective_event(event))
 
         return event
 
@@ -317,7 +321,8 @@ class TimeSkipService:
         # Create default locations if empty
         name, ltype, desc = random.choice(self.default_locations)
         if hasattr(self.repository, 'get_or_create_location'):
-            return await self.repository.get_or_create_location(name, ltype, desc)
+            # 🏰 BASTION SHIELD: Protect location creation
+            return await asyncio.shield(self.repository.get_or_create_location(name, ltype, desc))
 
         return LocationNode(name="The Void", description="Unknown space", type="void")
 
@@ -325,9 +330,9 @@ class TimeSkipService:
         """Updates Agent-to-Agent affinity."""
         if delta != 0.0:
             if hasattr(self.repository, 'update_agent_affinity'):
-                await self.repository.update_agent_affinity(agent_a, agent_b, delta)
-                # Bi-directional update for symmetry in this simple model
-                await self.repository.update_agent_affinity(agent_b, agent_a, delta)
+                # 🏰 BASTION SHIELD: Protect affinity updates (bi-directional)
+                await asyncio.shield(self.repository.update_agent_affinity(agent_a, agent_b, delta))
+                await asyncio.shield(self.repository.update_agent_affinity(agent_b, agent_a, delta))
 
 # Singleton Instance (Initialized in main.py)
 time_skip_service = None
