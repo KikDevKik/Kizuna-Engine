@@ -9,7 +9,7 @@ from uuid import uuid4
 from ..repositories.base import SoulRepository
 from ..models.graph import (
     CollectiveEventNode, LocationNode, AgentAffinityEdge, UserNode,
-    IntentType, EphemeralIntent
+    IntentType, EphemeralIntent, ParticipatedIn, OccurredAt
 )
 
 logger = logging.getLogger(__name__)
@@ -250,7 +250,7 @@ class TimeSkipService:
         event = CollectiveEventNode(
             type=intent_type.value, # Event Type maps to Intent Type
             location_id=location.id,
-            participants=participants,
+            participants=[], # Explicitly empty, moving to edges
             outcome=outcome,
             summary=summary,
             timestamp=datetime.now() - timedelta(minutes=random.randint(1, 60))
@@ -260,10 +260,30 @@ class TimeSkipService:
         if len(real_agents) >= 2:
              await self._apply_affinity_shift(real_agents[0].id, real_agents[1].id, valence_delta)
 
-        # 9. Persist
+        # 9. Persist Event
         if hasattr(self.repository, 'record_collective_event'):
             # 🏰 BASTION SHIELD: Protect event recording
             await asyncio.shield(self.repository.record_collective_event(event))
+
+        # 10. Create Graph Edges (Pillar 1 Upgrade)
+        if hasattr(self.repository, 'create_edge'):
+            # ParticipatedIn Edges
+            for pid in participants:
+                edge = ParticipatedIn(
+                    source_id=pid,
+                    target_id=event.id,
+                    timestamp=event.timestamp,
+                    properties={"role": "participant"}
+                )
+                await asyncio.shield(self.repository.create_edge(edge))
+
+            # OccurredAt Edge
+            loc_edge = OccurredAt(
+                source_id=event.id,
+                target_id=location.id,
+                timestamp=event.timestamp
+            )
+            await asyncio.shield(self.repository.create_edge(loc_edge))
 
         return event
 

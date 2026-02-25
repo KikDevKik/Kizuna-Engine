@@ -15,7 +15,8 @@ from ..models.graph import (
     UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode,
     DreamNode, ShadowEdge, ArchetypeNode, GlobalDreamNode, EmbodiesEdge,
     SystemConfigNode,
-    LocationNode, FactionNode, CollectiveEventNode, AgentAffinityEdge
+    LocationNode, FactionNode, CollectiveEventNode, AgentAffinityEdge,
+    GraphEdge, ParticipatedIn, OccurredAt, InteractedWith
 )
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,9 @@ class LocalSoulRepository(SoulRepository):
         # {source_id: {target_id: AgentAffinityEdge}}
         self.agent_affinities: Dict[str, Dict[str, AgentAffinityEdge]] = {}
 
+        # Explicit Graph Edges (Pillar 1 Redesign)
+        self.graph_edges: List[GraphEdge] = []
+
     async def initialize(self) -> None:
         """Load the graph from JSON."""
         # Use asyncio.Lock() to ensure exclusive access
@@ -87,6 +91,7 @@ class LocalSoulRepository(SoulRepository):
             "factions": {},
             "collective_events": {},
             "agent_affinities": {},
+            "graph_edges": [],
             "global_dream": GlobalDreamNode(),
             "system_config": SystemConfigNode()
         }
@@ -161,21 +166,67 @@ class LocalSoulRepository(SoulRepository):
                 loaded_state["collective_events"][node.id] = node
 
             # Hydrate Agent Affinities (Phase 3)
-            # Stored as a flat list in JSON, hydrated into nested dict
             for af in data.get("agent_affinities", []):
                 edge = AgentAffinityEdge(**af)
                 if edge.source_agent_id not in loaded_state["agent_affinities"]:
                     loaded_state["agent_affinities"][edge.source_agent_id] = {}
                 loaded_state["agent_affinities"][edge.source_agent_id][edge.target_agent_id] = edge
 
+            # Hydrate Explicit Graph Edges (Pillar 1)
+            for ge in data.get("graph_edges", []):
+                edge_type = ge.get("type")
+                if edge_type == "participatedIn":
+                    loaded_state["graph_edges"].append(ParticipatedIn(**ge))
+                elif edge_type == "occurredAt":
+                    loaded_state["graph_edges"].append(OccurredAt(**ge))
+                elif edge_type == "interactedWith":
+                    loaded_state["graph_edges"].append(InteractedWith(**ge))
+                else:
+                    # Fallback generic
+                    loaded_state["graph_edges"].append(GraphEdge(**ge))
+
             return loaded_state
 
         except Exception as e:
-            # We log here, but the exception will be re-raised in the main thread
-            # or caught. Since this is a static method, we can't use self.logger if it was instance level,
-            # but we use module level logger.
             logger.error(f"Failed to load graph database in worker: {e}")
             raise e
+
+    def _migrate_legacy_data(self):
+        """
+        Graceful Migration Protocol:
+        Converts legacy 'flat lists' (e.g., event.participants) into Explicit Graph Edges.
+        Called after load() but before usage.
+        """
+        migration_count = 0
+
+        # 1. Migrate CollectiveEventNode.participants -> ParticipatedIn Edges
+        for event in self.collective_events.values():
+            if event.participants:
+                for participant_id in event.participants:
+                    # Check if edge already exists to avoid duplicates
+                    exists = any(
+                        e.source_id == participant_id and
+                        e.target_id == event.id and
+                        e.type == "participatedIn"
+                        for e in self.graph_edges
+                    )
+
+                    if not exists:
+                        edge = ParticipatedIn(
+                            source_id=participant_id,
+                            target_id=event.id,
+                            timestamp=event.timestamp
+                        )
+                        self.graph_edges.append(edge)
+                        migration_count += 1
+
+                # Clear legacy list to enforce new ontology
+                # We can keep it if we want backward compat, but plan says "Mark for migration"
+                # Clearing it confirms migration is done.
+                event.participants = []
+
+        if migration_count > 0:
+            logger.info(f"🏗️ MIGRATION: Converted {migration_count} legacy event participants to Graph Edges.")
 
     async def load(self):
         """Helper to actually load data (called manually or lazily)."""
@@ -185,10 +236,6 @@ class LocalSoulRepository(SoulRepository):
              # Offload heavy JSON parsing to thread
              loaded_state = await asyncio.to_thread(self._sync_load_worker, self.data_path)
 
-             # Atomic Assignment (Main Thread)
-             # We assume we are holding self.lock if called via initialize,
-             # but load() might be called internally.
-             # Safety: We just overwrite. If we are under lock, it's safe.
              self.users = loaded_state["users"]
              self.episodes = loaded_state["episodes"]
              self.facts = loaded_state["facts"]
@@ -205,24 +252,20 @@ class LocalSoulRepository(SoulRepository):
              self.factions = loaded_state["factions"]
              self.collective_events = loaded_state["collective_events"]
              self.agent_affinities = loaded_state["agent_affinities"]
+             self.graph_edges = loaded_state["graph_edges"]
 
-             logger.info(f"Graph Database loaded: {len(self.users)} Users.")
+             # 2. Trigger Migration
+             self._migrate_legacy_data()
+
+             logger.info(f"Graph Database loaded: {len(self.users)} Users, {len(self.graph_edges)} Edges.")
 
         except Exception as e:
             logger.error(f"Failed to load graph database: {e}")
-            # If load fails, we might still have partial state or empty state.
-            # We proceed to sync agents anyway.
 
         # ---------------------------------------------------------
         # Sync with Agents Directory (Source of Truth for Agents)
         # ---------------------------------------------------------
-        # This must happen regardless of graph.json state
-
-        # Clear in-memory agents to ensure we strictly mirror the filesystem.
-        # This removes "ghost agents" that were deleted from disk.
         self.agents = {}
-
-        # Offload Agent Sync to Thread as well (File I/O)
         agents_dir = self.data_path.parent / "agents"
 
         def _sync_agents_worker(dir_path: Path) -> Dict[str, AgentNode]:
@@ -244,7 +287,6 @@ class LocalSoulRepository(SoulRepository):
         except Exception as e:
             logger.error(f"Failed to sync agents: {e}")
 
-        # Ensure graph.json is initialized if it didn't exist
         if not self.data_path.exists():
             await self._save()
 
@@ -260,14 +302,9 @@ class LocalSoulRepository(SoulRepository):
         """
         temp_path = path.with_suffix(".tmp")
         try:
-            # Ensure directory exists
             path.parent.mkdir(parents=True, exist_ok=True)
-
-            # CPU-bound serialization + Blocking I/O
             with open(temp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)
-
-            # Atomic replacement (Blocking)
             os.replace(temp_path, path)
         except Exception as e:
             logger.error(f"Failed to save graph database to {path}: {e}")
@@ -281,7 +318,8 @@ class LocalSoulRepository(SoulRepository):
         # Helper to dump pydantic models to dict
         def to_dict_list(models):
              return [m.model_dump(mode='json') for m in models]
-        # 1. Prepare Data (Fast in-memory construction)
+
+        # 1. Prepare Data
         data = {
             "users": to_dict_list(self.users.values()),
             "agents": to_dict_list(self.agents.values()),
@@ -306,7 +344,6 @@ class LocalSoulRepository(SoulRepository):
                 aid: [e.model_dump(mode='json') for e in edges]
                 for aid, edges in self.embodies.items()
             },
-            # Phase 3 Data
             "locations": to_dict_list(self.locations.values()),
             "factions": to_dict_list(self.factions.values()),
             "collective_events": to_dict_list(self.collective_events.values()),
@@ -314,7 +351,9 @@ class LocalSoulRepository(SoulRepository):
                 edge.model_dump(mode='json')
                 for s_dict in self.agent_affinities.values()
                 for edge in s_dict.values()
-            ]
+            ],
+            # Explicit Graph Edges
+            "graph_edges": [e.model_dump(mode='json') for e in self.graph_edges]
         }
 
         # 2. Offload Serialization & I/O to Thread Pool
@@ -324,130 +363,83 @@ class LocalSoulRepository(SoulRepository):
         except Exception as e:
             logger.error(f"Async save failed: {e}")
 
+    # ... existing methods (get_or_create_user, update_user_last_seen, etc.) ...
+
     async def get_or_create_user(self, user_id: str, name: str = "Anonymous") -> UserNode:
         async with self.lock:
             if user_id in self.users:
                 return self.users[user_id]
-
             new_user = UserNode(id=user_id, name=name)
             self.users[user_id] = new_user
             await self._save()
             return new_user
 
     async def update_user_last_seen(self, user_id: str):
-        """Updates the last_seen timestamp for a user."""
         async with self.lock:
             if user_id in self.users:
                 self.users[user_id].last_seen = datetime.now()
                 await self._save()
 
     async def get_agent(self, agent_id: str) -> Optional[AgentNode]:
-        # Agents are usually pre-seeded, but let's check
         return self.agents.get(agent_id)
 
     async def create_agent(self, agent: AgentNode):
-        """Helper to seed agents."""
         async with self.lock:
             self.agents[agent.id] = agent
             await self._save()
 
     def _get_resonance_unsafe(self, user_id: str, agent_id: str) -> ResonanceEdge:
-        """
-        Internal unsafe method to get/create resonance without locking.
-        MUST be called within an acquired lock block.
-        """
         user_resonances = self.resonances.get(user_id, {})
         if agent_id in user_resonances:
             return user_resonances[agent_id]
-
-        # Default Resonance (Starts at 10.0 - Stranger/Warm)
         new_resonance = ResonanceEdge(source_id=user_id, target_id=agent_id, affinity_level=10.0)
         if user_id not in self.resonances:
             self.resonances[user_id] = {}
         self.resonances[user_id][agent_id] = new_resonance
-        # Caller is responsible for saving if a new one was created, but usually caller saves anyway.
         return new_resonance
 
     async def get_resonance(self, user_id: str, agent_id: str) -> ResonanceEdge:
         async with self.lock:
             resonance = self._get_resonance_unsafe(user_id, agent_id)
-            # If it was just created, we should save.
-            # Ideally _get_resonance_unsafe could return a tuple (resonance, created)
-            # But here we can just save unconditionally to be safe and simple, or check against clean state.
-            # For simplicity in this deadlock fix, we save.
             await self._save()
             return resonance
 
     async def update_resonance(self, user_id: str, agent_id: str, delta: float) -> ResonanceEdge:
         async with self.lock:
-            # FIX: Deadlock avoided by using unsafe internal method
             resonance = self._get_resonance_unsafe(user_id, agent_id)
-
-            # Apply delta
-            new_affinity = resonance.affinity_level + delta
-
-            # Clamp between 0.0 and 100.0
-            new_affinity = max(0.0, min(100.0, new_affinity))
-
+            new_affinity = max(0.0, min(100.0, resonance.affinity_level + delta))
             resonance.affinity_level = new_affinity
             resonance.last_interaction = datetime.now()
-
-            # Save logic handled by reference update in dict, but need to persist to disk
             await self._save()
-            logger.info(f"Resonance updated for User {user_id} -> Agent {agent_id}: {new_affinity}")
             return resonance
 
     @staticmethod
     def _vector_search(query_vector: List[float], candidates: List[Any], limit: int) -> List[Any]:
-        """
-        Performs Batched Cosine Similarity Search using Numpy.
-        Run this in a thread to release GIL.
-        """
         if not candidates or not query_vector:
             return []
-
-        # Filter candidates with valid embeddings
         valid_candidates = [c for c in candidates if c.embedding and len(c.embedding) == len(query_vector)]
         if not valid_candidates:
             return []
-
         try:
-            # 1. Prepare Data
-            # Stack embeddings into Matrix (N, D)
             embeddings = [c.embedding for c in valid_candidates]
             matrix = np.array(embeddings, dtype=np.float32)
             query = np.array(query_vector, dtype=np.float32)
-
-            # 2. Normalize Matrix (L2 Norm along axis 1)
             norm_matrix = np.linalg.norm(matrix, axis=1, keepdims=True)
-            norm_matrix[norm_matrix == 0] = 1e-10  # Avoid div/0
+            norm_matrix[norm_matrix == 0] = 1e-10
             normalized_matrix = matrix / norm_matrix
-
-            # 3. Normalize Query
             norm_query = np.linalg.norm(query)
             if norm_query == 0:
                 return []
             normalized_query = query / norm_query
-
-            # 4. Dot Product (Cosine Similarity)
-            # (N, D) @ (D,) -> (N,)
             scores = np.dot(normalized_matrix, normalized_query)
-
-            # 5. Top K
-            # argsort gives indices of sorted elements (ascending)
-            # We take the last 'limit' elements and reverse them
             top_k_indices = np.argsort(scores)[-limit:][::-1]
-
             return [valid_candidates[i] for i in top_k_indices]
-
         except Exception as e:
             logger.error(f"Vector math error in _vector_search: {e}")
             return []
 
     async def save_episode(self, user_id: str, agent_id: str, summary: str, valence: float, raw_transcript: Optional[str] = None) -> MemoryEpisodeNode:
-        # Generate embedding asynchronously (outside lock to avoid blocking)
         embedding = await embedding_service.embed_text(summary)
-
         async with self.lock:
             episode = MemoryEpisodeNode(
                 summary=summary,
@@ -456,337 +448,173 @@ class LocalSoulRepository(SoulRepository):
                 embedding=embedding
             )
             self.episodes[episode.id] = episode
-
-            # Link to User
             if user_id not in self.experienced:
                 self.experienced[user_id] = []
             self.experienced[user_id].append(episode.id)
-
-            # Update Resonance with this shared memory
-            # Access self.resonances directly since we already hold self.lock
             user_resonances = self.resonances.get(user_id, {})
             if agent_id in user_resonances:
                 resonance = user_resonances[agent_id]
             else:
-                # Default Resonance (Starts at 10.0 - Stranger/Warm)
                 resonance = ResonanceEdge(source_id=user_id, target_id=agent_id, affinity_level=10.0)
                 if user_id not in self.resonances:
                     self.resonances[user_id] = {}
                 self.resonances[user_id][agent_id] = resonance
-
             resonance.shared_memories.append(episode.id)
-
             await self._save()
             return episode
 
     async def get_relevant_facts(self, user_id: str, query: str, limit: int = 5) -> List[FactNode]:
-        """
-        Semantic Search using Cosine Similarity.
-        Replaces basic keyword matching with local vector search.
-        """
         if user_id not in self.knows:
             return []
-
-        # 1. Generate Query Vector
         query_vector = await embedding_service.embed_text(query)
         if not query_vector:
-            logger.warning("Failed to generate embedding for query in local RAG.")
             return []
-
-        # 2. Snapshot Candidates (Main Thread)
         user_fact_ids = self.knows[user_id]
-        candidates = []
-        for fact_id in user_fact_ids:
-            fact = self.facts.get(fact_id)
-            if fact:
-                candidates.append(fact)
-
-        # 3. Vector Search (Threaded)
+        candidates = [self.facts[fid] for fid in user_fact_ids if fid in self.facts]
         return await asyncio.to_thread(self._vector_search, query_vector, candidates, limit)
 
     async def save_fact(self, user_id: str, content: str, category: str) -> FactNode:
-        # Generate embedding asynchronously
         embedding = await embedding_service.embed_text(content)
-
         async with self.lock:
             fact = FactNode(content=content, category=category, embedding=embedding)
             self.facts[fact.id] = fact
-
             if user_id not in self.knows:
                 self.knows[user_id] = []
             self.knows[user_id].append(fact.id)
-
             await self._save()
             return fact
 
     async def save_dream(self, user_id: str, dream: DreamNode) -> DreamNode:
         async with self.lock:
             self.dreams[dream.id] = dream
-
-            # Create Shadow Edge
             edge = ShadowEdge(source_id=user_id, target_id=dream.id)
             if user_id not in self.shadows:
                 self.shadows[user_id] = []
             self.shadows[user_id].append(edge)
-
             await self._save()
             return dream
 
     async def consolidate_memories(self, user_id: str, dream_generator=None) -> None:
-        """
-        Consolidate memories for the user (Event-Driven Debounce).
-        Simulates compressing recent episodes.
-        """
-        # PHASE 1: Identification (Lock held)
         raw_episodes = []
         async with self.lock:
             ep_ids = self.experienced.get(user_id, [])
             if not ep_ids:
-                logger.info(f"No memories to consolidate for {user_id}.")
                 return
-
-            # Simulate LLM Clustering & Compression (Mock)
-            # Find all unprocessed episodes (valence != 999.0)
-            # We use 999.0 to mark 'Archived' since 0.0 is valid Neutral valence.
             for eid in ep_ids:
                 ep = self.episodes.get(eid)
-                if ep and abs(ep.emotional_valence) <= 1.0: # Valid range -1.0 to 1.0
+                if ep and abs(ep.emotional_valence) <= 1.0:
                     raw_episodes.append(ep)
-
             if not raw_episodes:
-                logger.info("No RAW episodes to consolidate.")
                 return
 
-            # NOTE: We hold references to `raw_episodes`. If another thread modifies them,
-            # we see the changes. We release the lock now to allow other operations.
-
         logger.info(f"Compressing {len(raw_episodes)} raw episodes into Long-Term Memory...")
-
-        # PHASE 2: Generation (Lock released - Async IO)
         dream_node = None
         fallback_mode = False
-
         if dream_generator:
-            # Lucid Dreaming Protocol
             try:
-                # 🏰 BASTION SHIELD: Execute slow network call OUTSIDE the lock to prevent deadlock
                 dream_node = await dream_generator(raw_episodes)
             except Exception as e:
                 logger.error(f"Failed to generate dream: {e}")
         else:
             fallback_mode = True
 
-        # PHASE 3: Commit (Lock re-acquired)
         async with self.lock:
-            # Re-verify existence (Race Condition with Purge)
-            # Only process episodes that still exist AND are not already archived (Race Condition: Double Process)
             valid_episodes = [
                 ep for ep in raw_episodes
                 if ep.id in self.episodes and abs(ep.emotional_valence) <= 1.0
             ]
-
             if not valid_episodes:
-                logger.warning(f"Consolidation aborted for {user_id}: Episodes no longer valid (Purged/Archived?).")
                 return
-
             if dream_node:
                 self.dreams[dream_node.id] = dream_node
-
-                # Link Shadow Edge
                 edge = ShadowEdge(source_id=user_id, target_id=dream_node.id)
                 if user_id not in self.shadows:
                     self.shadows[user_id] = []
                 self.shadows[user_id].append(edge)
-                logger.info(f"✨ Generated Dream: {dream_node.theme} (Intensity: {dream_node.intensity})")
-
             elif fallback_mode:
-                # Fallback: Create Summary Episode (The "Dream")
                 summary_text = f"User interaction summary: {len(valid_episodes)} events consolidated."
-                summary_node = MemoryEpisodeNode(
-                    summary=summary_text,
-                    emotional_valence=1.0 # Consolidated/Refined
-                )
+                summary_node = MemoryEpisodeNode(summary=summary_text, emotional_valence=1.0)
                 self.episodes[summary_node.id] = summary_node
-
-                # 2. Link Summary to User
                 self.experienced[user_id].append(summary_node.id)
 
-            # 4. Trigger Affinity Decay/Growth (Mathematical recalibration)
-            # Exponential Moving Average (EMA)
-            # NOTE: Must be done BEFORE archiving episodes so we have the correct valence.
-
-            # Calculate Average Valence (-1.0 to 1.0)
+            # Affinity EMA
             avg_valence = sum(ep.emotional_valence for ep in valid_episodes) / len(valid_episodes)
-
-            # FIX: We need to know the agent.
-            # `save_episode` links User->Episode.
-            # `ResonanceEdge` has `shared_memories` (list of Episode IDs).
-            # We can reverse lookup: For each episode, find which agent lists it in `shared_memories`.
-
-            agent_episode_map = {} # {agent_id: [episodes]}
-
-            # This is expensive in a big graph but fine for local.
-            # Iterate all agents -> resonances for this user -> check shared_memories.
+            agent_episode_map = {}
             user_resonances = self.resonances.get(user_id, {})
-
             for agent_id, resonance in user_resonances.items():
-                agent_eps = []
-                for ep in valid_episodes:
-                    if ep.id in resonance.shared_memories:
-                        agent_eps.append(ep)
+                agent_eps = [ep for ep in valid_episodes if ep.id in resonance.shared_memories]
                 if agent_eps:
                     agent_episode_map[agent_id] = agent_eps
 
-            # Now calculate EMA per agent
             ALPHA = 0.15
-
             for agent_id, eps in agent_episode_map.items():
-                if not eps: continue
-
-                # Avg valence for this agent's episodes
                 local_avg_valence = sum(e.emotional_valence for e in eps) / len(eps)
-
-                # Map Valence to Target Signal (0-100)
-                # -1.0 -> 0.0
-                #  0.0 -> 50.0
-                #  1.0 -> 100.0
                 local_target = 50.0 + (local_avg_valence * 50.0)
-
-                # Get current affinity
                 resonance = user_resonances[agent_id]
                 old_affinity = float(resonance.affinity_level)
-
-                # EMA Formula
                 new_affinity = (local_target * ALPHA) + (old_affinity * (1.0 - ALPHA))
-
-                # Clamp
                 new_affinity = max(0.0, min(100.0, new_affinity))
-
                 resonance.affinity_level = new_affinity
-                logger.info(f"📉 Affinity EMA Updated for {agent_id}: {old_affinity:.2f} -> {new_affinity:.2f} (Target: {local_target:.2f})")
 
-            # 3. Mark Raw Episodes as archived (or delete them to save space)
-            # We use 999.0 to indicate processed/archived state
             for ep in valid_episodes:
-                ep.emotional_valence = 999.0 # Archived state
+                ep.emotional_valence = 999.0
 
-            # Shield the save operation as it's critical state persistence
             await asyncio.shield(self._save())
 
     async def get_last_dream(self, user_id: str) -> Optional[DreamNode]:
-        """Retrieve the last dream generated for this user."""
         async with self.lock:
             shadow_edges = self.shadows.get(user_id, [])
             if not shadow_edges:
                 return None
-
-            # The edges are appended chronologically, so the last one is the most recent
             last_edge = shadow_edges[-1]
             return self.dreams.get(last_edge.target_id)
 
     async def purge_all_memories(self) -> None:
-        """
-        SCORCHED EARTH PROTOCOL: Wipes all episodic memory and dreams.
-        Preserves Identity (Users/Agents) and Facts (Knowledge).
-        """
         async with self.lock:
-            logger.warning("☢️ SCORCHED EARTH: Purging all memories...")
-
-            # Clear Episodic Memory
             self.episodes.clear()
             self.experienced.clear()
-
-            # Clear Dreams & Shadows
             self.dreams.clear()
             self.shadows.clear()
-
-            # Clear Shared Memories in Resonances (Keep Affinities)
             for user_res in self.resonances.values():
                 for resonance in user_res.values():
                     resonance.shared_memories.clear()
-
             await self._save()
-            logger.info("☢️ Memory Purge Complete.")
 
     async def get_recent_episodes(self, user_id: str, limit: int = 10) -> List[MemoryEpisodeNode]:
-        """
-        Retrieve recent episodes (short-term memory).
-        Archivist Patch: Implements 'Verbatim Priority' to ensure raw transcripts are not
-        displaced by consolidation summaries.
-        """
         async with self.lock:
             episode_ids = self.experienced.get(user_id, [])
             if not episode_ids:
                 return []
-
-            # Scan backwards to find relevant episodes with Verbatim Priority
             collected_raw = []
             collected_summaries = []
-
-            # We want to fill 'limit' slots.
-            # We scan deeper than 'limit' to skip over potential summaries if needed.
-            # Arbitrary lookback limit to prevent infinite scan on huge history
             LOOKBACK_LIMIT = 50
             scanned = 0
-
             for eid in reversed(episode_ids):
                 ep = self.episodes.get(eid)
-                if not ep:
-                    continue
-
+                if not ep: continue
                 if ep.raw_transcript and len(ep.raw_transcript.strip()) > 0:
                     collected_raw.append(ep)
                 else:
                     collected_summaries.append(ep)
-
-                # If we have filled the quota with raw transcripts, we are done.
-                if len(collected_raw) >= limit:
-                    break
-
+                if len(collected_raw) >= limit: break
                 scanned += 1
-                if scanned >= LOOKBACK_LIMIT:
-                    break
-
-            # Construct result: Prioritize raw, backfill with summaries
+                if scanned >= LOOKBACK_LIMIT: break
             result = collected_raw
-
             if len(result) < limit:
                 needed = limit - len(result)
-                # Take the most recent summaries available
                 result.extend(collected_summaries[:needed])
-
-            # Restore chronological order (since we collected backwards)
-            # Sorting by timestamp ensures correct flow regardless of mix
             result.sort(key=lambda x: x.timestamp)
-
             return result
 
     async def get_relevant_episodes(self, user_id: str, query: str, limit: int = 5) -> List[MemoryEpisodeNode]:
-        """
-        Semantic Search for Long-Term Memory (Episodes).
-        Uses local cosine similarity.
-        """
         if user_id not in self.experienced:
             return []
-
-        # 1. Generate Query Vector
         query_vector = await embedding_service.embed_text(query)
         if not query_vector:
-            logger.warning("Failed to generate embedding for query in local Episode RAG.")
             return []
-
-        # 2. Snapshot Candidates
         user_episode_ids = self.experienced[user_id]
-        candidates = []
-        for eid in user_episode_ids:
-            ep = self.episodes.get(eid)
-            if ep:
-                candidates.append(ep)
-
-        # 3. Vector Search (Threaded)
+        candidates = [self.episodes[eid] for eid in user_episode_ids if eid in self.episodes]
         return await asyncio.to_thread(self._vector_search, query_vector, candidates, limit)
-
-    # --- Evolution Phase 1: Ontology & Archetypes (Mock for Local) ---
 
     async def create_archetype(self, name: str, description: str, triggers: Dict) -> ArchetypeNode:
         async with self.lock:
@@ -815,11 +643,8 @@ class LocalSoulRepository(SoulRepository):
             edges = self.embodies.get(agent_id, [])
             if not edges:
                 return None
-            # Return first one
             edge = edges[0]
             return self.archetypes.get(edge.target_id)
-
-    # --- Evolution Phase 1: Global Dream (Mock for Local) ---
 
     async def get_global_dream(self) -> GlobalDreamNode:
         return self.global_dream
@@ -831,50 +656,36 @@ class LocalSoulRepository(SoulRepository):
             self.global_dream.last_updated = datetime.now()
             await self._save()
 
-    # --- Evolution Phase 2: System Config (Local) ---
-
     async def get_system_config(self) -> SystemConfigNode:
-        """Fetch the System Configuration (Singleton)."""
         async with self.lock:
-            # Already initialized in __init__ or load()
             return self.system_config
 
     async def update_system_config(self, config: SystemConfigNode) -> None:
-        """Update the System Configuration."""
         async with self.lock:
             self.system_config = config
             await self._save()
 
-    # --- Evolution Phase 3: Simulated Multi-Agent Reality (Local) ---
-
     async def get_or_create_location(self, name: str, type: str, description: str) -> LocationNode:
         async with self.lock:
-            # Check if exists by name (simple deduplication)
             for loc in self.locations.values():
                 if loc.name == name:
                     return loc
-
             loc = LocationNode(name=name, type=type, description=description)
             self.locations[loc.id] = loc
             await self._save()
             return loc
 
     async def record_collective_event(self, event: CollectiveEventNode):
-        # Generate embedding asynchronously
         embedding = await embedding_service.embed_text(event.summary)
         event.embedding = embedding
-
         async with self.lock:
             self.collective_events[event.id] = event
             await self._save()
 
     def _get_agent_affinity_unsafe(self, source_id: str, target_id: str) -> AgentAffinityEdge:
-        """Internal unsafe method for agent affinity."""
         source_map = self.agent_affinities.get(source_id, {})
         if target_id in source_map:
             return source_map[target_id]
-
-        # Create default affinity
         new_edge = AgentAffinityEdge(source_agent_id=source_id, target_agent_id=target_id)
         if source_id not in self.agent_affinities:
             self.agent_affinities[source_id] = {}
@@ -889,54 +700,64 @@ class LocalSoulRepository(SoulRepository):
 
     async def update_agent_affinity(self, source_id: str, target_id: str, delta: float) -> AgentAffinityEdge:
         async with self.lock:
-            # Use unsafe method to avoid code duplication and deadlock
             edge = self._get_agent_affinity_unsafe(source_id, target_id)
-
             new_val = max(0.0, min(100.0, edge.affinity + delta))
             edge.affinity = new_val
             edge.last_interaction = datetime.now()
-
             await self._save()
             return edge
 
     async def get_recent_collective_events(self, limit: int = 5) -> List[CollectiveEventNode]:
         async with self.lock:
-            # Sort by timestamp desc
             events = list(self.collective_events.values())
             events.sort(key=lambda x: x.timestamp, reverse=True)
             return events[:limit]
 
     async def get_agent_collective_events(self, agent_id: str, limit: int = 5) -> List[CollectiveEventNode]:
-        """
-        Retrieve collective events where the specific agent was a participant.
-        """
         async with self.lock:
-            # Filter by agent_id in participants
+            # Revised: Use Graph Edges to find participation
+            event_ids = {
+                edge.target_id for edge in self.graph_edges
+                if edge.source_id == agent_id and edge.type == "participatedIn"
+            }
+
+            # Filter from main collection
             relevant_events = [
-                e for e in self.collective_events.values()
-                if agent_id in e.participants
+                self.collective_events[eid] for eid in event_ids
+                if eid in self.collective_events
             ]
-            # Sort by timestamp desc
+
             relevant_events.sort(key=lambda x: x.timestamp, reverse=True)
             return relevant_events[:limit]
 
     async def get_relevant_collective_events(self, query: str, limit: int = 5) -> List[CollectiveEventNode]:
-        """
-        Semantic Search for Collective Events (World History).
-        """
-        # 1. Generate Query Vector
         query_vector = await embedding_service.embed_text(query)
         if not query_vector:
-            logger.warning("Failed to generate embedding for query in local Event RAG.")
             return []
-
-        # 2. Snapshot Candidates
         async with self.lock:
             candidates = list(self.collective_events.values())
-
-        # 3. Vector Search (Threaded)
         return await asyncio.to_thread(self._vector_search, query_vector, candidates, limit)
 
     async def get_all_locations(self) -> List[LocationNode]:
         async with self.lock:
             return list(self.locations.values())
+
+    # --- New Methods for Explicit Graph Edges ---
+
+    async def create_edge(self, edge: GraphEdge) -> None:
+        async with self.lock:
+            self.graph_edges.append(edge)
+            await self._save()
+
+    async def get_edges(self, source_id: str = None, target_id: str = None, type: str = None) -> List[GraphEdge]:
+        async with self.lock:
+            results = []
+            for edge in self.graph_edges:
+                if source_id and edge.source_id != source_id:
+                    continue
+                if target_id and edge.target_id != target_id:
+                    continue
+                if type and edge.type != type:
+                    continue
+                results.append(edge)
+            return results
