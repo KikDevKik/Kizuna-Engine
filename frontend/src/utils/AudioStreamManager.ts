@@ -11,6 +11,10 @@ export class AudioStreamManager {
   private animationFrame: number | null = null;
   private nextStartTime: number = 0;
 
+  // AEC Audio Tag Hack
+  private streamDestination: MediaStreamAudioDestinationNode | null = null;
+  private hiddenAudioElement: HTMLAudioElement | null = null;
+
   private volumeRef: MutableRefObject<number>;
   private onAudioInput: (data: ArrayBuffer) => void;
 
@@ -28,6 +32,16 @@ export class AudioStreamManager {
     this.ctx = new AudioContext({ sampleRate: 16000 });
     await this.ctx.resume();
     await this.ctx.audioWorklet.addModule('/pcm-processor.js');
+
+    // AEC Audio Tag Hack: Route output to a MediaStreamDestination
+    this.streamDestination = this.ctx.createMediaStreamDestination();
+
+    // Create hidden audio element to play the stream
+    // This forces the browser to recognize the audio as "media" for echo cancellation
+    this.hiddenAudioElement = new Audio();
+    this.hiddenAudioElement.srcObject = this.streamDestination.stream;
+    this.hiddenAudioElement.autoplay = true;
+    this.hiddenAudioElement.play().catch(e => console.error("Hidden Audio Play Error:", e));
   }
 
   addSystemAudioTrack(track: MediaStreamTrack) {
@@ -144,7 +158,14 @@ export class AudioStreamManager {
     const buffer = createAudioBuffer(this.ctx, float32Data);
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
-    source.connect(this.ctx.destination);
+
+    // AEC Audio Tag Hack: Route to stream destination instead of context.destination
+    if (this.streamDestination) {
+        source.connect(this.streamDestination);
+    } else {
+        // Fallback (should not happen if initialized correctly)
+        source.connect(this.ctx.destination);
+    }
 
     const currentTime = this.ctx.currentTime;
 
@@ -201,6 +222,17 @@ export class AudioStreamManager {
     if (this.mediaStream) {
         this.mediaStream.getTracks().forEach(track => track.stop());
         this.mediaStream = null;
+    }
+
+    if (this.hiddenAudioElement) {
+        this.hiddenAudioElement.pause();
+        this.hiddenAudioElement.srcObject = null;
+        this.hiddenAudioElement = null;
+    }
+
+    if (this.streamDestination) {
+        this.streamDestination.disconnect();
+        this.streamDestination = null;
     }
 
     if (this.ctx) {
