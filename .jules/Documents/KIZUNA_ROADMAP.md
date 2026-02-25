@@ -64,5 +64,3 @@ Este documento detalla los pasos secuenciales para transformar la implementació
 
 ### 2. [CLOUD] Despliegue de Redis Distribuido
 - **Acción**: Activar caché distribuida en entorno de producción (GCP Memorystore).
-
-

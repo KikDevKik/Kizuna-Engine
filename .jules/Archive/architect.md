@@ -1,3 +1,0 @@
-## 2025-05-18 - Coupling in WebSocket Logic
-**Learning:** React hooks like `useLiveAPI` tend to accumulate WebSocket event handling logic inline, mixing UI state updates with low-level binary data processing. This makes the hook hard to read and impossible to unit test without mocking the entire DOM/WebSocket environment.
-**Action:** Always extract message parsing and binary data manipulation into pure utility functions (`utils/audioUtils.ts`) and define strict types (`types/websocket.ts`) before implementing the hook. Ideally, use a custom `useWebSocket` hook or a class-based manager if complexity grows, but simple extraction is a huge first step.
