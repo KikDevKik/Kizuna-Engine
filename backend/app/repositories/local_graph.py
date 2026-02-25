@@ -65,101 +65,153 @@ class LocalSoulRepository(SoulRepository):
         async with self.lock:
             await self.load()
 
+    @staticmethod
+    def _sync_load_worker(path: Path) -> dict:
+        """
+        Worker for file I/O and JSON parsing to be run in a separate thread.
+        This isolates CPU-bound JSON serialization and blocking I/O.
+        Returns a dict of hydrated objects.
+        """
+        loaded_state = {
+            "users": {},
+            "episodes": {},
+            "facts": {},
+            "dreams": {},
+            "resonances": {},
+            "experienced": {},
+            "knows": {},
+            "shadows": {},
+            "archetypes": {},
+            "embodies": {},
+            "locations": {},
+            "factions": {},
+            "collective_events": {},
+            "agent_affinities": {},
+            "global_dream": GlobalDreamNode(),
+            "system_config": SystemConfigNode()
+        }
+
+        if not path.exists():
+            return loaded_state
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Hydrate models
+            for u in data.get("users", []):
+                node = UserNode(**u)
+                loaded_state["users"][node.id] = node
+
+            for e in data.get("episodes", []):
+                node = MemoryEpisodeNode(**e)
+                loaded_state["episodes"][node.id] = node
+
+            for f in data.get("facts", []):
+                node = FactNode(**f)
+                loaded_state["facts"][node.id] = node
+
+            for d in data.get("dreams", []):
+                node = DreamNode(**d)
+                loaded_state["dreams"][node.id] = node
+
+            # Hydrate Edges
+            for r in data.get("resonances", []):
+                edge = ResonanceEdge(**r)
+                if edge.source_id not in loaded_state["resonances"]:
+                    loaded_state["resonances"][edge.source_id] = {}
+                loaded_state["resonances"][edge.source_id][edge.target_id] = edge
+
+            loaded_state["experienced"] = data.get("experienced", {})
+            loaded_state["knows"] = data.get("knows", {})
+
+            # Hydrate Shadows
+            for uid, edges in data.get("shadows", {}).items():
+                loaded_state["shadows"][uid] = [ShadowEdge(**e) for e in edges]
+
+            # Hydrate Archetypes (Phase 1)
+            for a in data.get("archetypes", []):
+                node = ArchetypeNode(**a)
+                loaded_state["archetypes"][node.id] = node
+
+            if "global_dream" in data:
+                loaded_state["global_dream"] = GlobalDreamNode(**data["global_dream"])
+
+            # Hydrate System Config (Phase 2)
+            if "system_config" in data:
+                loaded_state["system_config"] = SystemConfigNode(**data["system_config"])
+
+            # Hydrate Embodies
+            for aid, edges in data.get("embodies", {}).items():
+                loaded_state["embodies"][aid] = [EmbodiesEdge(**e) for e in edges]
+
+            # Hydrate Locations (Phase 3)
+            for l in data.get("locations", []):
+                node = LocationNode(**l)
+                loaded_state["locations"][node.id] = node
+
+            # Hydrate Factions (Phase 3)
+            for fc in data.get("factions", []):
+                node = FactionNode(**fc)
+                loaded_state["factions"][node.id] = node
+
+            # Hydrate Collective Events (Phase 3)
+            for ce in data.get("collective_events", []):
+                node = CollectiveEventNode(**ce)
+                loaded_state["collective_events"][node.id] = node
+
+            # Hydrate Agent Affinities (Phase 3)
+            # Stored as a flat list in JSON, hydrated into nested dict
+            for af in data.get("agent_affinities", []):
+                edge = AgentAffinityEdge(**af)
+                if edge.source_agent_id not in loaded_state["agent_affinities"]:
+                    loaded_state["agent_affinities"][edge.source_agent_id] = {}
+                loaded_state["agent_affinities"][edge.source_agent_id][edge.target_agent_id] = edge
+
+            return loaded_state
+
+        except Exception as e:
+            # We log here, but the exception will be re-raised in the main thread
+            # or caught. Since this is a static method, we can't use self.logger if it was instance level,
+            # but we use module level logger.
+            logger.error(f"Failed to load graph database in worker: {e}")
+            raise e
+
     async def load(self):
         """Helper to actually load data (called manually or lazily)."""
-        # 1. Load Graph Data (if exists)
-        if self.data_path.exists():
-            try:
-                with open(self.data_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
 
-                # Hydrate models
-                for u in data.get("users", []):
-                    node = UserNode(**u)
-                    self.users[node.id] = node
+        # 1. Load Graph Data (Threaded)
+        try:
+             # Offload heavy JSON parsing to thread
+             loaded_state = await asyncio.to_thread(self._sync_load_worker, self.data_path)
 
-                # NOTE: We intentionally DO NOT load agents from graph.json.
-                # The 'agents' directory is the single source of truth.
-                # This prevents "ghost agents" (deleted from disk but remaining in graph.json) from persisting.
-                # self.agents will be populated strictly from the filesystem below.
+             # Atomic Assignment (Main Thread)
+             # We assume we are holding self.lock if called via initialize,
+             # but load() might be called internally.
+             # Safety: We just overwrite. If we are under lock, it's safe.
+             self.users = loaded_state["users"]
+             self.episodes = loaded_state["episodes"]
+             self.facts = loaded_state["facts"]
+             self.dreams = loaded_state["dreams"]
+             self.resonances = loaded_state["resonances"]
+             self.experienced = loaded_state["experienced"]
+             self.knows = loaded_state["knows"]
+             self.shadows = loaded_state["shadows"]
+             self.archetypes = loaded_state["archetypes"]
+             self.embodies = loaded_state["embodies"]
+             self.global_dream = loaded_state["global_dream"]
+             self.system_config = loaded_state["system_config"]
+             self.locations = loaded_state["locations"]
+             self.factions = loaded_state["factions"]
+             self.collective_events = loaded_state["collective_events"]
+             self.agent_affinities = loaded_state["agent_affinities"]
 
-                for e in data.get("episodes", []):
-                    node = MemoryEpisodeNode(**e)
-                    self.episodes[node.id] = node
+             logger.info(f"Graph Database loaded: {len(self.users)} Users.")
 
-                for f in data.get("facts", []):
-                    node = FactNode(**f)
-                    self.facts[node.id] = node
-
-                for d in data.get("dreams", []):
-                    node = DreamNode(**d)
-                    self.dreams[node.id] = node
-
-                # Hydrate Edges
-                for r in data.get("resonances", []):
-                    edge = ResonanceEdge(**r)
-                    if edge.source_id not in self.resonances:
-                        self.resonances[edge.source_id] = {}
-                    self.resonances[edge.source_id][edge.target_id] = edge
-
-                self.experienced = data.get("experienced", {})
-                self.knows = data.get("knows", {})
-
-                # Hydrate Shadows
-                self.shadows = {}
-                for uid, edges in data.get("shadows", {}).items():
-                    self.shadows[uid] = [ShadowEdge(**e) for e in edges]
-
-                # Hydrate Archetypes (Phase 1)
-                for a in data.get("archetypes", []):
-                    node = ArchetypeNode(**a)
-                    self.archetypes[node.id] = node
-
-                if "global_dream" in data:
-                    self.global_dream = GlobalDreamNode(**data["global_dream"])
-
-                # Hydrate System Config (Phase 2)
-                if "system_config" in data:
-                    self.system_config = SystemConfigNode(**data["system_config"])
-                else:
-                    # Default values (matches previous hardcoded constants)
-                    self.system_config = SystemConfigNode()
-
-                # Hydrate Embodies
-                self.embodies = {}
-                for aid, edges in data.get("embodies", {}).items():
-                    self.embodies[aid] = [EmbodiesEdge(**e) for e in edges]
-
-                # Hydrate Locations (Phase 3)
-                for l in data.get("locations", []):
-                    node = LocationNode(**l)
-                    self.locations[node.id] = node
-
-                # Hydrate Factions (Phase 3)
-                for fc in data.get("factions", []):
-                    node = FactionNode(**fc)
-                    self.factions[node.id] = node
-
-                # Hydrate Collective Events (Phase 3)
-                for ce in data.get("collective_events", []):
-                    node = CollectiveEventNode(**ce)
-                    self.collective_events[node.id] = node
-
-                # Hydrate Agent Affinities (Phase 3)
-                # Stored as a flat list in JSON, hydrated into nested dict
-                for af in data.get("agent_affinities", []):
-                    edge = AgentAffinityEdge(**af)
-                    if edge.source_agent_id not in self.agent_affinities:
-                        self.agent_affinities[edge.source_agent_id] = {}
-                    self.agent_affinities[edge.source_agent_id][edge.target_agent_id] = edge
-
-                logger.info(f"Graph Database loaded: {len(self.users)} Users, {len(self.agents)} Agents.")
-
-            except Exception as e:
-                logger.error(f"Failed to load graph database: {e}")
-                # We proceed to sync agents anyway, effectively starting with partial data if graph is corrupt
-        else:
-            logger.info("No graph.json found. Starting with empty graph.")
+        except Exception as e:
+            logger.error(f"Failed to load graph database: {e}")
+            # If load fails, we might still have partial state or empty state.
+            # We proceed to sync agents anyway.
 
         # ---------------------------------------------------------
         # Sync with Agents Directory (Source of Truth for Agents)
@@ -170,20 +222,27 @@ class LocalSoulRepository(SoulRepository):
         # This removes "ghost agents" that were deleted from disk.
         self.agents = {}
 
+        # Offload Agent Sync to Thread as well (File I/O)
         agents_dir = self.data_path.parent / "agents"
-        if agents_dir.exists():
-            loaded_count = 0
-            for agent_file in agents_dir.glob("*.json"):
-                try:
-                    with open(agent_file, "r", encoding="utf-8") as af:
-                        agent_data = json.load(af)
-                        agent_node = AgentNode(**agent_data)
-                        # Source of Truth: Filesystem
-                        self.agents[agent_node.id] = agent_node
-                        loaded_count += 1
-                except Exception as ae:
-                    logger.error(f"Failed to sync agent from {agent_file}: {ae}")
-            logger.info(f"Synced {loaded_count} agents from filesystem.")
+
+        def _sync_agents_worker(dir_path: Path) -> Dict[str, AgentNode]:
+             agents_map = {}
+             if dir_path.exists():
+                 for agent_file in dir_path.glob("*.json"):
+                    try:
+                        with open(agent_file, "r", encoding="utf-8") as af:
+                            agent_data = json.load(af)
+                            agent_node = AgentNode(**agent_data)
+                            agents_map[agent_node.id] = agent_node
+                    except Exception as ae:
+                        logger.error(f"Failed to sync agent from {agent_file}: {ae}")
+             return agents_map
+
+        try:
+            self.agents = await asyncio.to_thread(_sync_agents_worker, agents_dir)
+            logger.info(f"Synced {len(self.agents)} agents from filesystem.")
+        except Exception as e:
+            logger.error(f"Failed to sync agents: {e}")
 
         # Ensure graph.json is initialized if it didn't exist
         if not self.data_path.exists():

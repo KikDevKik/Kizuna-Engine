@@ -142,7 +142,7 @@ class ReflectionMind:
                                     )
                                 )
                             ),
-                            timeout=8.0 # Reflection should be fast
+                            timeout=10.0 # Reflection should be fast
                         )
                         break
                     except asyncio.TimeoutError:
