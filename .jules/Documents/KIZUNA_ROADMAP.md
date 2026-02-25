@@ -56,7 +56,7 @@ Este documento detalla los pasos secuenciales para transformar la implementació
 
 --------------------------------------------------------------------------------
 
-## Fase 6: Infraestructura y Escala (Horizonte)
+## Fase 6: Infraestructura y Escala (Horizonte) [No trabajar hasta que el sistema esté estabilizado y el Usuario mencione sobre pasar esto a produccion]
 **Objetivo**: Migración a nube y optimización masiva.
 
 ### 1. [CLOUD] Migración a Spanner
@@ -64,3 +64,5 @@ Este documento detalla los pasos secuenciales para transformar la implementació
 
 ### 2. [CLOUD] Despliegue de Redis Distribuido
 - **Acción**: Activar caché distribuida en entorno de producción (GCP Memorystore).
+
+
