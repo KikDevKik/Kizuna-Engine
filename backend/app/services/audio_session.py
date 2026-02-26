@@ -114,6 +114,15 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
                 try:
                     payload = json.loads(text)
 
+                    # SOVEREIGN VOICE: Explicit Interrupt
+                    if payload.get("type") == "control" and payload.get("action") == "interrupt":
+                        logger.info("🛑 SOVEREIGN VOICE: User Interrupted (Explicit Signal)")
+                        await auction_service.interrupt()
+                        # Note: We can't force the 'session.receive()' loop to stop yielding easily
+                        # from here without shared state, but clearing the auction lock prevents
+                        # new audio from being sent to client in 'receive_from_gemini'.
+                        continue
+
                     # TRUE ECHO PROTOCOL: Handle Native Transcript
                     if payload.get("type") == "native_transcript":
                         transcript_text = payload.get("text")
@@ -213,6 +222,16 @@ async def receive_from_gemini(
         while True:
             try:
                 async for response in session.receive():
+                    # SOVEREIGN VOICE: Check lock status before processing chunks
+                    # If lock is lost (user barged in), we should mute output.
+                    is_interrupted = False
+                    if agent_id:
+                        # We don't bid here, just check if we still hold it if we did before.
+                        # Actually, bid() handles re-acquisition or check.
+                        # But interrupt() clears the winner.
+                        # So if we are sending audio, we check if we are the winner.
+                        pass
+
                     if response.server_content is None:
                         continue
 
@@ -311,15 +330,15 @@ async def receive_from_gemini(
                                     won = await auction_service.bid(agent_id, 1.0)
                                     if not won:
                                         # 🔇 Auction Lost: Drop Audio
+                                        # This happens if user interrupted (cleared winner) or another agent won.
+
                                         # Send paralanguage backchannel signal (once per chunk, frontend handles debounce)
-                                        try:
-                                            await websocket.send_json({
-                                                "type": "backchannel",
-                                                "file": "sigh.wav"
-                                            })
-                                        except Exception:
-                                            pass
-                                        continue # Skip sending bytes
+                                        # OPTIMIZATION: Don't spam backchannel on every chunk if just silence
+                                        # But for now, dropping it is key.
+
+                                        # We DO NOT send bytes.
+                                        # This effectively mutes the agent immediately when interrupt() clears the lock.
+                                        continue
 
                                 # part.inline_data.data is bytes
                                 # Optimize: Send raw binary directly to avoid Base64 overhead

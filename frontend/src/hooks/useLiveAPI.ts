@@ -96,6 +96,13 @@ export const useLiveAPI = (): UseLiveAPI => {
                             text: transcript
                         }));
                     }
+                } else if (!lastResult.isFinal) {
+                    // Interim result - User is likely speaking
+                    // Sovereign Voice: Check volume or assume speaking
+                    if (volumeRef.current > 0.05) {
+                        // Debounce if needed, but for barge-in, speed is key.
+                        // audioManagerRef.current?.flush(); // We do this on audio input event mainly
+                    }
                 }
             };
 
@@ -197,8 +204,29 @@ export const useLiveAPI = (): UseLiveAPI => {
             audioManagerRef.current = new AudioStreamManager(
                 volumeRef,
                 (data: ArrayBuffer) => {
+                    // This callback runs when the AudioWorklet produces data (User Speaking)
+
+                    // 1. Send Audio to Backend
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(data);
+                    }
+
+                    // 2. SOVEREIGN VOICE: Barge-in Logic
+                    // If volume > threshold, interrupt playback locally
+                    if (volumeRef.current > 0.05 && isAiSpeaking) {
+                        console.log("🛑 Sovereign Voice: User Interruption Detected!");
+                        // A. Stop Local Playback
+                        audioManagerRef.current?.flush();
+                        setIsAiSpeaking(false);
+
+                        // B. Send Explicit Interrupt Signal (Optional but robust)
+                        // Backend will also trigger on 'data' flow, but this is cleaner.
+                        if (ws.readyState === WebSocket.OPEN) {
+                             ws.send(JSON.stringify({
+                                 type: "control",
+                                 action: "interrupt"
+                             }));
+                        }
                     }
                 }
             );
