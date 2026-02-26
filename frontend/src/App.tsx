@@ -3,6 +3,7 @@ import { useLiveAPI } from './hooks/useLiveAPI';
 import { Layout } from './components/Layout';
 import { KizunaCore } from './components/KizunaCore';
 import { AgentRoster } from './components/AgentRoster';
+import { DistrictZero } from './components/DistrictZero';
 import { VisionPanel } from './components/VisionPanel';
 import { EpistemicPanel } from './components/EpistemicPanel';
 import { SystemLogs } from './components/SystemLogs';
@@ -30,7 +31,7 @@ function App() {
     removeSystemAudio
   } = liveApi;
 
-  const [viewMode, setViewMode] = useState<'core' | 'roster'>('roster'); // Default to Roster to force selection
+  const [viewMode, setViewMode] = useState<'core' | 'roster' | 'district'>('roster'); // Default to Roster to force selection
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [isSanctuaryOpen, setIsSanctuaryOpen] = useState(false);
 
@@ -123,6 +124,14 @@ function App() {
             </div>
           </button>
           <button
+            onClick={() => setViewMode('district')}
+            className={`kizuna-shard-nav-btn ${viewMode === 'district' ? 'active' : ''}`}
+          >
+            <div className="kizuna-shard-nav-inner">
+              DISTRICT ZERO
+            </div>
+          </button>
+          <button
             onClick={() => setViewMode('roster')}
             className={`kizuna-shard-nav-btn ${viewMode === 'roster' ? 'active' : ''}`}
           >
@@ -170,6 +179,17 @@ function App() {
                   </span>
                 </button>
               </div>
+            </motion.div>
+          ) : viewMode === 'district' ? (
+             <motion.div
+              key="district-view"
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50, filter: 'blur(10px)' }}
+              transition={{ duration: 0.5 }}
+              className="w-full h-full flex items-center justify-center pointer-events-auto"
+            >
+              <DistrictZero />
             </motion.div>
           ) : (
             <motion.div
