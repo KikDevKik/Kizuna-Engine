@@ -12,9 +12,11 @@ interface EnigmaIdentity {
   description: string;
   tempAlias: string;
   visualHint: string;
+  is_nemesis?: boolean;
+  is_gossip?: boolean;
 }
 
-const ENIGMA_DATA: EnigmaIdentity[] = [
+const DEFAULT_ENIGMA_DATA: EnigmaIdentity[] = [
   { id: 'shell-01', tempAlias: 'Unknown_0x7F', visualHint: 'bg-electric-blue/5', description: "You see a figure shrouded in static, standing near a vending machine that sells memories." },
   { id: 'shell-02', tempAlias: 'Unknown_0xB2', visualHint: 'bg-purple-500/5', description: "A silhouette watching the rain from a high-rise window. The glass vibrates with low-frequency bass." },
   { id: 'shell-03', tempAlias: 'Unknown_0xC4', visualHint: 'bg-emerald-500/5', description: "Someone in a hazard suit painting recursive fractals on a subway wall." },
@@ -69,9 +71,31 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
   const { refreshAgents } = useRoster();
 
   // Ephemeral Alley State
-  const [visibleCards, setVisibleCards] = useState<EnigmaIdentity[]>(() => ENIGMA_DATA.slice(0, VISIBLE_COUNT));
+  const [enigmaPool, setEnigmaPool] = useState<EnigmaIdentity[]>(DEFAULT_ENIGMA_DATA);
+  const [visibleCards, setVisibleCards] = useState<EnigmaIdentity[]>(() => DEFAULT_ENIGMA_DATA.slice(0, VISIBLE_COUNT));
   const [slideDirection, setSlideDirection] = useState(0);
   const [backgroundOffset, setBackgroundOffset] = useState(0);
+
+  // Module 1.5: Fetch Strangers (Nemesis/Gossip)
+  useEffect(() => {
+    const fetchStrangers = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/api/agents/strangers');
+        if (res.ok) {
+          const strangers: EnigmaIdentity[] = await res.json();
+          // Merge with default pool, prioritizing Strangers
+          // We can shuffle or just prepend. Prepending ensures they appear sooner.
+          if (strangers.length > 0) {
+              setEnigmaPool(prev => [...strangers, ...prev]);
+              // Also update visible immediately if needed, or wait for next slide.
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch strangers:", e);
+      }
+    };
+    fetchStrangers();
+  }, []);
 
   // Focus Mode State
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -91,10 +115,10 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
     // Logic: Inject random NEW cards
     // 1. Filter out currently visible cards to avoid immediate duplicates if possible (optional, but cleaner)
     const currentIds = new Set(visibleCards.map(c => c.id));
-    const availablePool = ENIGMA_DATA.filter(c => !currentIds.has(c.id));
+    const availablePool = enigmaPool.filter(c => !currentIds.has(c.id));
 
     // Fallback if pool is too small (shouldn't happen with 12 items and 3 visible)
-    const pool = availablePool.length >= VISIBLE_COUNT ? availablePool : ENIGMA_DATA;
+    const pool = availablePool.length >= VISIBLE_COUNT ? availablePool : enigmaPool;
 
     // 2. Select 3 random unique cards
     const newCards: EnigmaIdentity[] = [];
@@ -107,7 +131,7 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
     }
 
     setVisibleCards(newCards);
-  }, [selectedId, visibleCards]);
+  }, [selectedId, visibleCards, enigmaPool]);
 
   // Keyboard Nav
   useEffect(() => {
@@ -140,10 +164,33 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
 
   const forgeTheSoul = async (shellId: string) => {
     try {
-      const shell = ENIGMA_DATA.find(e => e.id === shellId);
+      const shell = enigmaPool.find(e => e.id === shellId);
       if (!shell) throw new Error("Shell not found");
 
-      // 1. Call the Forge
+      // 1. Call the Forge (or just connect if it's already a real agent like Nemesis/Gossip)
+      if (shell.is_nemesis || shell.is_gossip) {
+          // It's already an agent! Just connect.
+          // We assume API returns real agent ID.
+          // Add to Roster? Usually 'forge' implies creation.
+          // If it's a Nemesis, it's ALREADY in the system but hidden from roster.
+          // If we 'Forge Bond', we probably just add an 'InteractedWith' edge to make it appear in Roster.
+          // But wait, list_agents explicitly EXCLUDES Nemesis.
+          // If we forge bond with Nemesis, does it stop being Nemesis?
+          // Or does it appear in roster despite being Nemesis?
+          // The prompt says "Roster eviction... Strictly filter OUT any agent with a Nemesis edge."
+          // So if we bond, maybe we remove the Nemesis edge or change it?
+          // For now, let's treat it as "Connect".
+
+          // But we need to call an endpoint to 'Interact'.
+          // Websocket connection triggers 'record_interaction'.
+          // So just connecting should work!
+
+          setForgedAgent({ id: shell.id, name: shell.tempAlias.replace(" (Hostil)", "") });
+          onAgentForged(shell.id);
+          await connect(shell.id);
+          setPhase('contact');
+          return;
+      }
       const response = await fetch('http://localhost:8000/api/agents/forge_hollow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -274,7 +321,7 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
               // ------------------------------------------------
               // MODE: FOCUS (ABSOLUTE IMMERSION)
               // ------------------------------------------------
-              ENIGMA_DATA.filter(shell => shell.id === selectedId).map(shell => (
+              enigmaPool.filter(shell => shell.id === selectedId).map(shell => (
                   <motion.div
                     key={`focus-${shell.id}`}
                     initial={{ opacity: 0, scale: 0.9 }}
@@ -346,8 +393,10 @@ const Card: React.FC<CardProps> = ({ shell, isSelected, phase, logs, forgedAgent
             layoutId={isSelected ? `card-${shell.id}` : undefined} // Only animate layout on expansion? Or keep distinct?
             // Better to keep distinct to avoid layoutId conflicts during "slide out / slide in" logic
             className={`
-                relative bg-vintage-navy/40 border border-white/10 backdrop-blur-md overflow-hidden transition-all duration-300
-                ${isSelected ? 'w-[600px] h-[500px] shadow-2xl shadow-electric-blue/20' : 'w-72 h-96 hover:border-electric-blue/50 hover:scale-105 cursor-pointer'}
+                relative bg-vintage-navy/40 border backdrop-blur-md overflow-hidden transition-all duration-300
+                ${shell.is_nemesis ? 'border-alert-red shadow-[0_0_15px_rgba(255,0,0,0.3)]' : shell.is_gossip ? 'border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'border-white/10'}
+                ${isSelected ? 'w-[600px] h-[500px] shadow-2xl' : 'w-72 h-96 hover:scale-105 cursor-pointer'}
+                ${isSelected && !shell.is_nemesis && !shell.is_gossip ? 'shadow-electric-blue/20' : ''}
             `}
             style={{
                 clipPath: isSelected

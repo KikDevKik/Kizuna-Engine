@@ -51,6 +51,14 @@ class CreateAgentRequest(BaseModel):
 class HollowForgeRequest(BaseModel):
     aesthetic_description: str = Field(..., min_length=10, max_length=1000, description="A description of the agent's vibe, appearance, or theme.")
 
+class StrangerNode(BaseModel):
+    id: str
+    description: str
+    tempAlias: str
+    visualHint: str
+    is_nemesis: bool = False
+    is_gossip: bool = False
+
 class RitualFlowResponse(BaseModel):
     is_complete: bool
     message: Optional[str] = None
@@ -83,16 +91,73 @@ async def list_agents(
             logger.warning("Repository does not support get_edges filtering. Returning all agents.")
             return all_agents
 
-        # 3. Filter the list
+        # 3. Filter the list (InteractedWith)
         my_agents = [
             agent for agent in all_agents
             if agent.id in interacted_agent_ids
         ]
 
+        # 4. Roster Eviction: Remove Nemesis (Module 1.5)
+        nemesis_agents = await repository.get_nemesis_agents(user_id)
+        nemesis_ids = {a.id for a in nemesis_agents}
+
+        my_agents = [a for a in my_agents if a.id not in nemesis_ids]
+
         return my_agents
 
     except Exception as e:
         logger.exception("Error listing agents")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+@router.get("/strangers", response_model=List[StrangerNode])
+async def list_strangers(
+    user_id: str = Depends(get_current_user),
+    repository: SoulRepository = Depends(get_repository)
+):
+    """
+    List "Stranger" candidates for District Zero.
+    Includes Nemesis agents (hidden threats) and Gossiped agents (spawned by others).
+    """
+    try:
+        results = []
+
+        # 1. Fetch Nemesis Agents
+        nemesis_agents = await repository.get_nemesis_agents(user_id)
+        for agent in nemesis_agents:
+            results.append(StrangerNode(
+                id=agent.id,
+                description=agent.base_instruction[:150] + "...", # Snippet
+                tempAlias=f"{agent.name} (Hostil)",
+                visualHint="bg-alert-red/10", # Signal Red
+                is_nemesis=True,
+                is_gossip=False
+            ))
+
+        # 2. Fetch Gossip Candidates
+        gossip_agents = await repository.get_gossip_candidates(user_id)
+        for agent in gossip_agents:
+            # Try to get context from traits if available
+            vibe = agent.base_instruction
+            if "Aesthetic/Vibe:" in vibe:
+                vibe = vibe.split("Aesthetic/Vibe:")[-1].strip()
+
+            results.append(StrangerNode(
+                id=agent.id,
+                description=vibe,
+                tempAlias=f"Unknown_0x{agent.id[:4].upper()}",
+                visualHint="bg-purple-500/10",
+                is_nemesis=False,
+                is_gossip=True
+            ))
+
+        # Note: We return ONLY backend-managed strangers.
+        # The frontend will merge these with static Enigma Shells if needed,
+        # or use these primarily.
+
+        return results
+
+    except Exception as e:
+        logger.exception("Error listing strangers")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @router.post("/", response_model=AgentNode, status_code=status.HTTP_201_CREATED)

@@ -155,6 +155,8 @@ class SessionManager:
                                 reflection_queue,
                                 session_transcript_buffer,
                                 agent_name=agent_name,
+                                agent_id=agent_id, # Module 6: Audio Concurrency ID
+                                soul_repo=self.soul_repo # Module 1.5: Gossip Protocol
                             )
                         )
 
