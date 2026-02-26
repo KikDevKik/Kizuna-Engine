@@ -5,6 +5,15 @@ import json
 import re
 from fastapi import WebSocket, WebSocketDisconnect
 
+from .auction_service import auction_service
+from .agent_service import agent_service
+from ..models.graph import GraphEdge
+# Note: We avoid importing SoulRepository type to prevent circular imports if possible,
+# but for type hinting we can use explicit string or conditional.
+from typing import TYPE_CHECKING, Optional
+if TYPE_CHECKING:
+    from ..repositories.base import SoulRepository
+
 # Try importing types for robust multimodal handling
 try:
     from google.genai import types
@@ -77,6 +86,9 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
 
             if data:
                 # --- AUDIO FLOW ---
+                # Module 6: User Barge-in -> Interrupt Agent
+                await auction_service.interrupt()
+
                 # Prepend carry_over from previous iteration
                 if carry_over:
                     data = carry_over + data
@@ -184,7 +196,9 @@ async def receive_from_gemini(
     transcript_queue: asyncio.Queue | None = None,
     reflection_queue: asyncio.Queue | None = None,
     transcript_buffer: list[str] | None = None,
-    agent_name: str = "AI"
+    agent_name: str = "AI",
+    agent_id: Optional[str] = None,
+    soul_repo: Optional["SoulRepository"] = None
 ):
     """
     Task B: Gemini -> Client + Subconscious
@@ -208,6 +222,68 @@ async def receive_from_gemini(
                     if model_turn:
                         for part in model_turn.parts:
 
+                            # --- MODULE 1.5: GOSSIP TOOL ---
+                            if part.function_call:
+                                fc = part.function_call
+                                if fc.name == "spawn_stranger":
+                                    logger.info(f"🛠️ Tool Use Detected: spawn_stranger args={fc.args}")
+                                    try:
+                                        # Extract args
+                                        name = fc.args.get("name", "Unknown")
+                                        relation = fc.args.get("relation", "Associate")
+                                        vibe = fc.args.get("vibe", "Mysterious")
+
+                                        # Create the Stranger Agent directly
+                                        new_agent = await agent_service.create_agent(
+                                            name=name,
+                                            role="Stranger",
+                                            base_instruction=f"You are {name}, a {relation} of {agent_name}. Aesthetic/Vibe: {vibe}.",
+                                            voice_name="Puck",
+                                            traits={"gossip_spawn": True, "relation": relation},
+                                            tags=["hollow", "gossip", "spawned"]
+                                        )
+
+                                        # Create the Gossip Edge (Roster Agent -> Stranger)
+                                        if soul_repo and agent_id:
+                                            # We need to ensure new_agent is in the repo/cache
+                                            if hasattr(soul_repo, 'create_agent'):
+                                                await soul_repo.create_agent(new_agent)
+
+                                            edge = GraphEdge(
+                                                source_id=agent_id,
+                                                target_id=new_agent.id,
+                                                type="Gossip_Source",
+                                                properties={"relation": relation, "context": vibe}
+                                            )
+                                            if hasattr(soul_repo, 'create_edge'):
+                                                await soul_repo.create_edge(edge)
+                                                logger.info(f"🕸️ Gossip Edge Created: {agent_name} -> {name}")
+
+                                        # Send Tool Response to Gemini
+                                        # Construct the response payload
+                                        tool_response = types.LiveClientToolResponse(
+                                            function_responses=[
+                                                types.FunctionResponse(
+                                                    name="spawn_stranger",
+                                                    response={"result": "success", "agent_id": new_agent.id}
+                                                )
+                                            ]
+                                        )
+                                        await session.send(input=tool_response)
+
+                                    except Exception as e:
+                                        logger.error(f"Tool Execution Failed: {e}")
+                                        # Send error response
+                                        await session.send(input=types.LiveClientToolResponse(
+                                            function_responses=[
+                                                types.FunctionResponse(
+                                                    name="spawn_stranger",
+                                                    response={"error": str(e)}
+                                                )
+                                            ]
+                                        ))
+                                continue
+
                             # --- ANTHROPOLOGIST: HANG-UP INTERCEPTOR ---
                             # Check text for [ACTION: HANGUP] before processing
                             if part.text and "[ACTION: HANGUP]" in part.text:
@@ -229,6 +305,22 @@ async def receive_from_gemini(
 
                             # Handle Audio
                             if part.inline_data:
+                                # --- MODULE 6: AUDIO CONCURRENCY LOCK ---
+                                if agent_id:
+                                    # Bid for the mic (Priority 1.0 default)
+                                    won = await auction_service.bid(agent_id, 1.0)
+                                    if not won:
+                                        # 🔇 Auction Lost: Drop Audio
+                                        # Send paralanguage backchannel signal (once per chunk, frontend handles debounce)
+                                        try:
+                                            await websocket.send_json({
+                                                "type": "backchannel",
+                                                "file": "sigh.wav"
+                                            })
+                                        except Exception:
+                                            pass
+                                        continue # Skip sending bytes
+
                                 # part.inline_data.data is bytes
                                 # Optimize: Send raw binary directly to avoid Base64 overhead
                                 try:
@@ -300,6 +392,10 @@ async def receive_from_gemini(
                     # Handle turn completion
                     if server_content.turn_complete:
                         logger.info("Gemini -> Client: Turn complete signal.")
+
+                        # --- MODULE 6: RELEASE LOCK ---
+                        if agent_id:
+                            await auction_service.release(agent_id)
 
                         try:
                             await websocket.send_json({"type": "turn_complete"})

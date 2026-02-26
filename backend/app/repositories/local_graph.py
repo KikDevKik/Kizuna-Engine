@@ -741,3 +741,49 @@ class LocalSoulRepository(SoulRepository):
                     existing.updated_at = datetime.utcnow()
                     return AgentNode(**data)
         return None
+
+    # --- Module 1.5: Nemesis & Social Spawning ---
+
+    async def get_nemesis_agents(self, user_id: str) -> List[AgentNode]:
+        """
+        Fetch agents that have a 'Nemesis' edge with the user.
+        """
+        async with AsyncSessionLocal() as session:
+            # Find Nemesis edges (user -> agent)
+            stmt = select(NodeModel).join(
+                EdgeModel,
+                and_(EdgeModel.target_id == NodeModel.id, EdgeModel.type == "Nemesis")
+            ).where(EdgeModel.source_id == user_id)
+            result = await session.execute(stmt)
+            nodes = result.scalars().all()
+            return [AgentNode(**n.data) for n in nodes]
+
+    async def get_gossip_candidates(self, user_id: str) -> List[AgentNode]:
+        """
+        Fetch agents that were spawned via Gossip (Gossip_Source edge)
+        and have NOT yet been interacted with by the user.
+        """
+        async with AsyncSessionLocal() as session:
+            # 1. Find agents target of Gossip_Source (from *any* roster agent)
+            # 2. Exclude agents user has InteractedWith
+
+            # Step 1: Subquery for gossip targets
+            gossip_targets = select(EdgeModel.target_id).where(EdgeModel.type == "Gossip_Source").distinct()
+
+            # Step 2: Subquery for user interactions
+            user_known = select(EdgeModel.target_id).where(
+                and_(EdgeModel.source_id == user_id, EdgeModel.type == "interactedWith")
+            )
+
+            # Step 3: Combined Query
+            stmt = select(NodeModel).where(
+                and_(
+                    NodeModel.id.in_(gossip_targets),
+                    NodeModel.id.notin_(user_known),
+                    NodeModel.label == "AgentNode"
+                )
+            )
+
+            result = await session.execute(stmt)
+            nodes = result.scalars().all()
+            return [AgentNode(**n.data) for n in nodes]

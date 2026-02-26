@@ -204,13 +204,24 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
 
           // 2. Text / Control Messages
           if (typeof event.data === 'string') {
-            const message = JSON.parse(event.data) as ServerMessage;
+            const message = JSON.parse(event.data) as any;
 
             if (message.type === 'text') {
                 setLastAiMessage(message.data);
             } else if (message.type === 'turn_complete') {
               console.log("Turn complete signal received.");
               setIsAiSpeaking(false);
+            } else if (message.type === 'backchannel') {
+              // Module 6: Audio Concurrency Backchannel
+              console.log("Playing backchannel:", message.file);
+              try {
+                  // Play from public/sfx/ or root
+                  const audio = new Audio(`/sfx/${message.file}`);
+                  audio.volume = 0.4;
+                  audio.play().catch(e => console.warn("Backchannel audio missing or blocked:", e));
+              } catch (e) {
+                  console.error("Failed to play backchannel:", e);
+              }
             }
           }
         } catch (e) {

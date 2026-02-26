@@ -168,3 +168,20 @@ class SoulRepository(ABC):
         Returns the updated AgentNode.
         """
         pass
+
+    # --- Module 1.5: Nemesis & Social Spawning ---
+
+    @abstractmethod
+    async def get_nemesis_agents(self, user_id: str) -> List[AgentNode]:
+        """
+        Fetch agents that have a 'Nemesis' edge with the user.
+        """
+        pass
+
+    @abstractmethod
+    async def get_gossip_candidates(self, user_id: str) -> List[AgentNode]:
+        """
+        Fetch agents that were spawned via Gossip (Gossip_Source edge)
+        and have NOT yet been interacted with by the user.
+        """
+        pass
