@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Trash2 } from 'lucide-react';
 import { SoulForgeModal } from './SoulForgeModal';
 import { DeleteAgentModal } from './DeleteAgentModal';
-import { useRoster, Agent } from '../contexts/RosterContext';
+import { useRoster, type Agent } from '../contexts/RosterContext';
 import '../KizunaHUD.css';
 
 interface AgentRosterProps {

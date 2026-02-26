@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Radio, Activity, X, Network, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Activity, X, Network, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { useRoster } from '../contexts/RosterContext';
 import '../KizunaHUD.css';
 
@@ -67,35 +67,47 @@ interface DistrictZeroProps {
 
 export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, connect, disconnect }) => {
   const { refreshAgents } = useRoster();
-  const [startIndex, setStartIndex] = useState(0);
+
+  // Ephemeral Alley State
+  const [visibleCards, setVisibleCards] = useState<EnigmaIdentity[]>(() => ENIGMA_DATA.slice(0, VISIBLE_COUNT));
+  const [slideDirection, setSlideDirection] = useState(0);
+  const [backgroundOffset, setBackgroundOffset] = useState(0);
+
+  // Focus Mode State
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [phase, setPhase] = useState<'idle' | 'approach' | 'scan' | 'contact' | 'error'>('idle');
   const [logs, setLogs] = useState<string[]>([]);
   const [forgedAgent, setForgedAgent] = useState<{ id: string; name: string } | null>(null);
 
   // ------------------------------------------------------------------
-  // NAVIGATION LOGIC (SLIDE)
+  // NAVIGATION LOGIC (The Ephemeral Alley)
   // ------------------------------------------------------------------
   const slide = useCallback((direction: number) => {
     if (selectedId) return; // Lock nav if interacting
-    setStartIndex((prev) => {
-      const next = prev + direction;
-      // Infinite Scroll Logic (Modulo)
-      if (next < 0) return ENIGMA_DATA.length - 1;
-      if (next >= ENIGMA_DATA.length) return 0;
-      return next;
-    });
-  }, [selectedId]);
 
-  // Compute visible cards
-  const visibleCards = React.useMemo(() => {
-    const cards = [];
+    setSlideDirection(direction);
+    setBackgroundOffset(prev => prev - (direction * 50)); // Parallax shift
+
+    // Logic: Inject random NEW cards
+    // 1. Filter out currently visible cards to avoid immediate duplicates if possible (optional, but cleaner)
+    const currentIds = new Set(visibleCards.map(c => c.id));
+    const availablePool = ENIGMA_DATA.filter(c => !currentIds.has(c.id));
+
+    // Fallback if pool is too small (shouldn't happen with 12 items and 3 visible)
+    const pool = availablePool.length >= VISIBLE_COUNT ? availablePool : ENIGMA_DATA;
+
+    // 2. Select 3 random unique cards
+    const newCards: EnigmaIdentity[] = [];
+    const tempPool = [...pool];
+
     for (let i = 0; i < VISIBLE_COUNT; i++) {
-        const index = (startIndex + i) % ENIGMA_DATA.length;
-        cards.push(ENIGMA_DATA[index]);
+        const randomIndex = Math.floor(Math.random() * tempPool.length);
+        newCards.push(tempPool[randomIndex]);
+        tempPool.splice(randomIndex, 1);
     }
-    return cards;
-  }, [startIndex]);
+
+    setVisibleCards(newCards);
+  }, [selectedId, visibleCards]);
 
   // Keyboard Nav
   useEffect(() => {
@@ -111,18 +123,19 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
   // ------------------------------------------------------------------
   // INTERACTION LOOP
   // ------------------------------------------------------------------
-  const handleSocialize = (id: string) => {
+  const handleObserve = (id: string) => {
+    // Phase 1: Focus Mode (UI Only)
     setSelectedId(id);
     setPhase('approach');
     setLogs([]);
     setForgedAgent(null);
+  };
 
-    // Sequence Choreography
-    setTimeout(() => {
-      setPhase('scan');
-      runScanSequence(); // Visuals Only
-      forgeTheSoul(id);  // API Call
-    }, 800); // 0.8s Approach
+  const handleForgeBond = (id: string) => {
+    // Phase 2: The Real Deal (API Call)
+    setPhase('scan');
+    runScanSequence(); // Visuals
+    forgeTheSoul(id);  // Logic
   };
 
   const forgeTheSoul = async (shellId: string) => {
@@ -188,10 +201,10 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
     disconnect(); // Sever the WebSocket
     setPhase('idle');
     setTimeout(() => {
-      setSelectedId(null);
+      setSelectedId(null); // Return to Alley
       setLogs([]);
       setForgedAgent(null);
-    }, 500); // Wait for exit animation
+    }, 500);
   };
 
   // ------------------------------------------------------------------
@@ -200,12 +213,17 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
   return (
     <div className="w-full h-full relative overflow-hidden flex items-center justify-center p-8">
 
-      {/* BACKGROUND AMBIENCE */}
+      {/* PARALLAX BACKGROUND LAYER */}
+      <motion.div
+        className="layer-abyssal-background absolute inset-0 pointer-events-none"
+        animate={{ backgroundPositionX: backgroundOffset }}
+        transition={{ type: "spring", stiffness: 50, damping: 20 }}
+      />
+
+      {/* STATIC OVERLAYS */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,_var(--color-abyssal-black)_0%,_#000_100%)] opacity-90" />
         <div className="grid-overlay opacity-10" />
-
-        {/* Parallax Stars/Dust Effect could go here */}
       </div>
 
       {/* HEADER (Only visible when not focused) */}
@@ -225,7 +243,7 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
               Intercept signals from the void. These entities are unverified. Proceed with caution.
             </p>
             <div className="mt-4 flex gap-2 text-[10px] font-technical text-white/30">
-                <span>[ ARROW KEYS TO SCAN ]</span>
+                <span>[ ARROW KEYS TO TRAVERSE THE ALLEY ]</span>
             </div>
           </motion.div>
         )}
@@ -251,34 +269,55 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
 
       {/* CARD STAGE */}
       <div className="relative z-20 w-full max-w-6xl flex justify-center items-center h-[600px]">
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence mode="wait">
           {selectedId ? (
-              // FOCUSED CARD (Single)
+              // ------------------------------------------------
+              // MODE: FOCUS (ABSOLUTE IMMERSION)
+              // ------------------------------------------------
               ENIGMA_DATA.filter(shell => shell.id === selectedId).map(shell => (
-                  <Card key={shell.id} shell={shell} isSelected={true} phase={phase} logs={logs} forgedAgent={forgedAgent} onDisconnect={handleDisconnect} />
-              ))
-          ) : (
-              // CAROUSEL
-              visibleCards.map((shell) => (
                   <motion.div
-                    key={shell.id}
-                    layoutId={`card-${shell.id}`}
-                    initial={{ opacity: 0, x: 100 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -100 }}
-                    transition={{ duration: 0.4 }}
-                    className="mx-4"
+                    key={`focus-${shell.id}`}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 1.1 }}
+                    transition={{ duration: 0.5 }}
+                    className="z-50"
                   >
                       <Card
+                        shell={shell}
+                        isSelected={true}
+                        phase={phase}
+                        logs={logs}
+                        forgedAgent={forgedAgent}
+                        onDisconnect={handleDisconnect}
+                        onForge={() => handleForgeBond(shell.id)}
+                      />
+                  </motion.div>
+              ))
+          ) : (
+              // ------------------------------------------------
+              // MODE: CAROUSEL (EPHEMERAL ALLEY)
+              // ------------------------------------------------
+              <motion.div
+                key={`carousel-${visibleCards.map(c => c.id).join('-')}`} // Unique key triggers re-render animation
+                className="flex items-center justify-center gap-8"
+                initial={{ x: slideDirection * 100, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: slideDirection * -100, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              >
+                  {visibleCards.map((shell) => (
+                      <Card
+                        key={shell.id}
                         shell={shell}
                         isSelected={false}
                         phase={phase}
                         logs={[]}
                         forgedAgent={null}
-                        onSocialize={() => handleSocialize(shell.id)}
+                        onObserve={() => handleObserve(shell.id)}
                       />
-                  </motion.div>
-              ))
+                  ))}
+              </motion.div>
           )}
         </AnimatePresence>
       </div>
@@ -288,7 +327,7 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
 };
 
 // ------------------------------------------------------------------
-// SUB-COMPONENT: CARD (Extracted for cleaner render loop)
+// SUB-COMPONENT: CARD (Updated for Dual Modes)
 // ------------------------------------------------------------------
 interface CardProps {
     shell: EnigmaIdentity;
@@ -296,24 +335,26 @@ interface CardProps {
     phase: string;
     logs: string[];
     forgedAgent: { name: string } | null;
-    onSocialize?: () => void;
+    onObserve?: () => void;
+    onForge?: () => void;
     onDisconnect?: () => void;
 }
 
-const Card: React.FC<CardProps> = ({ shell, isSelected, phase, logs, forgedAgent, onSocialize, onDisconnect }) => {
+const Card: React.FC<CardProps> = ({ shell, isSelected, phase, logs, forgedAgent, onObserve, onForge, onDisconnect }) => {
     return (
         <motion.div
-            layoutId={`card-${shell.id}`}
+            layoutId={isSelected ? `card-${shell.id}` : undefined} // Only animate layout on expansion? Or keep distinct?
+            // Better to keep distinct to avoid layoutId conflicts during "slide out / slide in" logic
             className={`
-                relative bg-vintage-navy/40 border border-white/10 backdrop-blur-md overflow-hidden
-                ${isSelected ? 'w-[600px] h-[500px] z-50' : 'w-72 h-96 hover:border-electric-blue/50 cursor-pointer'}
+                relative bg-vintage-navy/40 border border-white/10 backdrop-blur-md overflow-hidden transition-all duration-300
+                ${isSelected ? 'w-[600px] h-[500px] shadow-2xl shadow-electric-blue/20' : 'w-72 h-96 hover:border-electric-blue/50 hover:scale-105 cursor-pointer'}
             `}
             style={{
                 clipPath: isSelected
                 ? 'polygon(0 0, 100% 0, 100% 90%, 95% 100%, 0 100%)'
                 : 'polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%)'
             }}
-            onClick={() => !isSelected && onSocialize && onSocialize()}
+            onClick={() => !isSelected && onObserve && onObserve()}
         >
             {/* CARD CONTENT */}
             <div className="p-6 flex flex-col h-full relative">
@@ -322,9 +363,9 @@ const Card: React.FC<CardProps> = ({ shell, isSelected, phase, logs, forgedAgent
 
                 {/* HEADER */}
                 <div className="flex justify-between items-start mb-4">
-                <motion.div layoutId={`title-${shell.id}`} className="font-monumental text-2xl text-white">
-                    {isSelected && forgedAgent ? forgedAgent.name : "???"}
-                </motion.div>
+                <div className="font-monumental text-2xl text-white">
+                    {isSelected && forgedAgent ? forgedAgent.name : shell.tempAlias}
+                </div>
                 <div className="flex items-center gap-2">
                         {isSelected && phase === 'contact' ? (
                             <span className="text-electric-blue animate-pulse font-technical tracking-widest">LIVE SIGNAL</span>
@@ -341,14 +382,9 @@ const Card: React.FC<CardProps> = ({ shell, isSelected, phase, logs, forgedAgent
 
                 {/* IDLE STATE */}
                 {(!isSelected || phase === 'approach') && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="text-white/20 font-technical text-6xl tracking-widest opacity-20"
-                    >
+                    <div className="text-white/20 font-technical text-6xl tracking-widest opacity-20">
                         ENIGMA
-                    </motion.div>
+                    </div>
                 )}
 
                 {/* SCAN PHASE */}
@@ -425,21 +461,45 @@ const Card: React.FC<CardProps> = ({ shell, isSelected, phase, logs, forgedAgent
                 </div>
 
                 {/* ACTIONS */}
-                <div className="mt-6 flex justify-end">
+                <div className="mt-6 flex justify-end w-full">
                 {!isSelected ? (
-                        <button className="kizuna-shard-btn-wrapper group">
-                            <div className="kizuna-shard-btn-inner text-xs py-2 px-6 group-hover:bg-electric-blue group-hover:text-black transition-colors">
-                                <Radio size={14} /> SOCIALIZE
+                        // CAROUSEL MODE BUTTON: OBSERVE
+                        <button className="kizuna-shard-btn-wrapper group w-full">
+                            <div className="kizuna-shard-btn-inner text-xs py-2 px-6 group-hover:bg-electric-blue group-hover:text-black transition-colors flex items-center justify-center gap-2">
+                                <Eye size={14} /> [ OBSERVAR ]
                             </div>
                         </button>
-                ) : phase === 'contact' && (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onDisconnect && onDisconnect(); }}
-                        className="bg-alert-red/10 border border-alert-red text-alert-red hover:bg-alert-red hover:text-white transition-all px-6 py-3 font-monumental text-sm tracking-widest flex items-center gap-2"
-                        style={{ clipPath: 'polygon(10% 0, 100% 0, 100% 80%, 90% 100%, 0 100%, 0 20%)' }}
-                    >
-                        <X size={16} /> TERMINATE LINK
-                    </button>
+                ) : (
+                    // FOCUS MODE ACTIONS
+                    <>
+                        {phase === 'approach' && (
+                            <div className="flex gap-4 w-full">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onDisconnect && onDisconnect(); }} // Back to Alley
+                                    className="flex-1 border border-white/20 text-white/50 hover:text-white hover:border-white transition-all py-3 font-technical tracking-widest text-xs"
+                                >
+                                    [ ABORTAR ]
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onForge && onForge(); }}
+                                    className="flex-[2] bg-electric-blue text-black font-monumental tracking-widest text-sm hover:bg-white hover:scale-105 transition-all shadow-[0_0_20px_rgba(0,209,255,0.4)]"
+                                    style={{ clipPath: 'polygon(10% 0, 100% 0, 100% 80%, 90% 100%, 0 100%, 0 20%)' }}
+                                >
+                                    [ FORJAR VÍNCULO ]
+                                </button>
+                            </div>
+                        )}
+
+                        {phase === 'contact' && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onDisconnect && onDisconnect(); }}
+                                className="bg-alert-red/10 border border-alert-red text-alert-red hover:bg-alert-red hover:text-white transition-all px-6 py-3 font-monumental text-sm tracking-widest flex items-center gap-2 w-full justify-center"
+                                style={{ clipPath: 'polygon(10% 0, 100% 0, 100% 80%, 90% 100%, 0 100%, 0 20%)' }}
+                            >
+                                <X size={16} /> TERMINATE LINK
+                            </button>
+                        )}
+                    </>
                 )}
                 </div>
 
