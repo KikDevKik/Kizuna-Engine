@@ -1,5 +1,12 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
+import json
+import sys
+import os
+
+# Ensure backend is in path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from app.services.agent_service import AgentService, HollowAgentProfile, GeneratedMemory
 from app.models.graph import AgentNode, MemoryEpisodeNode
 
@@ -9,18 +16,19 @@ async def test_forge_hollow_agent():
     mock_client = MagicMock()
     mock_response = MagicMock()
 
-    # Mock the parsed response (HollowAgentProfile)
-    mock_profile = HollowAgentProfile(
-        name="Test Stranger",
-        backstory="A test backstory.",
-        traits={"brave": "true"},
-        voice_name="Aoede",
-        false_memories=[
-            GeneratedMemory(summary="Memory 1", emotional_valence=-0.5),
-            GeneratedMemory(summary="Memory 2", emotional_valence=0.8)
+    # Create profile data matching new schema
+    profile_data = {
+        "name": "Test Stranger",
+        "backstory": "A test backstory.",
+        "traits": {"brave": "true"},
+        "voice_name": "Aoede",
+        "false_memories": [
+            {"memory_text": "Memory 1", "importance": 0.5},
+            {"memory_text": "Memory 2", "importance": 0.8}
         ]
-    )
-    mock_response.parsed = mock_profile
+    }
+
+    mock_response.text = json.dumps(profile_data)
 
     # Setup async generate_content
     mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
@@ -39,18 +47,17 @@ async def test_forge_hollow_agent():
     assert agent.voice_name == "Aoede"
     assert len(memories) == 2
     assert memories[0].summary == "Memory 1"
-    assert memories[0].emotional_valence == -0.5
+    assert memories[0].emotional_valence == 0.5
 
     # Verify Gemini call
     mock_client.aio.models.generate_content.assert_called_once()
     args, kwargs = mock_client.aio.models.generate_content.call_args
-    # Check if passed as arg or kwarg
-    prompt_content = kwargs.get('contents')
-    if not prompt_content and args:
-        # Check args if kwargs failed
-        # Arg 0 is model, Arg 1 is contents
-        if len(args) > 1:
-            prompt_content = args[1]
 
-    assert prompt_content is not None
-    assert "Cyberpunk ninja" in prompt_content
+    contents = kwargs.get('contents')
+    # If not in kwargs, might be in args.
+    # generate_content(model, contents, config=...)
+    if not contents and len(args) > 1:
+        contents = args[1]
+
+    assert contents is not None
+    assert "Cyberpunk ninja" in str(contents)
