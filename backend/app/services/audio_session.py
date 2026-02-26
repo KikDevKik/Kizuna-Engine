@@ -444,8 +444,10 @@ async def receive_from_gemini(
                     raise e
                 else:
                     logger.error(f"Error in receive loop: {e}")
-                    # Don't re-raise, break to exit loop cleanly
-                    break
+                    # 🏰 BASTION PROTOCOL: Fail Fast.
+                    # If we encounter an unknown error, we MUST NOT swallow it with break.
+                    # We must raise it to trigger the TaskGroup cancellation.
+                    raise e
 
             logger.info("Gemini session.receive() iterator exhausted. Re-entering loop to listen for next turn...")
 

@@ -88,6 +88,10 @@ export class AudioStreamManager {
           echoCancellation: true,
           autoGainControl: true,
           noiseSuppression: true
+          // Additional constraints for robustness (optional but good practice)
+          // googEchoCancellation: true,
+          // googAutoGainControl: true,
+          // googNoiseSuppression: true,
         }
       });
 
