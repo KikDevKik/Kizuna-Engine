@@ -101,6 +101,25 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
 
         episode_context = "--- RECENT CONVERSATION HISTORY (VERBATIM) ---\n" + "\n\n".join(lines)
 
+    # 5.5. Fetch Agent's Personal History (False Memories / Lore)
+    # FORGEMASTER UPDATE: Inject the agent's own memories (where they are the 'user' of their own life)
+    personal_history_context = ""
+    agent_memories = await repository.get_recent_episodes(agent_id, limit=5)
+    if agent_memories:
+        lines = []
+        for ep in agent_memories:
+            # We filter for memories where the agent is the experiencer (user_id=agent_id)
+            # Since get_recent_episodes(agent_id) returns exactly that, we just format them.
+            if ep.summary:
+                lines.append(f"- {ep.summary}")
+
+        if lines:
+            personal_history_context = (
+                "--- PERSONAL HISTORY (FALSE MEMORIES) ---\n"
+                "You have these specific memories from your past. They are NOT shared with the user; they are your private backstory.\n"
+                + "\n".join(lines) + "\n"
+            )
+
     # 6. Fetch Background Reality (Time-Skip Events)
     background_context = ""
     # ARCHITECT UPDATE: Strictly filtered narrative injection (only events the agent participated in)
@@ -188,6 +207,7 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         f"--- PSYCHOLOGICAL STATE ---\n"
         f"{social_battery_context}\n\n"
         f"{dream_context}\n\n"
+        f"{personal_history_context}\n\n"
         f"{background_context}\n\n"
         f"{episode_context}\n\n"
         f"{multi_agent_context}\n\n"

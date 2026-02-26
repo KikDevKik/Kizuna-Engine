@@ -47,6 +47,9 @@ class CreateAgentRequest(BaseModel):
                 raise ValueError('Trait value must be less than 200 characters')
         return v
 
+class HollowForgeRequest(BaseModel):
+    aesthetic_description: str = Field(..., min_length=10, max_length=1000, description="A description of the agent's vibe, appearance, or theme.")
+
 class RitualFlowResponse(BaseModel):
     is_complete: bool
     message: Optional[str] = None
@@ -83,6 +86,55 @@ async def create_agent(request: CreateAgentRequest):
     except Exception as e:
         logger.exception(f"Error creating agent '{request.name}'")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+@router.post("/forge_hollow", response_model=AgentNode, status_code=status.HTTP_201_CREATED)
+async def forge_hollow_agent(
+    request: HollowForgeRequest,
+    repository: SoulRepository = Depends(get_repository)
+):
+    """
+    Forges a procedural 'Stranger' agent using Gemini (Hollow Forging Protocol).
+    Generates a full profile, voice, and false memories based on an aesthetic description.
+    """
+    try:
+        # 1. Forge the Soul (Generate Content)
+        agent_node, memories = await agent_service.forge_hollow_agent(request.aesthetic_description)
+
+        # 2. Bind the Soul to Matter (Save File)
+        saved_agent = await agent_service.create_agent(
+            name=agent_node.name,
+            role=agent_node.role,
+            base_instruction=agent_node.base_instruction,
+            voice_name=agent_node.voice_name,
+            traits=agent_node.traits,
+            tags=agent_node.tags,
+            native_language=agent_node.native_language,
+            known_languages=agent_node.known_languages
+        )
+
+        # 3. Sync with Graph Database (In-Memory)
+        if hasattr(repository, 'create_agent'):
+            await repository.create_agent(saved_agent)
+
+        # 4. Inject False Memories (The Past)
+        for mem in memories:
+            # We use saved_agent.id as both user and agent to denote "Self-Memory"
+            # This creates an 'ExperiencedEdge' from Agent -> Episode
+            await repository.save_episode(
+                user_id=saved_agent.id,
+                agent_id=saved_agent.id,
+                summary=mem.summary,
+                valence=mem.emotional_valence
+            )
+
+        logger.info(f"Hollow Forging Complete: {saved_agent.name} ({saved_agent.id}) with {len(memories)} memories.")
+        return saved_agent
+
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.exception(f"Error forging hollow agent")
+        raise HTTPException(status_code=500, detail="Soul Forge Malfunction")
 
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_agent(agent_id: str):
