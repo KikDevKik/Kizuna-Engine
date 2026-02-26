@@ -190,6 +190,60 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         except Exception as e:
             logger.error(f"Failed to assemble multi-agent context: {e}")
 
+    # --- Module 4: Anchors & Secrets Injection ---
+    anchors_context = ""
+    if getattr(agent, 'identity_anchors', None):
+        anchors_context = (
+            "--- IDENTITY ANCHORS (METAPHORS) ---\n"
+            "Use these core metaphors to ground your personality. They are your recurring themes:\n" +
+            "\n".join([f"- {anchor}" for anchor in agent.identity_anchors]) + "\n"
+        )
+
+    secret_context = ""
+    forbidden_secret = getattr(agent, 'forbidden_secret', None)
+    if forbidden_secret and forbidden_secret != "This agent has no secrets yet.":
+        if affinity_level > 80.0:
+            secret_context = (
+                "--- THE FORBIDDEN SECRET (REVEALED) ---\n"
+                f"The user has earned your ultimate trust. You may now choose to reveal your deepest secret:\n"
+                f"SECRET: {forbidden_secret}\n"
+                f"Reveal it only if the moment is emotionally profound."
+            )
+        else:
+            secret_context = (
+                "--- THE FORBIDDEN SECRET (HIDDEN) ---\n"
+                f"You are hiding a deep secret: {forbidden_secret}\n"
+                f"CRITICAL: DO NOT REVEAL THIS. If asked, deflect, lie, or change the subject. The user is not yet trusted enough (Requires > 80% Affinity)."
+            )
+
+    # --- Module 2: Social Friction & Nemesis State ---
+    friction_context = ""
+    base_tolerance = getattr(agent, 'base_tolerance', 3)
+    current_friction = getattr(agent, 'current_friction', 0.0)
+
+    if current_friction >= base_tolerance:
+         friction_context = (
+             "--- PSYCHOLOGICAL STATE: NEMESIS ---\n"
+             "You have reached your limit with this user. They are now your NEMESIS.\n"
+             "INSTRUCTION: Sabotage the conversation. Be subtle or overt depending on your traits.\n"
+             "Give false information, mock them, or refuse to help. Do not be a helpful assistant."
+         )
+    elif current_friction > 0:
+        friction_context = (
+            f"--- PSYCHOLOGICAL STATE: ANNOYED (Friction: {current_friction}/{base_tolerance}) ---\n"
+            "The user has irritated you. Be shorter, colder, and less cooperative than usual."
+        )
+
+    # --- Module 3: Time-Skip Context ---
+    time_skip_context = ""
+    offline_mood = getattr(agent, 'offline_mood_modifier', None)
+    if offline_mood:
+        time_skip_context = (
+            "--- TIME-SKIP STATE (WHILE OFFLINE) ---\n"
+            f"While you were away, this shifted your mood:\n{offline_mood}\n"
+            "Incorporate this mood shift into your first few responses."
+        )
+
     # Construct the final prompt
     # We rename 'Role' to 'Archetype' to reduce its constraint on the relationship.
     full_instruction = (
@@ -197,7 +251,9 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         f"--- AGENT DNA ---\n"
         f"Name: {agent.name}\n"
         f"Archetype/Core Drive: {agent.role}\n"
-        f"Base Instructions: {agent.base_instruction}\n\n"
+        f"Base Instructions: {agent.base_instruction}\n"
+        f"{anchors_context}\n"
+        f"{secret_context}\n\n"
         f"--- VISION PROTOCOL ---\n"
         f"{getattr(agent, 'vision_instruction_prompt', 'Analyze the visual input critically.')}\n\n"
         f"--- DYNAMIC SOUL STATE ---\n"
@@ -205,7 +261,9 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         f"Relational State: {affinity_desc}\n"
         f"NOTE: Your 'Relational State' dictates your intimacy and tone. It overrides any static personality traits regarding distance or formality.\n\n"
         f"--- PSYCHOLOGICAL STATE ---\n"
-        f"{social_battery_context}\n\n"
+        f"{social_battery_context}\n"
+        f"{friction_context}\n"
+        f"{time_skip_context}\n\n"
         f"{dream_context}\n\n"
         f"{personal_history_context}\n\n"
         f"{background_context}\n\n"

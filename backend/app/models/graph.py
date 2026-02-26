@@ -51,6 +51,17 @@ class AgentNode(BaseModel, JSONLDMixin):
     drain_rate: float = 1.0 # Multiplier (e.g., Introvert=1.5, Extrovert=0.8)
     emotional_decay_rate: float = 0.1 # Multiplier for Ebbinghaus Decay
 
+    # Module 2: Social Friction & Nemesis State
+    base_tolerance: int = 3 # 1-5 (5 = Stoic, 1 = Volatile)
+    current_friction: float = 0.0 # Starts 0. Increases on negative interaction.
+
+    # Module 3: Generative Time-Skip
+    offline_mood_modifier: Optional[str] = None # Stores "Battery: 50%, Tone: Melancholic"
+
+    # Module 4: Anchors & Secrets
+    identity_anchors: List[str] = Field(default_factory=list) # 3 Core Metaphors
+    forbidden_secret: str = "This agent has no secrets yet." # Revealed at Affinity > 80
+
     # Dynamic Prompts (Zero Hardcoding)
     memory_extraction_prompt: str = "Analyze the user's emotional state AND visual context from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return nothing."
     dream_prompt: str = "Synthesize these memories into a surreal dream concept. Return JSON with keys: theme (str), intensity (0.0-1.0), surrealism_level (0.0-1.0).\n\nCRITICAL: You MUST retain all specific proper nouns, technical terms, names of songs, media, or projects mentioned by the user. Never generalize specific entities. Act as a precise archivist.\n\nMemories:\n{summary_text}"

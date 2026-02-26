@@ -717,3 +717,27 @@ class LocalSoulRepository(SoulRepository):
 
     async def import_from_json_ld(self, data: Dict[str, Any]) -> None:
         pass # Migration handles this.
+
+    # --- Module 2: Social Friction ---
+
+    async def update_agent_friction(self, agent_id: str, delta: float) -> Optional[AgentNode]:
+        """
+        Updates the agent's current_friction score.
+        delta: can be positive (increase friction) or negative (decrease/heal).
+        Returns the updated AgentNode.
+        """
+        async with AsyncSessionLocal() as session:
+            async with session.begin():
+                stmt = select(NodeModel).where(NodeModel.id == agent_id)
+                result = await session.execute(stmt)
+                existing = result.scalar_one_or_none()
+
+                if existing:
+                    data = dict(existing.data)
+                    current = data.get('current_friction', 0.0)
+                    new_val = max(0.0, current + delta)
+                    data['current_friction'] = new_val
+                    existing.data = data
+                    existing.updated_at = datetime.utcnow()
+                    return AgentNode(**data)
+        return None
