@@ -765,6 +765,36 @@ class LocalSoulRepository(SoulRepository):
                 results.append(edge)
             return results
 
+    async def record_interaction(self, user_id: str, agent_id: str) -> None:
+        """
+        Records a discrete interaction (e.g., Session Start) between User and Agent.
+        Creates or updates the 'InteractedWith' edge.
+        This edge serves as the 'First Contact' bridge for the Roster.
+        """
+        async with self.lock:
+            found_edge = None
+            for edge in self.graph_edges:
+                if edge.type == "interactedWith" and edge.source_id == user_id and edge.target_id == agent_id:
+                    found_edge = edge
+                    break
+
+            if found_edge:
+                # Update existing edge
+                found_edge.timestamp = datetime.now()
+                current_count = found_edge.properties.get("interaction_count", 0)
+                found_edge.properties["interaction_count"] = current_count + 1
+            else:
+                # Create new edge (First Contact)
+                new_edge = InteractedWith(
+                    source_id=user_id,
+                    target_id=agent_id,
+                    timestamp=datetime.now(),
+                    properties={"interaction_count": 1}
+                )
+                self.graph_edges.append(new_edge)
+
+            await self._save()
+
     async def get_active_peers(self, user_id: str, time_window_minutes: int = 15) -> List[AgentNode]:
         """
         Finds agents who have interacted with the user or participated in events with the user
