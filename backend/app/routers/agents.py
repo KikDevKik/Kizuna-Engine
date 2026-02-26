@@ -266,15 +266,49 @@ async def forge_hollow_agent(
         raise HTTPException(status_code=500, detail="Soul Forge Malfunction")
 
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_agent(agent_id: str):
+async def delete_agent(
+    agent_id: str,
+    repository: SoulRepository = Depends(get_repository)
+):
     """
     Delete an agent by ID.
+    HOLLOW PRESERVATION RULE: Cannot delete agents with 'Gossip_Source' edges or 'gossip' tag.
     """
     try:
+        # 1. Fetch Agent (Cache/File)
+        agent = await agent_service.get_agent(agent_id)
+        if not agent:
+             raise HTTPException(status_code=404, detail="Agent not found")
+
+        # 2. Check for Hollow Preservation (Tags)
+        if "hollow" in agent.tags or "gossip" in agent.tags:
+             logger.warning(f"🛡️ Hollow Preservation: Blocked deletion of {agent.name} (Tags: {agent.tags})")
+             raise HTTPException(status_code=403, detail="Hollow Preservation: This agent is protected by the Gossip Protocol.")
+
+        # 3. Check for Hollow Preservation (Graph Edges)
+        if hasattr(repository, 'get_edges'):
+            # Check if this agent is the TARGET of a Gossip_Source edge (meaning it was spawned by gossip)
+            # OR if it is the SOURCE (meaning it spawned someone, less critical but potentially important)
+            # The rule is: "Any Agent node with a Gossip_Source edge... is strictly EXEMPT"
+
+            # Check Incoming Gossip (Spawned by someone)
+            incoming = await repository.get_edges(target_id=agent_id, type="Gossip_Source")
+            if incoming:
+                logger.warning(f"🛡️ Hollow Preservation: Blocked deletion of {agent.name} (Incoming Gossip Edge)")
+                raise HTTPException(status_code=403, detail="Hollow Preservation: This agent is a node in a Gossip Chain.")
+
+            # Check Outgoing Gossip (Spawned someone)
+            outgoing = await repository.get_edges(source_id=agent_id, type="Gossip_Source")
+            if outgoing:
+                 logger.warning(f"🛡️ Hollow Preservation: Blocked deletion of {agent.name} (Outgoing Gossip Edge)")
+                 raise HTTPException(status_code=403, detail="Hollow Preservation: This agent is a source of active rumors.")
+
+        # 4. Proceed with Deletion
         success = await agent_service.delete_agent(agent_id)
         if not success:
-            raise HTTPException(status_code=404, detail="Agent not found")
+            raise HTTPException(status_code=404, detail="Agent not found during deletion")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     except HTTPException:
         raise
     except Exception as e:

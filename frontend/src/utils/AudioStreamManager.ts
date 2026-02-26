@@ -15,6 +15,9 @@ export class AudioStreamManager {
   private streamDestination: MediaStreamAudioDestinationNode | null = null;
   private hiddenAudioElement: HTMLAudioElement | null = null;
 
+  // Track active sources for barge-in cancellation
+  private activeSources: AudioBufferSourceNode[] = [];
+
   private volumeRef: MutableRefObject<number>;
   private onAudioInput: (data: ArrayBuffer) => void;
 
@@ -159,6 +162,12 @@ export class AudioStreamManager {
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
 
+    // Track source for cancellation
+    source.onended = () => {
+        this.activeSources = this.activeSources.filter(s => s !== source);
+    };
+    this.activeSources.push(source);
+
     // AEC Audio Tag Hack: Route to stream destination instead of context.destination
     if (this.streamDestination) {
         source.connect(this.streamDestination);
@@ -198,7 +207,32 @@ export class AudioStreamManager {
     this.nextStartTime = startTime + (buffer.duration / playbackRate);
   }
 
+  /**
+   * Sovereign Voice Protocol: Immediate Silence
+   * Flushes all pending audio buffers and resets the timeline.
+   */
+  flush() {
+      if (!this.ctx) return;
+      console.log("🔇 Sovereign Voice: Flushing Audio Buffer...");
+
+      // 1. Stop all active sources
+      this.activeSources.forEach(source => {
+          try {
+              source.stop();
+              source.disconnect();
+          } catch (e) {
+              // Ignore already stopped errors
+          }
+      });
+      this.activeSources = [];
+
+      // 2. Reset timeline to now
+      this.nextStartTime = this.ctx.currentTime;
+  }
+
   cleanup() {
+    this.flush();
+
     if (this.animationFrame) {
       cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
