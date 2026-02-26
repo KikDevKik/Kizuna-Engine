@@ -38,6 +38,10 @@ class Settings:
     # In Development: Forces Flash to avoid 429 errors.
     _MODEL_DREAM_PROD: list[str] = json.loads(os.getenv("MODEL_DREAM", '["gemini-3.0-pro-exp", "gemini-3-flash-preview", "gemini-2.5-flash"]'))
 
+    # 4. Soul Forge (Hollow Forging - Agent Generation)
+    # Always Flash 2.5 for low latency and structured output reliability.
+    MODEL_FORGE: str = os.getenv("MODEL_FORGE", "gemini-2.5-flash")
+
     @property
     def MODEL_DREAM(self) -> list[str]:
         if self.ENVIRONMENT == "development":

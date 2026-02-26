@@ -3,21 +3,49 @@ import logging
 import aiofiles
 import aiofiles.os
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from uuid import uuid4
+from pydantic import BaseModel, Field
 
-from ..models.graph import AgentNode
+from ..models.graph import AgentNode, MemoryEpisodeNode
+from core.config import settings
 from .cache import cache
+
+# Try importing Google GenAI SDK
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
 
 logger = logging.getLogger(__name__)
 
 # Define the path relative to the project root or use an environment variable
 AGENTS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "agents"
 
+# --- Structured Output Schema for Gemini ---
+
+class GeneratedMemory(BaseModel):
+    summary: str = Field(..., description="A specific event from the agent's past.")
+    emotional_valence: float = Field(..., description="Emotional impact (-1.0 to 1.0).")
+
+class HollowAgentProfile(BaseModel):
+    name: str = Field(..., description="The name of the agent.")
+    backstory: str = Field(..., description="A rich backstory explaining their presence in District Zero.")
+    traits: dict = Field(..., description="Personality traits (key-value pairs).")
+    voice_name: str = Field(..., description="Selected voice from: Aoede, Kore, Puck, Charon, Fenrir.")
+    false_memories: List[GeneratedMemory] = Field(..., description="2-3 distinct memories from their past.")
+
 class AgentService:
     def __init__(self, data_dir: Path = AGENTS_DIR):
         self.data_dir = data_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
+
+        # Initialize Gemini Client if key exists
+        self.client = None
+        if genai and settings.GEMINI_API_KEY:
+            self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
     def _get_safe_path(self, agent_id: str) -> Optional[Path]:
         """
@@ -165,6 +193,71 @@ class AgentService:
             except Exception as e:
                 logger.error(f"Failed to warm up agent {file_path}: {e}")
         logger.info(f"🔥 Neural Sync Complete: {count} agents cached.")
+
+    async def forge_hollow_agent(self, aesthetic_description: str) -> Tuple[AgentNode, List[MemoryEpisodeNode]]:
+        """
+        Forges a new 'Hollow' agent using Gemini 2.5 Flash based on an aesthetic description.
+        Returns the AgentNode and a list of MemoryEpisodeNodes (False Memories).
+        """
+        if not self.client:
+            raise ValueError("Gemini Client not initialized. Check GEMINI_API_KEY.")
+
+        prompt = (
+            f"You are the Soul Forge. Your task is to create a procedural 'Stranger' agent for the Kizuna Engine simulation.\n"
+            f"The user has provided this aesthetic description: '{aesthetic_description}'\n\n"
+            f"Generate a full psychological profile, including:\n"
+            f"1. A fitting Name.\n"
+            f"2. A Semantic Backstory (Base Instruction) that explains why they are in District Zero. They must be a STRANGER to the user.\n"
+            f"3. Personality Traits (key-value).\n"
+            f"4. Voice Selection: Choose the best voice from [Aoede, Kore, Puck, Charon, Fenrir] based on the vibe.\n"
+            f"5. False Memories: Create 2-3 specific, vivid memories from their past (NOT involving the user). "
+            f"These give them depth (e.g., 'Escaped a corp raid', 'Lost a bet').\n\n"
+            f"Output must be valid JSON matching the schema."
+        )
+
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=settings.MODEL_FORGE,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=HollowAgentProfile
+                )
+            )
+
+            if not response.parsed:
+                raise ValueError("Failed to parse structured output from Soul Forge.")
+
+            profile: HollowAgentProfile = response.parsed
+
+            # Create AgentNode
+            # We treat 'backstory' as 'base_instruction'
+            new_agent = AgentNode(
+                name=profile.name,
+                role="Stranger", # Default role for forged hollows
+                base_instruction=profile.backstory,
+                voice_name=profile.voice_name,
+                traits=profile.traits,
+                tags=["hollow-forged", "stranger"],
+                native_language="Unknown", # Can be inferred later or added to schema if needed
+                known_languages=[]
+            )
+
+            # Create MemoryEpisodeNodes
+            memories = []
+            for mem in profile.false_memories:
+                episode = MemoryEpisodeNode(
+                    summary=mem.summary,
+                    emotional_valence=mem.emotional_valence,
+                    raw_transcript=None # No transcript for false memories
+                )
+                memories.append(episode)
+
+            return new_agent, memories
+
+        except Exception as e:
+            logger.error(f"Soul Forge failed: {e}")
+            raise
 
 # Singleton instance
 agent_service = AgentService()
