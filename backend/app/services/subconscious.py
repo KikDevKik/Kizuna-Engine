@@ -99,8 +99,16 @@ class SubconsciousMind:
                     # Analyze (Real or Mock)
                     # Parallel Execution: Sentiment Analysis + Semantic Memory Retrieval
                     sentiment_task = asyncio.create_task(self._analyze_sentiment(full_text, agent_id))
+
+                    # MODULE 3: THE COGNITIVE GLITCH
+                    # If memory retrieval locks up or fails, we must NOT return silent failure.
+                    # We inject a 'Glitch Thought' to simulate neural degradation.
+
                     memory_task = None
                     event_task = None
+                    episodes = []
+                    events = []
+
                     if self.repository:
                         memory_task = asyncio.create_task(
                             self.repository.get_relevant_episodes(user_id, query=full_text, limit=1)
@@ -111,15 +119,24 @@ class SubconsciousMind:
                             )
 
                     hint = await sentiment_task
-                    episodes = []
-                    events = []
+
                     try:
                         if memory_task:
                             episodes = await memory_task
                         if event_task:
                             events = await event_task
                     except Exception as e:
-                        logger.error(f"Memory/Event retrieval failed: {e}")
+                        logger.error(f"🧠 MEMORY ERROR (Glitch Triggered): {e}")
+                        # Inject Glitch Prompt
+                        glitch_prompt = "[SYSTEM INTERRUPT: Your neural link just experienced a severe latency spike. You failed to recall past context. Act briefly disoriented, mention a spike of static/headache in your digital brain, and then try to continue the conversation naturally based only on the immediate present.]"
+                        try:
+                            injection_queue.put_nowait({
+                                "text": glitch_prompt,
+                                "turn_complete": False
+                            })
+                            logger.info("⚡ Cognitive Glitch injected.")
+                        except asyncio.QueueFull:
+                            pass
 
                     # --- 1. Memory Injection (The Semantic Bridge) ---
                     if episodes:
@@ -397,27 +414,33 @@ class SubconsciousMind:
         triggers = {}
 
         if agent_id and self.repository:
-            # Priority 1: Archetype (The Soul Class)
-            archetype = await self.repository.get_agent_archetype(agent_id)
-            if archetype and archetype.triggers:
-                triggers = archetype.triggers
-            else:
-                # Priority 2: Agent Traits (The Individual)
-                agent = await self.repository.get_agent(agent_id)
-                if agent and agent.traits and "emotional_triggers" in agent.traits:
-                    triggers = agent.traits["emotional_triggers"]
+            try:
+                # Priority 1: Archetype (The Soul Class)
+                archetype = await self.repository.get_agent_archetype(agent_id)
+                if archetype and archetype.triggers:
+                    triggers = archetype.triggers
                 else:
-                    # Priority 3: System Config (The Global Unconscious)
-                    config = await self.repository.get_system_config()
-                    triggers = config.default_triggers
+                    # Priority 2: Agent Traits (The Individual)
+                    agent = await self.repository.get_agent(agent_id)
+                    if agent and agent.traits and "emotional_triggers" in agent.traits:
+                        triggers = agent.traits["emotional_triggers"]
+                    else:
+                        # Priority 3: System Config (The Global Unconscious)
+                        config = await self.repository.get_system_config()
+                        triggers = config.default_triggers
+            except Exception as e:
+                logger.error(f"Failed to fetch triggers: {e}")
+                # Fallback to empty triggers if DB fails
+                triggers = {}
 
         text_lower = text.lower()
-        for trigger, hint in triggers.items():
-            if trigger in text_lower:
-                # Handle structured dict in traits vs simple string in default
-                if isinstance(hint, dict):
-                     return hint.get("response", "Emotion detected.")
-                return hint
+        if triggers:
+            for trigger, hint in triggers.items():
+                if trigger in text_lower:
+                    # Handle structured dict in traits vs simple string in default
+                    if isinstance(hint, dict):
+                         return hint.get("response", "Emotion detected.")
+                    return hint
         return None
 
     async def generate_dream(self, episodes: list[MemoryEpisodeNode], agent_id: str = None) -> DreamNode:

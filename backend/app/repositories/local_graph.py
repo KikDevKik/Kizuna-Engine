@@ -748,6 +748,7 @@ class LocalSoulRepository(SoulRepository):
         """
         Fetch agents that have a 'Nemesis' edge with the user.
         """
+        # Module 2: Relational Injection (World State)
         async with AsyncSessionLocal() as session:
             # Find Nemesis edges (user -> agent)
             stmt = select(NodeModel).join(

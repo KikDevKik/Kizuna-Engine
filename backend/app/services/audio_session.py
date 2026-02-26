@@ -39,30 +39,39 @@ async def send_injections_to_gemini(session, injection_queue: asyncio.Queue):
     """
     Task C: Subconscious -> Gemini
     Injects system hints (text) into the active session without ending the turn.
+    MODULE 1 (Harden): This loop MUST survive individual injection failures.
     """
     try:
         while True:
-            # Wait for a "hint" from the subconscious
-            hint_payload = await injection_queue.get()
+            try:
+                # Wait for a "hint" from the subconscious
+                hint_payload = await injection_queue.get()
 
-            text = hint_payload.get("text", "")
-            turn_complete = hint_payload.get("turn_complete", False)
+                text = hint_payload.get("text", "")
+                turn_complete = hint_payload.get("turn_complete", False)
 
-            if not text:
+                if not text:
+                    continue
+
+                logger.info(f"🤫 Whispering to Gemini: {text}")
+
+                # 🏰 BASTION: Reverting to string input. SDK is picky about dicts in Live Session.
+                # Prefixing with [SYSTEM] to ensure Gemini understands this is background context.
+                system_text = f"[SYSTEM_CONTEXT]: {text}"
+                await session.send(input=system_text, end_of_turn=turn_complete)
+
+            except asyncio.CancelledError:
+                raise # Propagate cancellation to exit the outer loop
+            except Exception as e:
+                # 🏰 BASTION SHIELD: Cognitive Glitch
+                # If an injection fails (SDK error, timeout), we log it but DO NOT kill the loop.
+                logger.error(f"⚠️ Injection failed (continuing): {e}")
                 continue
-
-            logger.info(f"🤫 Whispering to Gemini: {text}")
-
-            # 🏰 BASTION: Reverting to string input. SDK is picky about dicts in Live Session.
-            # Prefixing with [SYSTEM] to ensure Gemini understands this is background context.
-            system_text = f"[SYSTEM_CONTEXT]: {text}"
-            await session.send(input=system_text, end_of_turn=turn_complete)
 
     except asyncio.CancelledError:
         logger.info("Injection loop cancelled.")
     except Exception as e:
-        logger.error(f"Error injecting system hint: {e}")
-        # Don't crash, just log and continue/retry?
+        logger.error(f"CRITICAL: Injection loop died: {e}")
         pass
 
 
