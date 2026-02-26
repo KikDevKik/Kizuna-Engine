@@ -55,6 +55,12 @@ function App() {
     setViewMode('core');
   }, []);
 
+  const handleAgentForged = useCallback((agentId: string) => {
+    console.log(`Agent Forged: ${agentId}`);
+    setSelectedAgentId(agentId);
+    // Stay in District mode to see the Mock Session UI
+  }, []);
+
   const handleToggleConnection = () => {
     if (connected) {
       disconnect();
@@ -189,7 +195,11 @@ function App() {
               transition={{ duration: 0.5 }}
               className="w-full h-full flex items-center justify-center pointer-events-auto"
             >
-              <DistrictZero />
+              <DistrictZero
+                connect={connect}
+                disconnect={disconnect}
+                onAgentForged={handleAgentForged}
+              />
             </motion.div>
           ) : (
             <motion.div

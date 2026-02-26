@@ -68,10 +68,17 @@ const TerminalLog: React.FC<{ logs: string[] }> = ({ logs }) => {
 // ------------------------------------------------------------------
 // MAIN COMPONENT: DISTRICT ZERO
 // ------------------------------------------------------------------
-export const DistrictZero: React.FC = () => {
+interface DistrictZeroProps {
+  onAgentForged: (id: string) => void;
+  connect: (agentId: string) => Promise<void>;
+  disconnect: () => void;
+}
+
+export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, connect, disconnect }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [phase, setPhase] = useState<'idle' | 'approach' | 'scan' | 'contact'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'approach' | 'scan' | 'contact' | 'error'>('idle');
   const [logs, setLogs] = useState<string[]>([]);
+  const [forgedAgent, setForgedAgent] = useState<{ id: string; name: string } | null>(null);
 
   // ------------------------------------------------------------------
   // INTERACTION LOOP
@@ -79,12 +86,53 @@ export const DistrictZero: React.FC = () => {
   const handleSocialize = (id: string) => {
     setSelectedId(id);
     setPhase('approach');
+    setLogs([]);
+    setForgedAgent(null);
 
     // Sequence Choreography
     setTimeout(() => {
       setPhase('scan');
-      runScanSequence();
+      runScanSequence(); // Visuals Only
+      forgeTheSoul(id);  // API Call
     }, 800); // 0.8s Approach
+  };
+
+  const forgeTheSoul = async (shellId: string) => {
+    try {
+      const shell = ENIGMA_DATA.find(e => e.id === shellId);
+      if (!shell) throw new Error("Shell not found");
+
+      // 1. Call the Forge
+      const response = await fetch('/api/agents/forge_hollow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aesthetic_description: shell.description })
+      });
+
+      if (!response.ok) throw new Error("Forge failed");
+
+      const data = await response.json();
+
+      // 2. Transition (Phase C)
+      // We wait a bit if the API was too fast to let the animation breathe?
+      // Nah, instant gratification is better for "Success".
+
+      setForgedAgent({ id: data.id, name: data.name });
+      onAgentForged(data.id); // Update App State
+
+      // 3. Ignite WebSocket
+      await connect(data.id);
+
+      setPhase('contact');
+
+    } catch (err) {
+      console.error("Forging Protocol Failed:", err);
+      // Silent Grace
+      setPhase('error');
+      setTimeout(() => {
+        handleDisconnect();
+      }, 2500);
+    }
   };
 
   const runScanSequence = () => {
@@ -93,27 +141,31 @@ export const DistrictZero: React.FC = () => {
       { text: "> INTERCEPTING FREQUENCY...", delay: 800 },
       { text: "> DECRYPTING BIO-SIGNATURE...", delay: 1500 },
       { text: "> [FORJANDO ALMA... ESTABLECIENDO VÍNCULO NEURONAL]", delay: 2200 },
-      { text: "> LINK ESTABLISHED.", delay: 3200 }
+      // Removed automatic transition to 'contact' here, controlled by forgeTheSoul
     ];
 
     setLogs([]); // Reset
 
-    sequence.forEach((step, index) => {
+    sequence.forEach((step) => {
       setTimeout(() => {
-        setLogs(prev => [...prev, step.text]);
-        if (index === sequence.length - 1) {
-          // Transition to Contact
-          setTimeout(() => setPhase('contact'), 500);
-        }
+        // Only update logs if we are still scanning (prevent leaks if error happened)
+        setPhase(current => {
+          if (current === 'scan') {
+             setLogs(prev => [...prev, step.text]);
+          }
+          return current;
+        });
       }, step.delay);
     });
   };
 
   const handleDisconnect = () => {
+    disconnect(); // Sever the WebSocket
     setPhase('idle');
     setTimeout(() => {
       setSelectedId(null);
       setLogs([]);
+      setForgedAgent(null);
     }, 500); // Wait for exit animation
   };
 
@@ -187,11 +239,13 @@ export const DistrictZero: React.FC = () => {
                   {/* HEADER */}
                   <div className="flex justify-between items-start mb-4">
                     <motion.div layoutId={`title-${shell.id}`} className="font-monumental text-2xl text-white">
-                      ???
+                      {isSelected && forgedAgent ? forgedAgent.name : "???"}
                     </motion.div>
                     <div className="flex items-center gap-2">
                          {isSelected && phase === 'contact' ? (
                              <span className="text-electric-blue animate-pulse font-technical tracking-widest">LIVE SIGNAL</span>
+                         ) : isSelected && phase === 'error' ? (
+                             <span className="text-alert-red font-technical tracking-widest">SIGNAL LOST</span>
                          ) : (
                              <Activity size={16} className="text-white/20" />
                          )}
@@ -199,7 +253,7 @@ export const DistrictZero: React.FC = () => {
                   </div>
 
                   {/* VISUALIZER / CONTENT AREA */}
-                  <div className="flex-1 relative flex items-center justify-center bg-abyssal-black/30 border border-white/5 mb-6 overflow-hidden">
+                  <div className={`flex-1 relative flex items-center justify-center bg-abyssal-black/30 border ${phase === 'error' ? 'border-alert-red/50' : 'border-white/5'} mb-6 overflow-hidden transition-colors duration-300`}>
 
                     {/* IDLE STATE */}
                     {(!isSelected || phase === 'approach') && (
@@ -224,6 +278,14 @@ export const DistrictZero: React.FC = () => {
                             <div className="glitch-text font-monumental text-electric-blue text-sm tracking-widest text-center px-4">
                                 [FORJANDO ALMA... <br/> ESTABLECIENDO VÍNCULO NEURONAL]
                             </div>
+                        </div>
+                    )}
+
+                    {/* ERROR PHASE */}
+                    {phase === 'error' && isSelected && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                             <div className="font-monumental text-alert-red text-2xl tracking-widest mb-2">CONNECTION FAILED</div>
+                             <div className="font-mono text-xs text-alert-red/70">NEURAL HANDSHAKE REJECTED</div>
                         </div>
                     )}
 
@@ -258,13 +320,18 @@ export const DistrictZero: React.FC = () => {
                       ) : isSelected && phase === 'contact' ? (
                           <div className="flex flex-col gap-2">
                               <div className="font-monumental text-electric-blue text-xl">
-                                  {shell.tempAlias}
+                                  {forgedAgent?.name || shell.tempAlias}
                               </div>
                               <div className="font-mono text-xs text-white/50">
                                   {'>'} Connection stable. <br/>
                                   {'>'} Audio channel open. <br/>
                                   {'>'} Waiting for input...
                               </div>
+                          </div>
+                      ) : isSelected && phase === 'error' ? (
+                          <div className="text-alert-red font-mono text-xs">
+                              {'>'} ERROR: 0xDEADDEAD <br/>
+                              {'>'} RETRYING IN 3s...
                           </div>
                       ) : (
                         <p className="font-narrative text-white/70 text-sm leading-relaxed">
