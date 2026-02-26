@@ -108,6 +108,13 @@ class SessionManager:
             f"WebSocket connection established from origin: {origin} for Agent: {agent_id}"
         )
 
+        # Phase 3.3: First Contact Protocol (Roster Update)
+        try:
+            if hasattr(self.soul_repo, "record_interaction"):
+                await self.soul_repo.record_interaction(user_id, agent_id)
+        except Exception as e:
+            logger.error(f"Failed to record interaction edge: {e}")
+
         # Master Session Logger: Global Transcript Accumulation
         session_transcript_buffer: list[str] = []
 
