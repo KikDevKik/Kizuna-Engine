@@ -157,3 +157,14 @@ class SoulRepository(ABC):
         Retrieves edges based on source, target, or type.
         """
         pass
+
+    # --- Evolution Phase 6.5: Module 2 (Social Friction) ---
+
+    @abstractmethod
+    async def update_agent_friction(self, agent_id: str, delta: float) -> Optional[AgentNode]:
+        """
+        Updates the agent's current_friction score.
+        delta: can be positive (increase friction) or negative (decrease/heal).
+        Returns the updated AgentNode.
+        """
+        pass

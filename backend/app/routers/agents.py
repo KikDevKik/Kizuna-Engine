@@ -3,11 +3,12 @@ from typing import List, Optional, Any
 from pydantic import BaseModel, Field, field_validator
 import logging
 
-from ..models.graph import AgentNode
+from ..models.graph import AgentNode, GraphEdge
 from ..repositories.base import SoulRepository
 from ..services.agent_service import AgentService
 from ..services.ritual_service import RitualService, RitualMessage
 from ..dependencies import get_current_user, get_repository
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,41 @@ async def forge_hollow_agent(
                 summary=mem.summary,
                 valence=mem.emotional_valence
             )
+
+        # 5. Module 5: The Gossip Protocol (Web Forging)
+        try:
+            # Query for existing agents (candidates)
+            # list_agents returns ALL agents.
+            all_agents = await agent_service.list_agents()
+            candidates = [a for a in all_agents if a.id != saved_agent.id]
+
+            if candidates:
+                # Pick ONE victim
+                target = random.choice(candidates)
+
+                # Pick ONE relation
+                relations = ["Knows", "OwesDebtTo", "FormerAlly", "Distrusts", "SecretlyAdmires"]
+                rel_type = random.choice(relations)
+
+                # Create the edge
+                # We use a generic GraphEdge with 'type' set to the relation
+                # Note: GraphEdge requires lowerCamelCase usually for ontological purity, but we use PascalCase for these display types
+                # Let's map to standardized predicates if strictness matters, but "Knows" is fine.
+                edge = GraphEdge(
+                    source_id=saved_agent.id,
+                    target_id=target.id,
+                    type="gossip_connection", # Use a specific type for query/filtering if needed, or generic 'relatedTo'
+                    properties={
+                        "relation": rel_type,
+                        "context": f"Procedurally generated connection: {saved_agent.name} {rel_type} {target.name}"
+                    }
+                )
+
+                if hasattr(repository, 'create_edge'):
+                    await repository.create_edge(edge)
+                    logger.info(f"🕸️ Gossip Protocol: Linked {saved_agent.name} -> {rel_type} -> {target.name}")
+        except Exception as e:
+            logger.error(f"Gossip Protocol failed: {e}")
 
         logger.info(f"Hollow Forging Complete: {saved_agent.name} ({saved_agent.id}) with {len(memories)} memories.")
         return saved_agent
