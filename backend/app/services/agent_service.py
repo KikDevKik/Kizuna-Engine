@@ -227,43 +227,43 @@ class AgentService:
         )
 
         try:
-            hollow_schema = types.Schema(
-                type=types.Type.OBJECT,
-                properties={
-                    "name": types.Schema(type=types.Type.STRING),
-                    "backstory": types.Schema(type=types.Type.STRING),
-                    "voice_name": types.Schema(
-                        type=types.Type.STRING,
-                        enum=["Aoede", "Kore", "Puck", "Charon", "Fenrir"]
-                    ),
-                    "traits": types.Schema(
-                        type=types.Type.OBJECT
-                    ),
-                    "base_tolerance": types.Schema(
-                        type=types.Type.INTEGER,
-                        description="1 to 5"
-                    ),
-                    "identity_anchors": types.Schema(
-                        type=types.Type.ARRAY,
-                        items=types.Schema(type=types.Type.STRING)
-                    ),
-                    "forbidden_secret": types.Schema(
-                        type=types.Type.STRING
-                    ),
-                    "false_memories": types.Schema(
-                        type=types.Type.ARRAY,
-                        items=types.Schema(
-                            type=types.Type.OBJECT,
-                            properties={
-                                "memory_text": types.Schema(type=types.Type.STRING),
-                                "importance": types.Schema(type=types.Type.NUMBER)
+            # Solution B: Native Dictionary Schema (Namespace Shadowing Resilience)
+            hollow_schema = {
+                "type": "OBJECT",
+                "properties": {
+                    "name": {"type": "STRING"},
+                    "backstory": {"type": "STRING"},
+                    "voice_name": {
+                        "type": "STRING",
+                        "enum": ["Aoede", "Kore", "Puck", "Charon", "Fenrir"]
+                    },
+                    "traits": {"type": "OBJECT"},
+                    "base_tolerance": {
+                        "type": "INTEGER",
+                        "description": "Social tolerance level (1 to 5)"
+                    },
+                    "identity_anchors": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"}
+                    },
+                    "forbidden_secret": {"type": "STRING"},
+                    "false_memories": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "memory_text": {"type": "STRING"},
+                                "importance": {"type": "NUMBER"}
                             },
-                            required=["memory_text", "importance"]
-                        )
-                    )
+                            "required": ["memory_text", "importance"]
+                        }
+                    }
                 },
-                required=["name", "backstory", "voice_name", "traits", "base_tolerance", "identity_anchors", "forbidden_secret", "false_memories"]
-            )
+                "required": [
+                    "name", "backstory", "voice_name", "traits", 
+                    "base_tolerance", "identity_anchors", "forbidden_secret", "false_memories"
+                ]
+            }
 
             response = await self.client.aio.models.generate_content(
                 model=settings.MODEL_FORGE,
