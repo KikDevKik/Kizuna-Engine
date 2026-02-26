@@ -216,19 +216,47 @@ class AgentService:
         )
 
         try:
+            # Manually construct the schema to avoid Pydantic $defs issues with google-genai SDK
+            schema = types.Schema(
+                type="OBJECT",
+                properties={
+                    "name": types.Schema(type="STRING", description="The name of the agent."),
+                    "backstory": types.Schema(type="STRING", description="A rich backstory explaining their presence in District Zero."),
+                    "traits": types.Schema(type="OBJECT", description="Personality traits (key-value pairs)."),
+                    "voice_name": types.Schema(
+                        type="STRING",
+                        enum=["Aoede", "Kore", "Puck", "Charon", "Fenrir"],
+                        description="Selected voice from: Aoede, Kore, Puck, Charon, Fenrir."
+                    ),
+                    "false_memories": types.Schema(
+                        type="ARRAY",
+                        items=types.Schema(
+                            type="OBJECT",
+                            properties={
+                                "summary": types.Schema(type="STRING", description="A specific event from the agent's past."),
+                                "emotional_valence": types.Schema(type="NUMBER", description="Emotional impact (-1.0 to 1.0).")
+                            },
+                            required=["summary", "emotional_valence"]
+                        ),
+                        description="2-3 distinct memories from their past."
+                    )
+                },
+                required=["name", "backstory", "traits", "voice_name", "false_memories"]
+            )
+
             response = await self.client.aio.models.generate_content(
                 model=settings.MODEL_FORGE,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
-                    response_schema=HollowAgentProfile
+                    response_schema=schema
                 )
             )
 
-            if not response.parsed:
-                raise ValueError("Failed to parse structured output from Soul Forge.")
+            if not response.text:
+                raise ValueError("Soul Forge returned empty response.")
 
-            profile: HollowAgentProfile = response.parsed
+            profile = HollowAgentProfile.model_validate_json(response.text)
 
             # Create AgentNode
             # We treat 'backstory' as 'base_instruction'
