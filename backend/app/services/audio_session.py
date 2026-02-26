@@ -86,8 +86,34 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
 
             if data:
                 # --- AUDIO FLOW ---
-                # Module 6: User Barge-in -> Interrupt Agent
-                await auction_service.interrupt()
+                # 🏰 BASTION: Energy Detection (Backend Noise Gate)
+                # We calculate RMS to ensure interrupt() only triggers on actual speech.
+                # data is bytes (Int16, 16kHz)
+                import math
+                import struct
+
+                # Calculate RMS (Root Mean Square) for energy estimation
+                # We sample 10% of the buffer for performance
+                count = len(data) // 2
+                if count > 0:
+                    sum_sq = 0
+                    # Unpack as signed 16-bit integers
+                    for i in range(0, len(data), 20): # Step by 10 samples (20 bytes)
+                        try:
+                            sample = struct.unpack_from('<h', data, i)[0]
+                            sum_sq += sample * sample
+                        except: break
+                    
+                    # Normalize RMS (range 0 to 32768)
+                    rms = math.sqrt(sum_sq / (count / 10)) if count > 0 else 0
+                    
+                    # Threshold: 500 is a safe bet for generic noise floor
+                    if rms > 500:
+                        # Module 6: User Barge-in -> Interrupt Agent
+                        await auction_service.interrupt()
+                    else:
+                        # logger.debug(f"🤫 Noise Suppressed (RMS: {rms:.1f})")
+                        pass
 
                 # Prepend carry_over from previous iteration
                 if carry_over:

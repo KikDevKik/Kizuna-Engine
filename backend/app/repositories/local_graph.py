@@ -787,3 +787,51 @@ class LocalSoulRepository(SoulRepository):
             result = await session.execute(stmt)
             nodes = result.scalars().all()
             return [AgentNode(**n.data) for n in nodes]
+
+    # --- Module 1.6: The Great Purge ---
+    async def purge_all_memories(self) -> bool:
+        """
+        Atomics wipe of all non-essential history: Memories, Dreams, and Edges.
+        Preserves Agent and User nodes but resets their state.
+        """
+        try:
+            async with AsyncSessionLocal() as session:
+                async with session.begin():
+                    # 1. Delete all Memory and Dream Nodes
+                    stmt_nodes = delete(NodeModel).where(
+                        NodeModel.label.in_(["MemoryEpisodeNode", "DreamNode", "CollectiveEventNode", "FactNode"])
+                    )
+                    await session.execute(stmt_nodes)
+
+                    # 2. Delete all interaction-based Edges
+                    # Preserve: EmbodiesEdge (Archetypes)
+                    stmt_edges = delete(EdgeModel).where(
+                        EdgeModel.type.in_([
+                            "ExperiencedEdge", "KnowsEdge", "ShadowEdge", 
+                            "interactedWith", "participatedIn", "occurredAt"
+                        ])
+                    )
+                    await session.execute(stmt_edges)
+
+                    # 3. Reset Agent States (Social Battery & Friction)
+                    stmt_agents = select(NodeModel).where(NodeModel.label == "AgentNode")
+                    result = await session.execute(stmt_agents)
+                    agents = result.scalars().all()
+                    for agent in agents:
+                        data = dict(agent.data)
+                        data['social_battery'] = 100.0
+                        data['current_friction'] = 0.0
+                        # Clear shared memories in resonance edges?
+                        # Since we deleted ResonanceEdge in logic above (implicit or explicit)
+                        # We should also reset resonance levels.
+                        agent.data = data
+
+                    # 4. Delete Resonance Edges to start affinity from zero
+                    stmt_resonance = delete(EdgeModel).where(EdgeModel.type == "ResonanceEdge")
+                    await session.execute(stmt_resonance)
+
+                logger.info("🔥 The Great Purge: Memories and history incinerated successfully.")
+                return True
+        except Exception as e:
+            logger.error(f"Failed to incinerate memories: {e}")
+            return False
