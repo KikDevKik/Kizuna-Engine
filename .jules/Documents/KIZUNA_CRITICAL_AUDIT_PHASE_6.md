@@ -29,37 +29,35 @@ Tras el análisis profundo del código, he detectado tres fallos de diseño masi
 
 ### 🐛 Problema 1: El "Watchdog" de Silencio es demasiado Paranoico (Deadlock Acústico)
 * **Dónde:** `auction_service.py` y `audio_session.py`
-* **El Fallo:** Creamos un "tiempo de gracia" de 500ms (`_user_priority_window`). Cada vez que envías un paquete de audio, el temporizador se reinicia. 
-* **La Realidad:** Tu micrófono no envía audio solo cuando hablas; envía "ruido de fondo" o "silencio digital" continuamente. Como el backend recibe paquetes constantemente, el sistema cree que **siempre estás hablando**. El agente intenta "pujar" por el micrófono, falla, activa el `turn_aborted = True` y descarta su respuesta entera. **El agente se está auto-censurando porque cree que nunca te callas.**
+* **El Fallo:** Creamos un "tiempo de gracia" de 500ms (`_user_priority_window`). Cada vez que envías un paquete de audio, el temporizador se reinicia. El agente se auto-censura porque cree que nunca te callas debido al ruido de fondo.
 
 ### 🐛 Problema 2: El "TaskGroup Zombie" (Silenciamiento de Errores)
 * **Dónde:** `audio_session.py` (línea 448 aprox).
-* **El Fallo:** En el bucle de recibir de Gemini, si ocurre un error genérico, pusimos un `break` en lugar de un `raise`.
-* **La Realidad:** Si Gemini tiene un micro-corte o falla, el bucle de "hablar" del agente se cierra, pero no avisa al `TaskGroup`. El resultado es una **Sesión Zombie**: tú puedes seguir hablando (Upstream funciona), la base de datos sigue guardando, pero el agente está lógicamente "muerto" en esa conexión. No hay error en consola porque le dijimos que muriera en silencio.
+* **El Fallo:** En el bucle de recibir de Gemini, si ocurre un error genérico, pusimos un `break` en lugar de un `raise`. La sesión muere silenciosamente.
 
 ### 🐛 Problema 3: Contención de Bloqueos en SQLite (Cuello de Botella)
 * **Dónde:** `local_graph.py` (Nuevo repositorio SQLite).
-* **El Fallo:** Cada vez que el agente drena su Batería Social, guarda una Memoria o actualiza la Fricción, abre un nuevo `AsyncSessionLocal`. 
-* **La Realidad:** Con la Subconsciencia y la Reflexión operando en tiempo real, estamos bombardeando el archivo `.db` con múltiples conexiones simultáneas. SQLite no maneja bien escrituras concurrentes pesadas (se bloquea). Esto puede paralizar el hilo de eventos de FastAPI, haciendo que el audio "tartamudee" o se congele.
+* **El Fallo:** Cada vez que el agente drena su Batería Social o guarda una Memoria, abre un nuevo `AsyncSessionLocal`. SQLite puede bloquearse bajo carga concurrente pesada.
 
 ---
 
 ## 4. PROPUESTAS DE SOLUCIÓN (EL PLAN DE BATALLA)
 
-Utilizaremos este mapa para atacar un problema a la vez, comprobando la estabilidad tras cada ataque.
+### FASE 4: La Fragilidad del TaskGroup y la Condición de Carrera
+* **Dónde:** `session_manager.py` (Orquestación) y `audio_session.py` (Bucle de Recepción).
+* **El Fallo:** Si una tarea cognitiva secundaria (Subconsciente) falla, el `TaskGroup` cancela el audio. Starlette lanza `RuntimeError: Cannot call "receive"...` al ser cancelado bruscamente.
+* **Solución:** Desacoplar tareas cognitivas del flujo vital de audio. Deben ser tareas independientes (`create_task`) con su propia gestión de errores.
 
-### FASE 1: Destruir el Deadlock Acústico (Prioridad Máxima)
-**Solución:** 
-1. **Filtro de Ruido en el Backend:** En `audio_session.py`, no llamar a `auction_service.interrupt()` por cada paquete de *bytes* vacío. Solo llamar a la interrupción si un VAD (Voice Activity Detector) real (como WebRTC VAD o un umbral de volumen) detecta que hay *voz*, no solo estática.
-2. **Alternativa Rápida:** Si el frontend ya tiene VAD (que solo envía audio cuando hablas), entonces el error es que la "Puja del Agente" es de 1.0, pero no le dimos un mecanismo para ganar si el usuario habla muy poco. Debemos relajar el `turn_aborted` para que **pause** y guarde el audio en un buffer en lugar de tirar toda la respuesta de la IA a la basura.
+### 🧠 FASE 5: El Colapso de la Inteligencia Social y Semántica
+* **Dónde:** `soul_assembler.py`, `embedding.py`, `local_graph.py`.
+* **El Fallo (Lobotomía Social):** El ensamblador de almas ignora el contexto relacional del grafo (Némesis globales, candidatos de Gossip). El agente no conoce el estado del mundo social.
+* **El Fallo (Amnesia Silenciosa):** El servicio de embeddings devuelve listas vacías en caso de timeout. El agente pierde el acceso a memorias pasadas sin generar alertas.
+* **El Fallo (Pérdida de Contexto):** Las colas de inyección (`put_nowait`) descartan pensamientos si el sistema está bajo carga. 
 
-### FASE 2: Resucitar a los Zombies
-**Solución:**
-En `receive_from_gemini`, quitar el `break` en el bloque `except Exception`. Debemos permitir que el error se lance (`raise e`) para que el `TaskGroup` colapse limpiamente, cierre el WebSocket y obligue al frontend a reconectar, curando el estado zombie.
-
-### FASE 3: Blindar SQLite (WAL Mode)
-**Solución:**
-En `core/database.py`, asegurar que SQLite se conecte usando el modo **WAL (Write-Ahead Logging)**. Esto permite leer y escribir al mismo tiempo sin bloquear toda la base de datos, vital para un sistema de IA multi-agente en tiempo real.
+**Solución Estructural:**
+1. **Inyección Relacional:** Modificar `assemble_soul` para que consulte `get_nemesis_agents` y `get_gossip_candidates`.
+2. **Alertas de Memoria:** El `embedding_service` debe lanzar excepciones controladas en lugar de devolver `[]` vacío.
+3. **Validación de Formato:** Escapar caracteres especiales en el Lore para evitar que rompan las instrucciones de sistema de Gemini.
 
 ---
 *Fin del Documento.*

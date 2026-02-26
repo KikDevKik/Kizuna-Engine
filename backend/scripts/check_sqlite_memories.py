@@ -42,10 +42,16 @@ def check_memories():
                     
                     print(f"🕒 Timestamp: {created_at}")
                     print(f"📝 Summary: {summary}")
-                    print(f"🗣️ Full Transcript:")
+                    print(f"🗣️ Full Transcript Analysis:")
                     if transcript:
-                        for line in str(transcript).split("\n"):
-                            print(f"    {line}")
+                        lines = str(transcript).split("\n")
+                        for line in lines:
+                            if line.startswith("User:"):
+                                print(f"    👤 {line}")
+                            elif ":" in line:
+                                print(f"    🤖 {line}")
+                            else:
+                                print(f"    ❓ {line}")
                     else:
                         print("    [EMPTY]")
                     print("-" * 40)

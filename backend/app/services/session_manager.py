@@ -183,8 +183,16 @@ class SessionManager:
                 except WebSocketDisconnect:
                     logger.info("WebSocket disconnected by client.")
                 except Exception as e:
-                    logger.error(f"Error in WebSocket session: {e}")
-                    # Try to close the websocket if it's still open and we had an internal error
+                    import traceback
+                    logger.error(f"❌ CRITICAL ERROR in WebSocket session: {e}")
+                    # If it's an ExceptionGroup (Python 3.11+), log all sub-exceptions
+                    if isinstance(e, BaseExceptionGroup):
+                        for i, ex in enumerate(e.exceptions):
+                            logger.error(f"  Sub-exception {i}: {ex}")
+                            logger.error(traceback.format_exc())
+                    else:
+                        logger.error(traceback.format_exc())
+                    
                     try:
                         await websocket.close()
                     except Exception:

@@ -53,9 +53,10 @@ async def send_injections_to_gemini(session, injection_queue: asyncio.Queue):
 
             logger.info(f"🤫 Whispering to Gemini: {text}")
 
-            # Send text with end_of_turn=False to inject context silently
-            # The SDK method session.send(input=..., end_of_turn=False)
-            await session.send(input=text, end_of_turn=turn_complete)
+            # 🏰 BASTION: Reverting to string input. SDK is picky about dicts in Live Session.
+            # Prefixing with [SYSTEM] to ensure Gemini understands this is background context.
+            system_text = f"[SYSTEM_CONTEXT]: {text}"
+            await session.send(input=system_text, end_of_turn=turn_complete)
 
     except asyncio.CancelledError:
         logger.info("Injection loop cancelled.")
@@ -153,7 +154,28 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
                     if payload.get("type") == "native_transcript":
                         transcript_text = payload.get("text")
                         if transcript_text:
-                            logger.info(f"🎤 Native Transcript: {transcript_text}")
+                            # 🏰 BASTION: Hardware Echo Kill-Switch
+                            # If ANY agent currently owns the mic, any 'User' transcript is 99% echo.
+                            # We check the auction service status.
+                            if auction_service._current_winner is not None:
+                                logger.debug(f"🔇 Echo Kill-Switch: Dropping user transcript during AI speech: {transcript_text}")
+                                continue
+
+                            # Fallback: Basic similarity echo filter
+                            is_echo = False
+                            if transcript_buffer:
+                                last_msgs = [m for m in transcript_buffer[-3:] if not m.startswith("User:")]
+                                for msg in last_msgs:
+                                    clean_msg = msg.split(": ", 1)[-1] if ": " in msg else msg
+                                    if transcript_text.lower() in clean_msg.lower() or clean_msg.lower() in transcript_text.lower():
+                                        is_echo = True
+                                        break
+                            
+                            if is_echo:
+                                logger.debug(f"🔇 Echo Filter: Suppressed AI voice from user transcript: {transcript_text}")
+                                continue
+
+                            logger.info(f"🎤 User (via Native): {transcript_text}")
 
                             # a) Append to Global Transcript Buffer
                             if transcript_buffer is not None:
