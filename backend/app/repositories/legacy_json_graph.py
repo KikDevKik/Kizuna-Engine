@@ -1100,3 +1100,13 @@ class LegacyJsonSoulRepository(SoulRepository):
             # 4. Persist
             await self._save()
             logger.info(f"Import complete. Restored {count} nodes/edges.")
+
+    # --- Phase 6.5 Legacy Stubs (to satisfy interface) ---
+    async def get_gossip_candidates(self, exclude_ids: List[str], limit: int = 3) -> List[AgentNode]:
+        return []
+
+    async def get_nemesis_agents(self, user_id: str) -> List[AgentNode]:
+        return []
+
+    async def update_agent_friction(self, agent_id: str, delta: float) -> float:
+        return 0.0
