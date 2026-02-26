@@ -345,16 +345,15 @@ class SubconsciousMind:
 
                 for model in models:
                     try:
-                        # 🏰 BASTION: Timeout Enforcement
+                        # 🏰 BASTION: Timeout Enforcement & Native Dict Config
+                        # Using native dicts to avoid 'types' shadowing issues.
                         response = await asyncio.wait_for(
                             self.client.aio.models.generate_content(
                                 model=model,
                                 contents=text,
-                                config=types.GenerateContentConfig(
-                                    system_instruction=types.Content(
-                                        parts=[types.Part(text=system_instruction)]
-                                    )
-                                )
+                                config={
+                                    "system_instruction": system_instruction
+                                }
                             ),
                             timeout=10.0
                         )
@@ -465,16 +464,14 @@ class SubconsciousMind:
                 response = None
                 for model in models:
                     try:
-                        # 🏰 BASTION: Timeout Enforcement
+                        # 🏰 BASTION: Timeout Enforcement & Native Dict Config
                         response = await asyncio.wait_for(
                             self.client.aio.models.generate_content(
                                 model=model, # Or SUBCONSCIOUS if DREAM model not defined
                                 contents=summary_text,
-                                config=types.GenerateContentConfig(
-                                    system_instruction=types.Content(
-                                        parts=[types.Part(text=system_instruction)]
-                                    )
-                                )
+                                config={
+                                    "system_instruction": system_instruction
+                                }
                             ),
                             timeout=15.0 # Dreams take longer
                         )

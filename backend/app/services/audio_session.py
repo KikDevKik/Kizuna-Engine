@@ -283,28 +283,31 @@ async def receive_from_gemini(
                                                 logger.info(f"🕸️ Gossip Edge Created: {agent_name} -> {name}")
 
                                         # Send Tool Response to Gemini
-                                        # Construct the response payload
-                                        tool_response = types.LiveClientToolResponse(
-                                            function_responses=[
-                                                types.FunctionResponse(
-                                                    name="spawn_stranger",
-                                                    response={"result": "success", "agent_id": new_agent.id}
-                                                )
+                                        # Solution B: Use native dictionary for tool responses if supported, 
+                                        # otherwise ensure type safety.
+                                        tool_response = {
+                                            "function_responses": [
+                                                {
+                                                    "name": "spawn_stranger",
+                                                    "response": {"result": "success", "agent_id": new_agent.id}
+                                                }
                                             ]
-                                        )
+                                        }
                                         await session.send(input=tool_response)
 
                                     except Exception as e:
                                         logger.error(f"Tool Execution Failed: {e}")
                                         # Send error response
-                                        await session.send(input=types.LiveClientToolResponse(
-                                            function_responses=[
-                                                types.FunctionResponse(
-                                                    name="spawn_stranger",
-                                                    response={"error": str(e)}
-                                                )
+                                        # Solution B: Native dictionary for error response
+                                        tool_error_response = {
+                                            "function_responses": [
+                                                {
+                                                    "name": "spawn_stranger",
+                                                    "response": {"error": str(e)}
+                                                }
                                             ]
-                                        ))
+                                        }
+                                        await session.send(input=tool_error_response)
                                 continue
 
                             # --- ANTHROPOLOGIST: HANG-UP INTERCEPTOR ---

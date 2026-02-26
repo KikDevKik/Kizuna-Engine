@@ -131,16 +131,14 @@ class ReflectionMind:
 
                 for model in models:
                     try:
-                        # 🏰 BASTION: Timeout Enforcement
+                        # 🏰 BASTION: Timeout Enforcement & Native Dict Config
                         response = await asyncio.wait_for(
                             self.client.aio.models.generate_content(
                                 model=model,
                                 contents=text,
-                                config=types.GenerateContentConfig(
-                                    system_instruction=types.Content(
-                                        parts=[types.Part(text=system_instruction)]
-                                    )
-                                )
+                                config={
+                                    "system_instruction": system_instruction
+                                }
                             ),
                             timeout=10.0 # Reflection should be fast
                         )

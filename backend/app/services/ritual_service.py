@@ -223,7 +223,8 @@ class RitualService:
         agent_data = None
 
         if self.client:
-            config = types.GenerateContentConfig(response_mime_type="application/json")
+            # Solution B: Use native dictionary for config
+            config = {"response_mime_type": "application/json"}
             text = await self._generate_with_retry(
                 models=settings.MODEL_DREAM,
                 contents=prompt,
