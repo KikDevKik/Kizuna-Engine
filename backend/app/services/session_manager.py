@@ -118,6 +118,11 @@ class SessionManager:
         # Master Session Logger: Global Transcript Accumulation
         session_transcript_buffer: list[str] = []
 
+        # MODULE 1: NERVOUS SYSTEM DECOUPLING
+        # We decouple the 'Cognitive' tasks (Subconscious, Reflection, Injection) from the 'Motor' tasks (Audio I/O).
+        # We declare the list here so it is accessible in the outer finally block for cleanup.
+        cognitive_tasks = []
+
         try:
             async with gemini_service.connect(
                 system_instruction=system_instruction, voice_name=voice_name
@@ -138,6 +143,30 @@ class SessionManager:
                 reflection_mind.set_repository(self.soul_repo)
 
                 try:
+                    # A. Launch Cognitive Tasks (Background - Fire & Forget-ish)
+                    # We store them to cancel them gracefully later.
+
+                    # 3. Subconscious Mind (Transcripts -> Analysis -> Injection Queue -> Persistence)
+                    cognitive_tasks.append(asyncio.create_task(
+                        subconscious_mind.start(
+                            transcript_queue, injection_queue, user_id, agent_id
+                        )
+                    ))
+
+                    # 4. Injection Upstream (Injection Queue -> Gemini)
+                    cognitive_tasks.append(asyncio.create_task(
+                        send_injections_to_gemini(session, injection_queue)
+                    ))
+
+                    # 5. Reflection Mind (AI Output -> Self-Critique -> Injection Queue)
+                    if agent:
+                        cognitive_tasks.append(asyncio.create_task(
+                            reflection_mind.start(
+                                reflection_queue, injection_queue, agent
+                            )
+                        ))
+
+                    # B. Critical Motor Loop (The TaskGroup that MUST NOT DIE from cognitive errors)
                     async with asyncio.TaskGroup() as tg:
                         # 1. Audio Upstream (Client -> Gemini)
                         tg.create_task(
@@ -159,26 +188,6 @@ class SessionManager:
                                 soul_repo=self.soul_repo # Module 1.5: Gossip Protocol
                             )
                         )
-
-                        # 3. Subconscious Mind (Transcripts -> Analysis -> Injection Queue -> Persistence)
-                        tg.create_task(
-                            subconscious_mind.start(
-                                transcript_queue, injection_queue, user_id, agent_id
-                            )
-                        )
-
-                        # 4. Injection Upstream (Injection Queue -> Gemini)
-                        tg.create_task(
-                            send_injections_to_gemini(session, injection_queue)
-                        )
-
-                        # 5. Reflection Mind (AI Output -> Self-Critique -> Injection Queue)
-                        if agent:
-                            tg.create_task(
-                                reflection_mind.start(
-                                    reflection_queue, injection_queue, agent
-                                )
-                            )
 
                 except WebSocketDisconnect:
                     logger.info("WebSocket disconnected by client.")
@@ -206,10 +215,20 @@ class SessionManager:
                     except Exception:
                         # Ignore if already closed
                         pass
-
         except Exception as e:
             logger.error(f"Unexpected error managing Gemini Session: {e}")
         finally:
+            # MODULE 1: CLEANUP COGNITIVE TASKS
+            # Ensure background tasks are killed when the session ends.
+            # This MUST be in the outer finally block to catch CancelledError from parent.
+            if cognitive_tasks:
+                logger.info(f"Terminating {len(cognitive_tasks)} background cognitive tasks...")
+                for task in cognitive_tasks:
+                    task.cancel()
+
+                # Wait for them to cancel to ensure clean resource release
+                await asyncio.gather(*cognitive_tasks, return_exceptions=True)
+
             logger.info("WebSocket session closed.")
 
             # Update Last Seen (Phase 3)

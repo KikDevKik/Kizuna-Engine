@@ -244,6 +244,35 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
             "Incorporate this mood shift into your first few responses."
         )
 
+    # --- Module 2.5: Relational Injection (World State) ---
+    world_state_context = ""
+    try:
+        # Nemesis Agents (Enemies of the State)
+        nemesis_list = []
+        if hasattr(repository, 'get_nemesis_agents'):
+             nemesis_agents = await repository.get_nemesis_agents(user_id)
+             for n_agent in nemesis_agents:
+                 if n_agent.id == agent_id:
+                     continue # Don't list self
+                 nemesis_list.append(f"- {n_agent.name} (Your enemy/rival)")
+
+        # Gossip Candidates (People you know about but haven't met)
+        gossip_list = []
+        if hasattr(repository, 'get_gossip_candidates'):
+            gossip_agents = await repository.get_gossip_candidates(user_id)
+            for g_agent in gossip_agents:
+                 gossip_list.append(f"- {g_agent.name} (A rumor you've heard)")
+
+        if nemesis_list or gossip_list:
+            world_state_context = "--- WORLD STATE (RUMORS & RIVALS) ---\nYou are aware of the following entities in District Zero:\n"
+            if nemesis_list:
+                world_state_context += "KNOWN ENEMIES (Warn the user about them):\n" + "\n".join(nemesis_list) + "\n"
+            if gossip_list:
+                world_state_context += "RUMORED FIGURES (You may gossip about them):\n" + "\n".join(gossip_list) + "\n"
+
+    except Exception as e:
+        logger.warning(f"Failed to inject World State: {e}")
+
     # Construct the final prompt
     # We rename 'Role' to 'Archetype' to reduce its constraint on the relationship.
     full_instruction = (
@@ -264,6 +293,7 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         f"{social_battery_context}\n"
         f"{friction_context}\n"
         f"{time_skip_context}\n\n"
+        f"{world_state_context}\n\n"
         f"{dream_context}\n\n"
         f"{personal_history_context}\n\n"
         f"{background_context}\n\n"
