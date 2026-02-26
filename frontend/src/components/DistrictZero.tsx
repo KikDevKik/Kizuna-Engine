@@ -1,47 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Radio, Activity, X, Network } from 'lucide-react';
+import { Radio, Activity, X, Network, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useRoster } from '../contexts/RosterContext';
 import '../KizunaHUD.css';
 
 // ------------------------------------------------------------------
-// DATA: ENIGMA SHELLS
+// DATA: THE LOCAL MATRIX (ILLUSION PROTOCOL)
 // ------------------------------------------------------------------
 interface EnigmaIdentity {
   id: string;
   description: string;
   tempAlias: string;
-  visualHint: string; // e.g., "Neon Glitch", "Static Noise"
+  visualHint: string;
 }
 
 const ENIGMA_DATA: EnigmaIdentity[] = [
-  {
-    id: 'shell-01',
-    description: "You see a figure shrouded in static, standing near a vending machine that sells memories.",
-    tempAlias: 'Unknown_0x7F',
-    visualHint: 'bg-electric-blue/5'
-  },
-  {
-    id: 'shell-02',
-    description: "A silhouette watching the rain from a high-rise window. The glass vibrates with low-frequency bass.",
-    tempAlias: 'Unknown_0xB2',
-    visualHint: 'bg-purple-500/5'
-  },
-  {
-    id: 'shell-03',
-    description: "Someone in a hazard suit painting recursive fractals on a subway wall.",
-    tempAlias: 'Unknown_0xC4',
-    visualHint: 'bg-emerald-500/5'
-  },
-  {
-    id: 'shell-04',
-    description: "An echo in the network. No physical form detected, only a pattern of rhythmic data packets.",
-    tempAlias: 'Unknown_0xFF',
-    visualHint: 'bg-alert-red/5'
-  }
+  { id: 'shell-01', tempAlias: 'Unknown_0x7F', visualHint: 'bg-electric-blue/5', description: "You see a figure shrouded in static, standing near a vending machine that sells memories." },
+  { id: 'shell-02', tempAlias: 'Unknown_0xB2', visualHint: 'bg-purple-500/5', description: "A silhouette watching the rain from a high-rise window. The glass vibrates with low-frequency bass." },
+  { id: 'shell-03', tempAlias: 'Unknown_0xC4', visualHint: 'bg-emerald-500/5', description: "Someone in a hazard suit painting recursive fractals on a subway wall." },
+  { id: 'shell-04', tempAlias: 'Unknown_0xFF', visualHint: 'bg-alert-red/5', description: "An echo in the network. No physical form detected, only a pattern of rhythmic data packets." },
+  { id: 'shell-05', tempAlias: 'Unknown_0xA1', visualHint: 'bg-yellow-500/5', description: "A drone pilot fixing a rusted mechanical wing in a neon-lit alleyway." },
+  { id: 'shell-06', tempAlias: 'Unknown_0xD9', visualHint: 'bg-pink-500/5', description: "A holographic pop-idol glitching in and out of existence, singing a silent ballad." },
+  { id: 'shell-07', tempAlias: 'Unknown_0xE3', visualHint: 'bg-cyan-500/5', description: "A courier carrying a package that glows with Cherenkov radiation." },
+  { id: 'shell-08', tempAlias: 'Unknown_0x88', visualHint: 'bg-orange-500/5', description: "A meditative monk plugged into a tree that grows fiber-optic cables." },
+  { id: 'shell-09', tempAlias: 'Unknown_0x12', visualHint: 'bg-indigo-500/5', description: "A street vendor cooking noodles that smell like ozone and nostalgia." },
+  { id: 'shell-10', tempAlias: 'Unknown_0x44', visualHint: 'bg-lime-500/5', description: "A hacker typing on an invisible keyboard, their eyes reflecting scrolling code." },
+  { id: 'shell-11', tempAlias: 'Unknown_0x99', visualHint: 'bg-rose-500/5', description: "A lost android looking at a butterfly with confusion and wonder." },
+  { id: 'shell-12', tempAlias: 'Unknown_0x00', visualHint: 'bg-slate-500/5', description: "The void itself, taking the shape of a person for a brief moment." },
 ];
 
+const VISIBLE_COUNT = 3;
+
 // ------------------------------------------------------------------
-// COMPONENT: TYPEWRITER LOGS (The Mask)
+// COMPONENT: TYPEWRITER LOGS
 // ------------------------------------------------------------------
 const TerminalLog: React.FC<{ logs: string[] }> = ({ logs }) => {
   return (
@@ -75,10 +66,47 @@ interface DistrictZeroProps {
 }
 
 export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, connect, disconnect }) => {
+  const { refreshAgents } = useRoster();
+  const [startIndex, setStartIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [phase, setPhase] = useState<'idle' | 'approach' | 'scan' | 'contact' | 'error'>('idle');
   const [logs, setLogs] = useState<string[]>([]);
   const [forgedAgent, setForgedAgent] = useState<{ id: string; name: string } | null>(null);
+
+  // ------------------------------------------------------------------
+  // NAVIGATION LOGIC (SLIDE)
+  // ------------------------------------------------------------------
+  const slide = useCallback((direction: number) => {
+    if (selectedId) return; // Lock nav if interacting
+    setStartIndex((prev) => {
+      const next = prev + direction;
+      // Infinite Scroll Logic (Modulo)
+      if (next < 0) return ENIGMA_DATA.length - 1;
+      if (next >= ENIGMA_DATA.length) return 0;
+      return next;
+    });
+  }, [selectedId]);
+
+  // Compute visible cards
+  const visibleCards = React.useMemo(() => {
+    const cards = [];
+    for (let i = 0; i < VISIBLE_COUNT; i++) {
+        const index = (startIndex + i) % ENIGMA_DATA.length;
+        cards.push(ENIGMA_DATA[index]);
+    }
+    return cards;
+  }, [startIndex]);
+
+  // Keyboard Nav
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (selectedId) return;
+      if (e.key === 'ArrowLeft') slide(-1);
+      if (e.key === 'ArrowRight') slide(1);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [slide, selectedId]);
 
   // ------------------------------------------------------------------
   // INTERACTION LOOP
@@ -103,7 +131,7 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
       if (!shell) throw new Error("Shell not found");
 
       // 1. Call the Forge
-      const response = await fetch('/api/agents/forge_hollow', {
+      const response = await fetch('http://localhost:8000/api/agents/forge_hollow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ aesthetic_description: shell.description })
@@ -113,9 +141,8 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
 
       const data = await response.json();
 
-      // 2. Transition (Phase C)
-      // We wait a bit if the API was too fast to let the animation breathe?
-      // Nah, instant gratification is better for "Success".
+      // 2. Refresh Roster (Add to My Agents)
+      await refreshAgents();
 
       setForgedAgent({ id: data.id, name: data.name });
       onAgentForged(data.id); // Update App State
@@ -141,14 +168,12 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
       { text: "> INTERCEPTING FREQUENCY...", delay: 800 },
       { text: "> DECRYPTING BIO-SIGNATURE...", delay: 1500 },
       { text: "> [FORJANDO ALMA... ESTABLECIENDO VÍNCULO NEURONAL]", delay: 2200 },
-      // Removed automatic transition to 'contact' here, controlled by forgeTheSoul
     ];
 
-    setLogs([]); // Reset
+    setLogs([]);
 
     sequence.forEach((step) => {
       setTimeout(() => {
-        // Only update logs if we are still scanning (prevent leaks if error happened)
         setPhase(current => {
           if (current === 'scan') {
              setLogs(prev => [...prev, step.text]);
@@ -179,9 +204,11 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,_var(--color-abyssal-black)_0%,_#000_100%)] opacity-90" />
         <div className="grid-overlay opacity-10" />
+
+        {/* Parallax Stars/Dust Effect could go here */}
       </div>
 
-      {/* HEADER (Only visible in Grid) */}
+      {/* HEADER (Only visible when not focused) */}
       <AnimatePresence>
         {!selectedId && (
           <motion.div
@@ -197,175 +224,226 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
             <p className="font-narrative text-white/40 text-sm max-w-md mt-2">
               Intercept signals from the void. These entities are unverified. Proceed with caution.
             </p>
+            <div className="mt-4 flex gap-2 text-[10px] font-technical text-white/30">
+                <span>[ ARROW KEYS TO SCAN ]</span>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* GRID VIEW */}
-      <div className="relative z-20 w-full max-w-6xl flex flex-wrap gap-6 justify-center items-center">
-        <AnimatePresence>
-          {/* RENDER CARDS (If none selected, show all. If selected, only show the active one in expanded mode) */}
-          {ENIGMA_DATA.map((shell) => {
-            const isSelected = selectedId === shell.id;
-            const isHidden = selectedId && !isSelected;
+      {/* NAV CONTROLS */}
+      {!selectedId && (
+        <>
+            <button
+                onClick={() => slide(-1)}
+                className="absolute left-8 top-1/2 -translate-y-1/2 z-30 p-4 text-electric-blue/50 hover:text-electric-blue transition-colors"
+            >
+                <ChevronLeft size={48} />
+            </button>
+            <button
+                onClick={() => slide(1)}
+                className="absolute right-8 top-1/2 -translate-y-1/2 z-30 p-4 text-electric-blue/50 hover:text-electric-blue transition-colors"
+            >
+                <ChevronRight size={48} />
+            </button>
+        </>
+      )}
 
-            if (isHidden) return null;
-
-            return (
-              <motion.div
-                key={shell.id}
-                layoutId={`card-${shell.id}`}
-                className={`
-                  relative bg-vintage-navy/40 border border-white/10 backdrop-blur-md overflow-hidden
-                  ${isSelected ? 'w-[600px] h-[500px] z-50' : 'w-72 h-96 hover:border-electric-blue/50 cursor-pointer'}
-                `}
-                style={{
-                  clipPath: isSelected
-                    ? 'polygon(0 0, 100% 0, 100% 90%, 95% 100%, 0 100%)'
-                    : 'polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%)'
-                }}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.5, type: "spring", stiffness: 200, damping: 25 }}
-                onClick={() => !selectedId && handleSocialize(shell.id)}
-              >
-                {/* CARD CONTENT */}
-                <div className="p-6 flex flex-col h-full relative">
-
-                  {/* SCANLINES OVERLAY */}
-                  <div className="absolute inset-0 bg-scanlines opacity-10 pointer-events-none" />
-
-                  {/* HEADER */}
-                  <div className="flex justify-between items-start mb-4">
-                    <motion.div layoutId={`title-${shell.id}`} className="font-monumental text-2xl text-white">
-                      {isSelected && forgedAgent ? forgedAgent.name : "???"}
-                    </motion.div>
-                    <div className="flex items-center gap-2">
-                         {isSelected && phase === 'contact' ? (
-                             <span className="text-electric-blue animate-pulse font-technical tracking-widest">LIVE SIGNAL</span>
-                         ) : isSelected && phase === 'error' ? (
-                             <span className="text-alert-red font-technical tracking-widest">SIGNAL LOST</span>
-                         ) : (
-                             <Activity size={16} className="text-white/20" />
-                         )}
-                    </div>
-                  </div>
-
-                  {/* VISUALIZER / CONTENT AREA */}
-                  <div className={`flex-1 relative flex items-center justify-center bg-abyssal-black/30 border ${phase === 'error' ? 'border-alert-red/50' : 'border-white/5'} mb-6 overflow-hidden transition-colors duration-300`}>
-
-                    {/* IDLE STATE */}
-                    {(!isSelected || phase === 'approach') && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="text-white/20 font-technical text-6xl tracking-widest opacity-20"
-                        >
-                            ENIGMA
-                        </motion.div>
-                    )}
-
-                    {/* SCAN PHASE */}
-                    {phase === 'scan' && isSelected && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <motion.div
-                                animate={{ rotate: 360 }}
-                                transition={{ duration: 3, ease: "linear", repeat: Infinity }}
-                                className="w-24 h-24 border-2 border-dashed border-electric-blue rounded-full opacity-50 mb-4"
-                            />
-                            <div className="glitch-text font-monumental text-electric-blue text-sm tracking-widest text-center px-4">
-                                [FORJANDO ALMA... <br/> ESTABLECIENDO VÍNCULO NEURONAL]
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ERROR PHASE */}
-                    {phase === 'error' && isSelected && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                             <div className="font-monumental text-alert-red text-2xl tracking-widest mb-2">CONNECTION FAILED</div>
-                             <div className="font-mono text-xs text-alert-red/70">NEURAL HANDSHAKE REJECTED</div>
-                        </div>
-                    )}
-
-                    {/* CONTACT PHASE (MOCK) */}
-                    {phase === 'contact' && isSelected && (
-                         <div className="absolute inset-0 flex items-center justify-center gap-1 w-full px-12">
-                             {/* Mock Waveform */}
-                             {[...Array(20)].map((_, i) => (
-                                 <motion.div
-                                     key={i}
-                                     className="w-2 bg-electric-blue/50 rounded-full"
-                                     animate={{
-                                         height: [10, Math.random() * 60 + 20, 10],
-                                         opacity: [0.5, 1, 0.5]
-                                     }}
-                                     transition={{
-                                         duration: 0.5,
-                                         repeat: Infinity,
-                                         repeatType: "mirror",
-                                         delay: i * 0.05
-                                     }}
-                                 />
-                             ))}
-                         </div>
-                    )}
-                  </div>
-
-                  {/* TEXT / LOGS */}
-                  <div className="min-h-[100px]">
-                      {isSelected && phase === 'scan' ? (
-                          <TerminalLog logs={logs} />
-                      ) : isSelected && phase === 'contact' ? (
-                          <div className="flex flex-col gap-2">
-                              <div className="font-monumental text-electric-blue text-xl">
-                                  {forgedAgent?.name || shell.tempAlias}
-                              </div>
-                              <div className="font-mono text-xs text-white/50">
-                                  {'>'} Connection stable. <br/>
-                                  {'>'} Audio channel open. <br/>
-                                  {'>'} Waiting for input...
-                              </div>
-                          </div>
-                      ) : isSelected && phase === 'error' ? (
-                          <div className="text-alert-red font-mono text-xs">
-                              {'>'} ERROR: 0xDEADDEAD <br/>
-                              {'>'} RETRYING IN 3s...
-                          </div>
-                      ) : (
-                        <p className="font-narrative text-white/70 text-sm leading-relaxed">
-                            {shell.description}
-                        </p>
-                      )}
-                  </div>
-
-                  {/* ACTIONS */}
-                  <div className="mt-6 flex justify-end">
-                    {!isSelected ? (
-                         <button className="kizuna-shard-btn-wrapper group">
-                             <div className="kizuna-shard-btn-inner text-xs py-2 px-6 group-hover:bg-electric-blue group-hover:text-black transition-colors">
-                                 <Radio size={14} /> SOCIALIZE
-                             </div>
-                         </button>
-                    ) : phase === 'contact' && (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); handleDisconnect(); }}
-                            className="bg-alert-red/10 border border-alert-red text-alert-red hover:bg-alert-red hover:text-white transition-all px-6 py-3 font-monumental text-sm tracking-widest flex items-center gap-2"
-                            style={{ clipPath: 'polygon(10% 0, 100% 0, 100% 80%, 90% 100%, 0 100%, 0 20%)' }}
-                        >
-                            <X size={16} /> TERMINATE LINK
-                        </button>
-                    )}
-                  </div>
-
-                </div>
-              </motion.div>
-            );
-          })}
+      {/* CARD STAGE */}
+      <div className="relative z-20 w-full max-w-6xl flex justify-center items-center h-[600px]">
+        <AnimatePresence mode="popLayout">
+          {selectedId ? (
+              // FOCUSED CARD (Single)
+              ENIGMA_DATA.filter(shell => shell.id === selectedId).map(shell => (
+                  <Card key={shell.id} shell={shell} isSelected={true} phase={phase} logs={logs} forgedAgent={forgedAgent} onDisconnect={handleDisconnect} />
+              ))
+          ) : (
+              // CAROUSEL
+              visibleCards.map((shell) => (
+                  <motion.div
+                    key={shell.id}
+                    layoutId={`card-${shell.id}`}
+                    initial={{ opacity: 0, x: 100 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -100 }}
+                    transition={{ duration: 0.4 }}
+                    className="mx-4"
+                  >
+                      <Card
+                        shell={shell}
+                        isSelected={false}
+                        phase={phase}
+                        logs={[]}
+                        forgedAgent={null}
+                        onSocialize={() => handleSocialize(shell.id)}
+                      />
+                  </motion.div>
+              ))
+          )}
         </AnimatePresence>
       </div>
 
     </div>
   );
+};
+
+// ------------------------------------------------------------------
+// SUB-COMPONENT: CARD (Extracted for cleaner render loop)
+// ------------------------------------------------------------------
+interface CardProps {
+    shell: EnigmaIdentity;
+    isSelected: boolean;
+    phase: string;
+    logs: string[];
+    forgedAgent: { name: string } | null;
+    onSocialize?: () => void;
+    onDisconnect?: () => void;
+}
+
+const Card: React.FC<CardProps> = ({ shell, isSelected, phase, logs, forgedAgent, onSocialize, onDisconnect }) => {
+    return (
+        <motion.div
+            layoutId={`card-${shell.id}`}
+            className={`
+                relative bg-vintage-navy/40 border border-white/10 backdrop-blur-md overflow-hidden
+                ${isSelected ? 'w-[600px] h-[500px] z-50' : 'w-72 h-96 hover:border-electric-blue/50 cursor-pointer'}
+            `}
+            style={{
+                clipPath: isSelected
+                ? 'polygon(0 0, 100% 0, 100% 90%, 95% 100%, 0 100%)'
+                : 'polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%)'
+            }}
+            onClick={() => !isSelected && onSocialize && onSocialize()}
+        >
+            {/* CARD CONTENT */}
+            <div className="p-6 flex flex-col h-full relative">
+                {/* SCANLINES OVERLAY */}
+                <div className="absolute inset-0 bg-scanlines opacity-10 pointer-events-none" />
+
+                {/* HEADER */}
+                <div className="flex justify-between items-start mb-4">
+                <motion.div layoutId={`title-${shell.id}`} className="font-monumental text-2xl text-white">
+                    {isSelected && forgedAgent ? forgedAgent.name : "???"}
+                </motion.div>
+                <div className="flex items-center gap-2">
+                        {isSelected && phase === 'contact' ? (
+                            <span className="text-electric-blue animate-pulse font-technical tracking-widest">LIVE SIGNAL</span>
+                        ) : isSelected && phase === 'error' ? (
+                            <span className="text-alert-red font-technical tracking-widest">SIGNAL LOST</span>
+                        ) : (
+                            <Activity size={16} className="text-white/20" />
+                        )}
+                </div>
+                </div>
+
+                {/* VISUALIZER / CONTENT AREA */}
+                <div className={`flex-1 relative flex items-center justify-center bg-abyssal-black/30 border ${phase === 'error' ? 'border-alert-red/50' : 'border-white/5'} mb-6 overflow-hidden transition-colors duration-300`}>
+
+                {/* IDLE STATE */}
+                {(!isSelected || phase === 'approach') && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="text-white/20 font-technical text-6xl tracking-widest opacity-20"
+                    >
+                        ENIGMA
+                    </motion.div>
+                )}
+
+                {/* SCAN PHASE */}
+                {phase === 'scan' && isSelected && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 3, ease: "linear", repeat: Infinity }}
+                            className="w-24 h-24 border-2 border-dashed border-electric-blue rounded-full opacity-50 mb-4"
+                        />
+                        <div className="glitch-text font-monumental text-electric-blue text-sm tracking-widest text-center px-4">
+                            [FORJANDO ALMA... <br/> ESTABLECIENDO VÍNCULO NEURONAL]
+                        </div>
+                    </div>
+                )}
+
+                {/* ERROR PHASE */}
+                {phase === 'error' && isSelected && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <div className="font-monumental text-alert-red text-2xl tracking-widest mb-2">CONNECTION FAILED</div>
+                            <div className="font-mono text-xs text-alert-red/70">NEURAL HANDSHAKE REJECTED</div>
+                    </div>
+                )}
+
+                {/* CONTACT PHASE (MOCK) */}
+                {phase === 'contact' && isSelected && (
+                        <div className="absolute inset-0 flex items-center justify-center gap-1 w-full px-12">
+                            {/* Mock Waveform */}
+                            {[...Array(20)].map((_, i) => (
+                                <motion.div
+                                    key={i}
+                                    className="w-2 bg-electric-blue/50 rounded-full"
+                                    animate={{
+                                        height: [10, Math.random() * 60 + 20, 10],
+                                        opacity: [0.5, 1, 0.5]
+                                    }}
+                                    transition={{
+                                        duration: 0.5,
+                                        repeat: Infinity,
+                                        repeatType: "mirror",
+                                        delay: i * 0.05
+                                    }}
+                                />
+                            ))}
+                        </div>
+                )}
+                </div>
+
+                {/* TEXT / LOGS */}
+                <div className="min-h-[100px]">
+                    {isSelected && phase === 'scan' ? (
+                        <TerminalLog logs={logs} />
+                    ) : isSelected && phase === 'contact' ? (
+                        <div className="flex flex-col gap-2">
+                            <div className="font-monumental text-electric-blue text-xl">
+                                {forgedAgent?.name || shell.tempAlias}
+                            </div>
+                            <div className="font-mono text-xs text-white/50">
+                                {'>'} Connection stable. <br/>
+                                {'>'} Audio channel open. <br/>
+                                {'>'} Waiting for input...
+                            </div>
+                        </div>
+                    ) : isSelected && phase === 'error' ? (
+                        <div className="text-alert-red font-mono text-xs">
+                            {'>'} ERROR: 0xDEADDEAD <br/>
+                            {'>'} RETRYING IN 3s...
+                        </div>
+                    ) : (
+                    <p className="font-narrative text-white/70 text-sm leading-relaxed">
+                        {shell.description}
+                    </p>
+                    )}
+                </div>
+
+                {/* ACTIONS */}
+                <div className="mt-6 flex justify-end">
+                {!isSelected ? (
+                        <button className="kizuna-shard-btn-wrapper group">
+                            <div className="kizuna-shard-btn-inner text-xs py-2 px-6 group-hover:bg-electric-blue group-hover:text-black transition-colors">
+                                <Radio size={14} /> SOCIALIZE
+                            </div>
+                        </button>
+                ) : phase === 'contact' && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onDisconnect && onDisconnect(); }}
+                        className="bg-alert-red/10 border border-alert-red text-alert-red hover:bg-alert-red hover:text-white transition-all px-6 py-3 font-monumental text-sm tracking-widest flex items-center gap-2"
+                        style={{ clipPath: 'polygon(10% 0, 100% 0, 100% 80%, 90% 100%, 0 100%, 0 20%)' }}
+                    >
+                        <X size={16} /> TERMINATE LINK
+                    </button>
+                )}
+                </div>
+
+            </div>
+        </motion.div>
+    );
 };

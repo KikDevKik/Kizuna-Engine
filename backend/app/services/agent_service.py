@@ -217,28 +217,29 @@ class AgentService:
 
         try:
             # Manually construct the schema to avoid Pydantic $defs issues with google-genai SDK
-            # FIX: Use string literals for types as types.Type is a Literal, not an Enum.
+            # FIX: Use types.Type.OBJECT and types.Type.STRING to prevent .upper() crash on dicts
 
             hollow_schema = types.Schema(
-                type="OBJECT",
+                type=types.Type.OBJECT,
                 properties={
-                    "name": types.Schema(type="STRING"),
-                    "backstory": types.Schema(type="STRING"),
+                    "name": types.Schema(type=types.Type.STRING),
+                    "backstory": types.Schema(type=types.Type.STRING),
                     "voice_name": types.Schema(
-                        type="STRING",
+                        type=types.Type.STRING,
                         enum=["Aoede", "Kore", "Puck", "Charon", "Fenrir"]
                     ),
                     "traits": types.Schema(
-                        type="OBJECT"
+                        type=types.Type.OBJECT
                         # CRITICAL: Do NOT define properties or additionalProperties here.
+                        # This prevents the SDK from trying to validate nested fields and crashing.
                     ),
                     "false_memories": types.Schema(
-                        type="ARRAY",
+                        type=types.Type.ARRAY,
                         items=types.Schema(
-                            type="OBJECT",
+                            type=types.Type.OBJECT,
                             properties={
-                                "memory_text": types.Schema(type="STRING"),
-                                "importance": types.Schema(type="NUMBER")
+                                "memory_text": types.Schema(type=types.Type.STRING),
+                                "importance": types.Schema(type=types.Type.NUMBER)
                             },
                             required=["memory_text", "importance"]
                         )
