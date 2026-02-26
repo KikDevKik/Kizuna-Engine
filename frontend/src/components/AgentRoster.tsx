@@ -1,17 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trash2 } from 'lucide-react';
 import { SoulForgeModal } from './SoulForgeModal';
 import { DeleteAgentModal } from './DeleteAgentModal';
+import { useRoster, Agent } from '../contexts/RosterContext';
 import '../KizunaHUD.css';
-
-interface Agent {
-  id: string;
-  name: string;
-  role: string;
-  avatar_path?: string | null;
-  systemStatus?: string;
-}
 
 interface AgentRosterProps {
   onSelect?: (agentId: string) => void;
@@ -60,75 +53,29 @@ const shardVariants = {
 };
 
 export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const { myAgents, isLoading, error, refreshAgents } = useRoster();
   const [activeIndex, setActiveIndex] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
 
-  // Fetch Agents
-  const fetchAgents = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const res = await fetch('http://localhost:8000/api/agents/');
+  // Compute display agents (My Agents + Create New)
+  const agents = useMemo(() => {
+    const createCard: Agent = {
+      id: 'create-new',
+      name: 'NEW SOUL',
+      role: 'INITIALIZE',
+      systemStatus: 'WAITING'
+    };
+    return [...myAgents, createCard];
+  }, [myAgents]);
 
-      if (!res.ok) {
-        throw new Error(`Failed to fetch agents: ${res.statusText}`);
-      }
-
-      const data = await res.json();
-
-      if (!Array.isArray(data)) {
-        throw new Error("Invalid API response format");
-      }
-
-      // Transform data
-      const loadedAgents: Agent[] = data.map((a: any) => ({
-        id: a.id,
-        name: a.name,
-        role: a.role || 'UNKNOWN',
-        avatar_path: a.avatar_path,
-        systemStatus: 'ONLINE'
-      }));
-
-      // Ensure consistent sort order (by Name)
-      loadedAgents.sort((a, b) => a.name.localeCompare(b.name));
-
-      // Append the "Create New" card
-      const createCard: Agent = {
-        id: 'create-new',
-        name: 'NEW SOUL',
-        role: 'INITIALIZE',
-        systemStatus: 'WAITING'
-      };
-
-      setAgents([...loadedAgents, createCard]);
-
-      // Ensure active index is valid
-      if (activeIndex >= loadedAgents.length + 1) {
-          setActiveIndex(0);
-      }
-
-    } catch (err: any) {
-      console.error("Error fetching agents:", err);
-      setError(err.message);
-      // Fallback
-      setAgents([{
-          id: 'create-new',
-          name: 'NEW SOUL',
-          role: 'INITIALIZE',
-          systemStatus: 'WAITING'
-      }]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []); // Removed activeIndex dependency
-
+  // Adjust activeIndex if out of bounds (e.g. after deletion)
   useEffect(() => {
-    fetchAgents();
-  }, [fetchAgents]);
+    if (activeIndex >= agents.length) {
+        setActiveIndex(Math.max(0, agents.length - 1));
+    }
+  }, [agents.length, activeIndex]);
 
   // ------------------------------------------------------------------
   // AUTONOMOUS AGENT LOGIC (Option B)
@@ -184,7 +131,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   };
 
   const handleAgentCreated = async () => {
-    await fetchAgents();
+    await refreshAgents();
   };
 
   const handleDeleteConfirm = async () => {
@@ -197,12 +144,12 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         throw new Error('Failed to delete agent');
       }
       setAgentToDelete(null);
-      await fetchAgents();
-      // Reset to beginning to avoid index bounds issues
+      await refreshAgents();
+      // Reset to beginning is handled by effect, but let's be safe
       setActiveIndex(0);
     } catch (err: any) {
       console.error("Delete error:", err);
-      setError(err.message || "DELETE_FAILED");
+      setLocalError(err.message || "DELETE_FAILED");
     }
   };
 
@@ -212,29 +159,14 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   const CYLINDER_RADIUS = 500;
   const CARD_ANGLE = 25; // Degrees per card
 
-  // Container Rotation: Rotates opposite to index to keep active card front & center
-  // But wait, the previous code moved CARDS.
-  // To simulate a cylinder where the CAMERA stays fixed and the cylinder rotates:
-  // We calculate the *relative* angle of each card to the current view center.
-
   const getCardStyle = (index: number) => {
     const offsetIndex = index - activeIndex;
     const angleDeg = offsetIndex * CARD_ANGLE;
     const angleRad = (angleDeg * Math.PI) / 180;
 
-    // Cylinder Math
-    // x = r * sin(theta)
-    // z = r * (cos(theta) - 1)  <-- Subtract radius to bring center to z=0 or push back?
-    // Let's keep it simple:
-    // We want active card at (0, 0, 0)
-    // Neighbors curve away in Z.
-
     const x = CYLINDER_RADIUS * Math.sin(angleRad);
     const z = CYLINDER_RADIUS * Math.cos(angleRad) - CYLINDER_RADIUS; // At angle=0, z=0.
 
-    // Rotation: Cards face the center of the cylinder? Or face the camera?
-    // "Revolver Cylinder" usually implies cards are tangent to the circle.
-    // So rotateY should be equal to angleDeg.
     const rotateY = angleDeg;
 
     // Visibility Culling & Fading
@@ -263,7 +195,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
     };
   };
 
-  if (isLoading && agents.length === 0) {
+  if (isLoading && agents.length <= 1) { // 1 because createCard is always there
       return <div className="text-electric-blue font-technical text-center mt-20 animate-pulse">ESTABLISHING LINK...</div>;
   }
 
@@ -275,6 +207,8 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   const a11yAnnouncement = currentAgent
     ? `Selected: ${currentAgent.name}, ${currentAgent.role}`
     : 'Agent Carousel';
+
+  const displayError = error || localError;
 
   return (
     <>
@@ -306,9 +240,9 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
           {a11yAnnouncement}
         </div>
 
-        {error && (
+        {displayError && (
             <div className="absolute top-4 text-alert-red font-technical text-sm bg-abyssal-black/90 p-4 border border-alert-red z-[300] shadow-[0_0_20px_rgba(255,51,102,0.4)] backdrop-blur-md tracking-widest uppercase">
-                {'>'} CONNECTION_ERROR: {error}
+                {'>'} CONNECTION_ERROR: {displayError}
             </div>
         )}
 
@@ -465,7 +399,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         isOpen={isModalOpen}
         onClose={() => {
             setIsModalOpen(false);
-            fetchAgents();
+            refreshAgents();
         }}
         onCreated={handleAgentCreated}
       />

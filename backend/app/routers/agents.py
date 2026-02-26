@@ -56,12 +56,40 @@ class RitualFlowResponse(BaseModel):
     agent: Optional[AgentNode] = None
 
 @router.get("/", response_model=List[AgentNode])
-async def list_agents():
+async def list_agents(
+    user_id: str = Depends(get_current_user),
+    repository: SoulRepository = Depends(get_repository)
+):
     """
-    List all available agents.
+    List "My Agents" - only those the current user has interacted with (InteractedWith Edge).
     """
     try:
-        return await agent_service.list_agents()
+        # 1. Fetch all agents from filesystem
+        all_agents = await agent_service.list_agents()
+
+        # 2. Fetch interaction edges for the current user
+        # We need to find agents where an 'InteractedWith' edge exists with the user.
+        # Since LocalSoulRepository.record_interaction creates (User -> Agent),
+        # we look for edges where source_id == user_id.
+
+        # Use get_edges if available (LocalSoulRepository)
+        if hasattr(repository, 'get_edges'):
+            edges = await repository.get_edges(source_id=user_id, type="interactedWith")
+            interacted_agent_ids = {edge.target_id for edge in edges}
+        else:
+            # Fallback for other repositories (should not happen in this phase)
+            # Just return all agents if we can't filter
+            logger.warning("Repository does not support get_edges filtering. Returning all agents.")
+            return all_agents
+
+        # 3. Filter the list
+        my_agents = [
+            agent for agent in all_agents
+            if agent.id in interacted_agent_ids
+        ]
+
+        return my_agents
+
     except Exception as e:
         logger.exception("Error listing agents")
         raise HTTPException(status_code=500, detail="Internal Server Error")

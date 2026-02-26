@@ -11,6 +11,7 @@ import { JulesSanctuary } from './components/JulesSanctuary';
 import { ConfigurationPanel } from './components/ConfigurationPanel';
 import { ConnectionSeveredModal } from './components/ConnectionSeveredModal';
 import { RitualProvider } from './contexts/RitualContext';
+import { RosterProvider } from './contexts/RosterContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Power, Settings } from 'lucide-react';
 import './KizunaHUD.css';
@@ -99,6 +100,7 @@ function App() {
 
   return (
     <RitualProvider>
+    <RosterProvider>
     <Layout showScanlines={showScanlines}>
       {/* HEADER / NAV */}
       <header className="fixed top-0 left-0 w-full p-6 flex justify-between items-start z-50 pointer-events-none">
@@ -268,6 +270,7 @@ function App() {
         </div>
       </footer>
     </Layout>
+    </RosterProvider>
     </RitualProvider>
   );
 }
