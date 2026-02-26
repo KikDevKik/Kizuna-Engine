@@ -27,8 +27,8 @@ AGENTS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "agents"
 # --- Structured Output Schema for Gemini ---
 
 class GeneratedMemory(BaseModel):
-    summary: str = Field(..., description="A specific event from the agent's past.")
-    emotional_valence: float = Field(..., description="Emotional impact (-1.0 to 1.0).")
+    memory_text: str = Field(..., description="A specific event from the agent's past.")
+    importance: float = Field(..., description="Importance of the memory (0.0 to 1.0).")
 
 class HollowAgentProfile(BaseModel):
     name: str = Field(..., description="The name of the agent.")
@@ -217,31 +217,34 @@ class AgentService:
 
         try:
             # Manually construct the schema to avoid Pydantic $defs issues with google-genai SDK
-            schema = types.Schema(
+            # FIX: Use string literals for types as types.Type is a Literal, not an Enum.
+
+            hollow_schema = types.Schema(
                 type="OBJECT",
                 properties={
-                    "name": types.Schema(type="STRING", description="The name of the agent."),
-                    "backstory": types.Schema(type="STRING", description="A rich backstory explaining their presence in District Zero."),
-                    "traits": types.Schema(type="OBJECT", description="Personality traits (key-value pairs)."),
+                    "name": types.Schema(type="STRING"),
+                    "backstory": types.Schema(type="STRING"),
                     "voice_name": types.Schema(
                         type="STRING",
-                        enum=["Aoede", "Kore", "Puck", "Charon", "Fenrir"],
-                        description="Selected voice from: Aoede, Kore, Puck, Charon, Fenrir."
+                        enum=["Aoede", "Kore", "Puck", "Charon", "Fenrir"]
+                    ),
+                    "traits": types.Schema(
+                        type="OBJECT"
+                        # CRITICAL: Do NOT define properties or additionalProperties here.
                     ),
                     "false_memories": types.Schema(
                         type="ARRAY",
                         items=types.Schema(
                             type="OBJECT",
                             properties={
-                                "summary": types.Schema(type="STRING", description="A specific event from the agent's past."),
-                                "emotional_valence": types.Schema(type="NUMBER", description="Emotional impact (-1.0 to 1.0).")
+                                "memory_text": types.Schema(type="STRING"),
+                                "importance": types.Schema(type="NUMBER")
                             },
-                            required=["summary", "emotional_valence"]
-                        ),
-                        description="2-3 distinct memories from their past."
+                            required=["memory_text", "importance"]
+                        )
                     )
                 },
-                required=["name", "backstory", "traits", "voice_name", "false_memories"]
+                required=["name", "backstory", "voice_name", "traits", "false_memories"]
             )
 
             response = await self.client.aio.models.generate_content(
@@ -249,7 +252,7 @@ class AgentService:
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
-                    response_schema=schema
+                    response_schema=hollow_schema
                 )
             )
 
@@ -275,8 +278,8 @@ class AgentService:
             memories = []
             for mem in profile.false_memories:
                 episode = MemoryEpisodeNode(
-                    summary=mem.summary,
-                    emotional_valence=mem.emotional_valence,
+                    summary=mem.memory_text,
+                    emotional_valence=mem.importance, # Map importance to valence
                     raw_transcript=None # No transcript for false memories
                 )
                 memories.append(episode)
