@@ -239,7 +239,11 @@ async def receive_from_gemini(
                     model_turn = server_content.model_turn
 
                     if model_turn:
+                        turn_aborted = False # Reset abort flag for the new turn
                         for part in model_turn.parts:
+                            # If the turn was aborted (e.g., lost auction), ignore all subsequent parts of this turn
+                            if turn_aborted:
+                                continue
 
                             # --- MODULE 1.5: GOSSIP TOOL ---
                             if part.function_call:
@@ -329,26 +333,23 @@ async def receive_from_gemini(
                                     # Bid for the mic (Priority 1.0 default)
                                     won = await auction_service.bid(agent_id, 1.0)
                                     if not won:
-                                        # 🔇 Auction Lost: Drop Audio
-                                        # This happens if user interrupted (cleared winner) or another agent won.
-
-                                        # Send paralanguage backchannel signal (once per chunk, frontend handles debounce)
-                                        # OPTIMIZATION: Don't spam backchannel on every chunk if just silence
-                                        # But for now, dropping it is key.
-
-                                        # We DO NOT send bytes.
-                                        # This effectively mutes the agent immediately when interrupt() clears the lock.
+                                        # 🔇 Auction Lost: Drop Audio and Abort Turn
+                                        # To prevent mid-sentence cut-ins, we give up on this entire AI response turn.
+                                        logger.info(f"🔇 {agent_name} lost the auction. Aborting turn to prevent cut-off phrase.")
+                                        turn_aborted = True
                                         continue
 
                                 # part.inline_data.data is bytes
                                 # Optimize: Send raw binary directly to avoid Base64 overhead
                                 try:
                                     await websocket.send_bytes(part.inline_data.data)
-                                except RuntimeError as e:
-                                    # Handle ASGI Race Condition during Fast Shutdown
-                                    if "Unexpected ASGI message" in str(e) or "closed" in str(e).lower():
-                                        logger.debug("Socket closed before audio chunk could be sent. Breaking loop.")
-                                        # Use WebSocketDisconnect to force TaskGroup cancellation of siblings
+                                except (RuntimeError, WebSocketDisconnect, ConnectionClosed, ConnectionClosedOK, ConnectionClosedError) as e:
+                                    # 🏰 BASTION SHIELD: Ignore write errors on closed sockets to prevent ECONNRESET
+                                    logger.debug(f"Audio send suppressed: Socket already closed ({type(e).__name__})")
+                                    raise WebSocketDisconnect()
+                                except Exception as e:
+                                    # Check for specific string patterns for low-level OS errors
+                                    if "closed" in str(e).lower() or "1006" in str(e) or "reset" in str(e).lower():
                                         raise WebSocketDisconnect()
                                     raise e
 
@@ -393,9 +394,11 @@ async def receive_from_gemini(
                                         "type": "text",
                                         "data": clean_text
                                     })
-                                except RuntimeError as e:
-                                    if "Unexpected ASGI message" in str(e) or "closed" in str(e).lower():
-                                        logger.debug("Socket closed before text could be sent. Breaking loop.")
+                                except (RuntimeError, WebSocketDisconnect, ConnectionClosed, ConnectionClosedOK, ConnectionClosedError) as e:
+                                    logger.debug(f"Text send suppressed: Socket already closed ({type(e).__name__})")
+                                    raise WebSocketDisconnect()
+                                except Exception as e:
+                                    if "closed" in str(e).lower() or "1006" in str(e) or "reset" in str(e).lower():
                                         raise WebSocketDisconnect()
                                     raise e
 
