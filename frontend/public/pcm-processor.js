@@ -2,15 +2,29 @@ class PCMProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.packetCount = 0;
+    // 1. THE DISCORD PROTOCOL (Frontend VAD & Noise Gate)
+    // Define a SILENCE_THRESHOLD (e.g., 0.01 or 0.02).
+    this.SILENCE_THRESHOLD = 0.01;
   }
 
   process(inputs, outputs, parameters) {
     const input = inputs[0];
     if (input.length > 0) {
       const float32Data = input[0];
-      this.packetCount++;
-      const int16Data = this.float32ToInt16(float32Data);
-      this.port.postMessage(int16Data, [int16Data.buffer]);
+
+      // Calculate RMS (Root Mean Square) volume
+      let sumSquares = 0;
+      for (let i = 0; i < float32Data.length; i++) {
+        sumSquares += float32Data[i] * float32Data[i];
+      }
+      const rms = Math.sqrt(sumSquares / float32Data.length);
+
+      // CRITICAL: If the calculated RMS is below the threshold, DO NOT post the message.
+      if (rms > this.SILENCE_THRESHOLD) {
+        this.packetCount++;
+        const int16Data = this.float32ToInt16(float32Data);
+        this.port.postMessage(int16Data, [int16Data.buffer]);
+      }
     }
     return true;
   }
