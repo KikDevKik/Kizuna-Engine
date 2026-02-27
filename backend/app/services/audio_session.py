@@ -114,8 +114,10 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
                     rms = math.sqrt(sum_sq / (count / 10)) if count > 0 else 0
                     
                     # Phase 7.0.3: Adaptive VAD Algorithm
-                    # Dynamic threshold is 1500 above the current ambient noise floor
-                    dynamic_threshold = current_noise_floor + 1500.0
+                    # TRACER PATCH: Elevar masivamente el umbral para silenciar el ruido de fondo por completo
+                    dynamic_threshold = current_noise_floor + 6000.0 # Subido de 1500 a 6000
+                    # Descomentar si se necesita ver el log continuo:
+                    # logger.debug(f"🔍 TRACER - RMS: {rms:.1f} | Threshold: {dynamic_threshold:.1f}")
 
                     if rms > dynamic_threshold:
                         # The user is actually speaking
