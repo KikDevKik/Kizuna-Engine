@@ -35,7 +35,7 @@ class SessionManager:
         self.time_skip_service = time_skip_service
 
     async def handle_session(
-        self, websocket: WebSocket, agent_id: str | None, token: str | None
+        self, websocket: WebSocket, agent_id: str | None, token: str | None, lang: str | None = "en"
     ):
         """
         Main entry point for WebSocket connection handling.
@@ -94,6 +94,10 @@ class SessionManager:
                 system_instruction = await assemble_soul(
                     agent_id, user_id, self.soul_repo
                 )
+
+            # 🏰 BASTION: The Babel Protocol (Phase 7.5)
+            # Inject the user's browser language directly into the active prompt.
+            system_instruction += f"\n\n[CRITICAL DIRECTIVE]: The user's system language is {lang}. You MUST ALWAYS speak and respond fluently in {lang}, maintaining your established personality."
 
         except ValueError as e:
             logger.warning(f"Connection rejected: {e}")

@@ -3,6 +3,7 @@ import logging
 import json
 import os
 import httpx
+import re
 from asyncio import Queue
 from datetime import datetime, timedelta
 from ..repositories.base import SoulRepository
@@ -160,7 +161,7 @@ class SubconsciousMind:
                             try:
                                 injection_queue.put_nowait({
                                     "text": whisper,
-                                    "turn_complete": True
+                                    "turn_complete": False
                                 })
                                 self.last_memory_id = episode.id
                                 self.last_injection_time = now
@@ -179,7 +180,7 @@ class SubconsciousMind:
                         try:
                             injection_queue.put_nowait({
                                 "text": whisper,
-                                "turn_complete": True
+                                "turn_complete": False
                             })
                         except asyncio.QueueFull:
                             pass
@@ -192,7 +193,7 @@ class SubconsciousMind:
                         # Producers send RAW TEXT. Consumer adds [SYSTEM_CONTEXT].
                         payload = {
                             "text": f"{hint}",
-                            "turn_complete": True
+                            "turn_complete": False
                         }
                         try:
                             injection_queue.put_nowait(payload)

@@ -107,7 +107,7 @@ async def health_check():
 
 @app.websocket("/ws/live")
 async def websocket_endpoint(
-    websocket: WebSocket, agent_id: str | None = None, token: str | None = None
+    websocket: WebSocket, agent_id: str | None = None, token: str | None = None, lang: str | None = "en"
 ):
     # Delegate to Session Manager
-    await session_manager.handle_session(websocket, agent_id, token)
+    await session_manager.handle_session(websocket, agent_id, token, lang)

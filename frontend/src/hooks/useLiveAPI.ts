@@ -184,7 +184,8 @@ export const useLiveAPI = (): UseLiveAPI => {
 
     try {
       // Initialize WebSocket
-      const wsUrl = getWebSocketUrl(agentId);
+      const userLang = navigator.language || 'en';
+      const wsUrl = getWebSocketUrl(agentId, userLang);
       const ws = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
