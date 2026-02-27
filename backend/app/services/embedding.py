@@ -67,10 +67,7 @@ class EmbeddingService:
                      return result.embeddings[0].values
 
                 logger.warning(f"Unexpected embedding response format from {model}: {result}")
-                # If format is wrong, maybe try next model? Or just return empty?
-                # Usually format is consistent across models if library is same.
-                return []
-
+                # Don't return empty yet, continue loop
             except asyncio.TimeoutError:
                 logger.warning(f"Timeout while generating embedding with model {model}.")
                 continue # Try next model
@@ -78,8 +75,10 @@ class EmbeddingService:
                 logger.warning(f"Failed to generate embedding with {model}: {e}")
                 continue # Try next model
 
-        logger.error("All embedding models failed.")
-        return []
+        # 🏰 BASTION SHIELD: Raise explicit error instead of silent failure
+        # Returning empty list [] causes semantic memory to silently fail.
+        logger.error("🚨 CRITICAL: All embedding models failed or timed out.")
+        raise RuntimeError("Embedding Service Failure: Long-term memory is currently unavailable.")
 
 # Singleton instance
 embedding_service = EmbeddingService()

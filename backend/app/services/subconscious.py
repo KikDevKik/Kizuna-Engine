@@ -34,6 +34,10 @@ class SubconsciousMind:
 
         self.active_sessions: dict[str, Queue] = {} # user_id -> injection_queue
         self.backoff_until: datetime | None = None
+        
+        # 🏰 BASTION: Deduplication & Cooldown
+        self.last_memory_id: Optional[str] = None
+        self.last_injection_time: datetime = datetime.min
 
         # Real GenAI Client (Phase 5)
         self.client = None
@@ -140,24 +144,33 @@ class SubconsciousMind:
 
                     # --- 1. Memory Injection (The Semantic Bridge) ---
                     if episodes:
-                        # We found a relevant memory from the past
                         episode = episodes[0]
-                        whisper = (
-                            f"SYSTEM_HINT: 🧠 [Flashback]: The user's current topic relates to a past memory: "
-                            f"{episode.summary}. Use this context naturally."
-                        )
-                        logger.info(f"🧠 Memory Retrieved: {episode.summary}")
-                        try:
-                            injection_queue.put_nowait({
-                                "text": whisper,
-                                "turn_complete": False
-                            })
-                        except asyncio.QueueFull:
-                            pass
+                        
+                        # 🏰 BASTION: Memory Deduplication & Cooldown (10s)
+                        now = datetime.now()
+                        is_new_memory = episode.id != self.last_memory_id
+                        is_cooled_down = (now - self.last_injection_time) > timedelta(seconds=10)
+
+                        if is_new_memory or is_cooled_down:
+                            whisper = (
+                                f"SYSTEM_HINT: 🧠 [Flashback]: The user's current topic relates to a past memory: "
+                                f"{episode.summary}. Use this context naturally."
+                            )
+                            logger.info(f"🧠 Memory Retrieved: {episode.summary}")
+                            try:
+                                injection_queue.put_nowait({
+                                    "text": whisper,
+                                    "turn_complete": False
+                                })
+                                self.last_memory_id = episode.id
+                                self.last_injection_time = now
+                            except asyncio.QueueFull:
+                                pass
 
                     # --- 1.5 World Event Injection ---
                     if events:
                         event = events[0]
+                        # Deduplicate events based on summary (they don't have IDs usually)
                         whisper = (
                             f"SYSTEM_HINT: 🌍 [World History]: The user's current topic relates to a past world event: "
                             f"{event.summary} (Outcome: {event.outcome}). Use this context."
@@ -214,11 +227,12 @@ class SubconsciousMind:
                             except Exception:
                                 logger.exception("Failed to persist subconscious insight")
 
-                    # Clear buffer if ANY insight was found to avoid repetition
-                    if hint or episodes:
-                        self.buffer = []
+                    # 🏰 BASTION: Atomic Buffer Clearance
+                    # We clear the buffer on EVERY process cycle to prevent stale contexts
+                    # from re-triggering the same memories in a loop.
+                    self.buffer = []
 
-                    # Keep buffer manageable
+                    # Keep buffer manageable (safety pop)
                     if len(self.buffer) > 20:
                         self.buffer.pop(0)
                 except Exception:
