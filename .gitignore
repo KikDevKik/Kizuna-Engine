@@ -6,3 +6,10 @@ __pycache__/
 .DS_Store
 backend/data/graph.json
 backend/data/agents/*.json
+
+# SQLite Database and artifacts
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
