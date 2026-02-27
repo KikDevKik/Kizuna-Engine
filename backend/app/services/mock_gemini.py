@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -10,10 +10,16 @@ class MockInlineData:
     def __init__(self, data):
         self.data = data
 
+class MockFunctionCall:
+    def __init__(self, name, args):
+        self.name = name
+        self.args = args
+
 class MockPart:
-    def __init__(self, text=None, inline_data=None):
+    def __init__(self, text=None, inline_data=None, function_call=None):
         self.text = text
         self.inline_data = inline_data
+        self.function_call = function_call
 
 class MockModelTurn:
     def __init__(self, parts):
@@ -36,7 +42,7 @@ class MockSession:
 
     async def send(self, input, end_of_turn=False):
         # We just consume the input.
-        if "data" in input:
+        if isinstance(input, dict) and "data" in input:
             data = input["data"]
             await self._input_queue.put(data)
             self._received_bytes += len(data)
@@ -77,6 +83,11 @@ class MockSession:
                 await self._output_queue.put(MockResponse(
                     server_content=MockServerContent(turn_complete=True)
                 ))
+        elif isinstance(input, str) or (isinstance(input, dict) and "text" in input):
+            # Handle text input (e.g. system instructions or text chat)
+            logger.info(f"Mock received text input: {input}")
+            # Could trigger a text response here if desired
+            pass
 
     async def receive(self):
         while True:
