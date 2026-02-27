@@ -58,6 +58,7 @@ async def send_injections_to_gemini(session, injection_queue: asyncio.Queue):
 
     except asyncio.CancelledError:
         logger.info("Injection loop cancelled.")
+        raise # 🏰 BASTION SHIELD: Propagate to Supervisor
     except Exception as e:
         logger.error(f"CRITICAL: Injection loop died: {e}")
         pass
@@ -97,7 +98,7 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
                         except: break
                     rms = math.sqrt(sum_sq / (count / 10)) if count > 0 else 0
                     
-                    if rms > 500: # Threshold for speech
+                    if rms > 2000: # 🏰 BASTION: Raised from 500 to 2000 to prevent static noise deadlock
                         await auction_service.interrupt()
 
                 if carry_over:

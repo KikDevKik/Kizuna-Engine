@@ -241,7 +241,8 @@ class SubconsciousMind:
                     await asyncio.sleep(1) # Small delay to avoid error storm
 
         except asyncio.CancelledError:
-            pass
+            # 🏰 BASTION SHIELD: Must raise so Supervisor breaks the loop
+            raise
         finally:
             if user_id in self.active_sessions:
                 del self.active_sessions[user_id]
@@ -357,7 +358,7 @@ class SubconsciousMind:
 
             try:
                 # Dynamic Prompt Loading
-                prompt_template = "Analyze the user's emotional state from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return nothing."
+                prompt_template = "Analyze the user's emotional state from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return exactly '[NEUTRAL]'."
 
                 if agent_id and self.repository:
                     agent = await self.repository.get_agent(agent_id)
@@ -413,11 +414,14 @@ class SubconsciousMind:
                     # Fall through to keywords
 
                 elif not response.text:
-                    logger.warning("Subconscious inference yielded no text/invalid response")
+                    # 🏰 BASTION: Lowered severity. Gemini often returns empty text for safety or if it decides no hint is needed.
+                    logger.debug("Subconscious inference yielded no text (likely neutral or safety blocked).")
                     return None
 
                 else:
                     result = response.text.strip()
+                    if "[NEUTRAL]" in result:
+                        return None
                     if "SYSTEM_HINT:" in result:
                         return result.replace("SYSTEM_HINT:", "").strip()
                     return None

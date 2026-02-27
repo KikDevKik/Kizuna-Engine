@@ -93,7 +93,8 @@ class ReflectionMind:
 
         except asyncio.CancelledError:
             logger.info("🪞 Reflection Mind deactivated.")
-            pass
+            # 🏰 BASTION SHIELD: Must raise so Supervisor breaks the loop
+            raise
 
     async def _reflect(self, text: str, agent: AgentNode) -> str | None:
         """
