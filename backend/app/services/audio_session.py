@@ -76,6 +76,10 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
         # Phase 7.0.3: Adaptive Noise Gate Initialization
         current_noise_floor = 1000.0
 
+        # Phase 7.0.4: The Start-up Shield
+        import time
+        session_start_time = time.time()
+
         while True:
             message = await websocket.receive()
             
@@ -88,6 +92,10 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
             text = message.get("text")
 
             if data:
+                # TRACER PATCH: The Start-up Shield. Ignore all user audio for 3 seconds to bypass the mic initialization pop.
+                if time.time() - session_start_time < 3.0:
+                    continue
+
                 # 🏰 BASTION: RMS Energy Gate
                 import math
                 import struct
