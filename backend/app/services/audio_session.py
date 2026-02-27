@@ -48,7 +48,17 @@ async def send_injections_to_gemini(session, injection_queue: asyncio.Queue):
 
                 logger.info(f"🤫 Whispering to Gemini: {text}")
                 system_text = f"[SYSTEM_CONTEXT]: {text}"
-                await session.send(input=system_text, end_of_turn=turn_complete)
+
+                # 🏰 BASTION SHIELD: Strict SDK Formatting for Live API
+                # The Live API 'send' method expects a Part or a dict representing a Part.
+                # It DOES NOT accept 'Content' objects or lists of parts nested in dicts.
+                if types:
+                    formatted_input = types.Part.from_text(text=system_text)
+                else:
+                    # Fallback for environments without the SDK strictly typed
+                    formatted_input = {"text": system_text}
+
+                await session.send(input=formatted_input, end_of_turn=turn_complete)
 
             except asyncio.CancelledError:
                 raise 
