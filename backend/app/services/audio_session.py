@@ -73,6 +73,9 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
         audio_buffer = bytearray()
         carry_over = bytearray()
 
+        # Phase 7.0.3: Adaptive Noise Gate Initialization
+        current_noise_floor = 1000.0
+
         while True:
             message = await websocket.receive()
             
@@ -98,10 +101,17 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
                         except: break
                     rms = math.sqrt(sum_sq / (count / 10)) if count > 0 else 0
                     
-                    # TRACER PATCH: Log the actual RMS value and forcefully disable the Barge-in
-                    logger.info(f"🔍 TRACER - Current Mic RMS: {rms:.2f}")
-                    if rms > 999999: # Impossible threshold to bypass the noise gate completely
+                    # Phase 7.0.3: Adaptive VAD Algorithm
+                    # Dynamic threshold is 1500 above the current ambient noise floor
+                    dynamic_threshold = current_noise_floor + 1500.0
+
+                    if rms > dynamic_threshold:
+                        # The user is actually speaking
                         await auction_service.interrupt()
+                    else:
+                        # The user is silent. Slowly adapt the noise floor to ambient room changes.
+                        # Using an Exponential Moving Average (EMA) to prevent sudden spikes from ruining the floor.
+                        current_noise_floor = (0.95 * current_noise_floor) + (0.05 * rms)
 
                 if carry_over:
                     data = carry_over + data

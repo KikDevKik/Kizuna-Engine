@@ -86,7 +86,7 @@ export class AudioStreamManager {
           sampleRate: 16000,
           channelCount: 1,
           echoCancellation: true,
-          autoGainControl: true,
+          autoGainControl: false,
           noiseSuppression: true
           // Additional constraints for robustness (optional but good practice)
           // googEchoCancellation: true,
