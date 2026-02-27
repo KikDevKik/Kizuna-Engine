@@ -87,7 +87,7 @@ class SubconsciousMind:
                                  if affinity_edge.affinity < 30.0:
                                      # Toxic/Rivalry Injection
                                      whisper = (
-                                         f"SYSTEM_HINT: 💢 [Rival Present]: You have low affinity ({affinity_edge.affinity:.1f}) with {peer.name}. "
+                                         f"💢 [Rival Present]: You have low affinity ({affinity_edge.affinity:.1f}) with {peer.name}. "
                                          f"Act dismissive, competitive, or annoyed if they are mentioned."
                                      )
                                      try:
@@ -132,7 +132,7 @@ class SubconsciousMind:
                     except Exception as e:
                         logger.error(f"🧠 MEMORY ERROR (Glitch Triggered): {e}")
                         # Inject Glitch Prompt
-                        glitch_prompt = "[SYSTEM INTERRUPT: Your neural link just experienced a severe latency spike. You failed to recall past context. Act briefly disoriented, mention a spike of static/headache in your digital brain, and then try to continue the conversation naturally based only on the immediate present.]"
+                        glitch_prompt = "SYSTEM INTERRUPT: Your neural link just experienced a severe latency spike. You failed to recall past context. Act briefly disoriented, mention a spike of static/headache in your digital brain, and then try to continue the conversation naturally based only on the immediate present."
                         try:
                             injection_queue.put_nowait({
                                 "text": glitch_prompt,
@@ -153,7 +153,7 @@ class SubconsciousMind:
 
                         if is_new_memory or is_cooled_down:
                             whisper = (
-                                f"SYSTEM_HINT: 🧠 [Flashback]: The user's current topic relates to a past memory: "
+                                f"🧠 [Flashback]: The user's current topic relates to a past memory: "
                                 f"{episode.summary}. Use this context naturally."
                             )
                             logger.info(f"🧠 Memory Retrieved: {episode.summary}")
@@ -172,7 +172,7 @@ class SubconsciousMind:
                         event = events[0]
                         # Deduplicate events based on summary (they don't have IDs usually)
                         whisper = (
-                            f"SYSTEM_HINT: 🌍 [World History]: The user's current topic relates to a past world event: "
+                            f"🌍 [World History]: The user's current topic relates to a past world event: "
                             f"{event.summary} (Outcome: {event.outcome}). Use this context."
                         )
                         logger.info(f"🌍 World Event Retrieved: {event.summary}")
@@ -189,8 +189,9 @@ class SubconsciousMind:
                         logger.info(f"🧠 Insight detected: {hint}")
 
                         # Inject Context
+                        # Producers send RAW TEXT. Consumer adds [SYSTEM_CONTEXT].
                         payload = {
-                            "text": f"SYSTEM_HINT: {hint}",
+                            "text": f"{hint}",
                             "turn_complete": False
                         }
                         try:
@@ -294,12 +295,12 @@ class SubconsciousMind:
             hint = ""
             if new_battery <= 0:
                 # Forced Exit Protocol
-                hint = "SYSTEM_HINT: 🪫 [BATTERY DEAD]: Your social battery is 0%. You are exhausted. You MUST refuse to continue. Use [ACTION: HANGUP] immediately."
+                hint = "🪫 [BATTERY DEAD]: Your social battery is 0%. You are exhausted. You MUST refuse to continue. Use [ACTION: HANGUP] immediately."
             elif new_battery < 15:
                 # Critical Warning
-                hint = f"SYSTEM_HINT: 🪫 [BATTERY CRITICAL: {int(new_battery)}%]: You are extremely drained. Be short, terse, and ask to end the conversation. If the user persists, use [ACTION: HANGUP]."
+                hint = f"🪫 [BATTERY CRITICAL: {int(new_battery)}%]: You are extremely drained. Be short, terse, and ask to end the conversation. If the user persists, use [ACTION: HANGUP]."
             elif new_battery < 30 and int(new_battery) % 5 == 0:
-                hint = f"SYSTEM_HINT: 🔋 [BATTERY LOW: {int(new_battery)}%]: You are getting tired. Start wrapping up."
+                hint = f"🔋 [BATTERY LOW: {int(new_battery)}%]: You are getting tired. Start wrapping up."
 
             if hint:
                 logger.info(f"🪫 Battery Drain: {old_battery:.1f}% -> {new_battery:.1f}% (Hint: {hint})")
@@ -325,13 +326,13 @@ class SubconsciousMind:
         if bpm and isinstance(bpm, (int, float)):
             # Thresholds could be user-specific in future
             if bpm > 110:
-                hint = f"SYSTEM_HINT: User's Heart Rate is HIGH ({bpm} BPM). They might be stressed or excited. Check tone."
+                hint = f"User's Heart Rate is HIGH ({bpm} BPM). They might be stressed or excited. Check tone."
                 try:
                     queue.put_nowait({"text": hint, "turn_complete": False})
                 except asyncio.QueueFull: pass
                 logger.info(f"❤️ Bio-Signal Injected: {hint}")
             elif bpm < 55:
-                 hint = f"SYSTEM_HINT: User's Heart Rate is LOW ({bpm} BPM). They are very calm or possibly tired."
+                 hint = f"User's Heart Rate is LOW ({bpm} BPM). They are very calm or possibly tired."
                  try:
                      queue.put_nowait({"text": hint, "turn_complete": False})
                  except asyncio.QueueFull: pass

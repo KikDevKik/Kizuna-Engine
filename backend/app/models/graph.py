@@ -55,6 +55,13 @@ class AgentNode(BaseModel, JSONLDMixin):
     base_tolerance: int = 3 # 1-5 (5 = Stoic, 1 = Volatile)
     current_friction: float = 0.0 # Starts 0. Increases on negative interaction.
 
+    # Module 2.1: Neural Signature (Cognitive DNA)
+    # Replaces flat "traits" with a structured brain map.
+    neural_signature: Dict[str, Any] = Field(default_factory=lambda: {
+        "weights": {"volatility": 0.5, "hostility": 0.2, "curiosity": 0.5},
+        "narrative": "A soul seeking purpose."
+    })
+
     # Module 3: Generative Time-Skip
     offline_mood_modifier: Optional[str] = None # Stores "Battery: 50%, Tone: Melancholic"
 

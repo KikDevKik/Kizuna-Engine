@@ -45,8 +45,8 @@ async def purge_memories(
     current_user: str = Depends(get_current_user)
 ):
     """
-    SCORCHED EARTH: Wipes all episodic memory and dreams.
-    This action is irreversible.
+    THE GREAT REBIRTH: Factory Reset.
+    Wipes all nodes and edges.
     """
     # Safety Check: Only Local Graph for now
     if not isinstance(repo, LocalSoulRepository):
@@ -54,7 +54,7 @@ async def purge_memories(
 
     try:
         await repo.purge_all_memories()
-        return {"status": "success", "message": "All memories purged. The slate is clean."}
+        return {"status": "success", "message": "The Great Rebirth Complete. Reality has been reset."}
     except Exception as e:
         logger.error(f"Failed to purge memories: {e}")
         raise HTTPException(status_code=500, detail=str(e))
