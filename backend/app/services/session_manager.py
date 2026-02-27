@@ -83,17 +83,13 @@ class SessionManager:
                 voice_name = agent.voice_name
                 agent_name = agent.name
 
-            # Phase 5: Neural Sync (Redis Check)
-            cache_key = f"soul:{user_id}:{agent_id}"
-            system_instruction = await cache.get(cache_key)
-
-            if system_instruction:
-                logger.info("⚡ Using Warmed-up Soul from Cache (Zero Latency).")
-            else:
-                logger.info("❄️ Cold Start: Assembling Soul from Graph...")
-                system_instruction = await assemble_soul(
-                    agent_id, user_id, self.soul_repo
-                )
+            # Phase 5: Neural Sync (Modular Caching)
+            # assemble_soul internally fetches the static DNA from cache (Zero Latency)
+            # and appends the fresh volatile state (Battery, Memories, Friction).
+            logger.info("⚡ Assembling Soul (Neural Sync)...")
+            system_instruction = await assemble_soul(
+                agent_id, user_id, self.soul_repo
+            )
 
             # 🏰 BASTION: The Babel Protocol (Phase 7.5)
             # Inject the user's browser language directly into the active prompt.

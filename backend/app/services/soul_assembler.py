@@ -34,15 +34,17 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
     # Module 2: Neural Signature
     neural_sig_context = ""
     if agent.neural_signature:
-        weights = agent.neural_signature.get("weights", {})
-        narrative = agent.neural_signature.get("narrative", "")
+        sig = agent.neural_signature
+        weights = sig.weights
         neural_sig_context = (
             "--- NEURAL SIGNATURE (COGNITIVE DNA) ---\n"
-            f"Core Internal Conflict: {narrative}\n"
+            f"Core Internal Conflict: {sig.core_conflict}\n"
+            f"Narrative: {sig.narrative}\n"
             f"Cognitive Weights (0.0-1.0):\n"
-            f"- Volatility: {weights.get('volatility', 0.5)} (Mood stability)\n"
-            f"- Hostility: {weights.get('hostility', 0.2)} (Aggressiveness)\n"
-            f"- Curiosity: {weights.get('curiosity', 0.5)} (Inquisitiveness)\n"
+            f"- Volatility: {weights.volatility} (Mood stability)\n"
+            f"- Hostility: {weights.hostility} (Aggressiveness)\n"
+            f"- Curiosity: {weights.curiosity} (Inquisitiveness)\n"
+            f"- Empathy: {weights.empathy} (Emotional resonance)\n"
         )
 
     # Note: Secret is technically static, but its REVELATION depends on affinity (dynamic).

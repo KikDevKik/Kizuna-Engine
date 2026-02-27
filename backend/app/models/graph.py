@@ -25,6 +25,18 @@ class JSONLDMixin:
             **data
         }
 
+# --- Neural Signatures ---
+class CognitiveWeights(BaseModel):
+    volatility: float = Field(default=0.5, ge=0.0, le=1.0)
+    hostility: float = Field(default=0.2, ge=0.0, le=1.0)
+    curiosity: float = Field(default=0.5, ge=0.0, le=1.0)
+    empathy: float = Field(default=0.5, ge=0.0, le=1.0)
+
+class NeuralSignature(BaseModel):
+    weights: CognitiveWeights = Field(default_factory=CognitiveWeights)
+    narrative: str = "A soul seeking purpose."
+    core_conflict: str = "Balancing logic with emergent emotion."
+
 # --- Nodes ---
 
 class UserNode(BaseModel, JSONLDMixin):
@@ -57,10 +69,7 @@ class AgentNode(BaseModel, JSONLDMixin):
 
     # Module 2.1: Neural Signature (Cognitive DNA)
     # Replaces flat "traits" with a structured brain map.
-    neural_signature: Dict[str, Any] = Field(default_factory=lambda: {
-        "weights": {"volatility": 0.5, "hostility": 0.2, "curiosity": 0.5},
-        "narrative": "A soul seeking purpose."
-    })
+    neural_signature: NeuralSignature = Field(default_factory=NeuralSignature)
 
     # Module 3: Generative Time-Skip
     offline_mood_modifier: Optional[str] = None # Stores "Battery: 50%, Tone: Melancholic"

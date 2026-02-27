@@ -80,10 +80,6 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
         # Phase 7.0.3: Adaptive Noise Gate Initialization
         current_noise_floor = 1000.0
 
-        # Phase 7.0.4: The Start-up Shield
-        import time
-        session_start_time = time.time()
-
         while True:
             message = await websocket.receive()
             
@@ -96,9 +92,6 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
             text = message.get("text")
 
             if data:
-                # TRACER PATCH: The Start-up Shield. Ignore all user audio for 3 seconds to bypass the mic initialization pop.
-                if time.time() - session_start_time < 3.0:
-                    continue
 
                 # 🏰 BASTION: RMS Energy Gate
                 import math
@@ -114,10 +107,7 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
                     rms = math.sqrt(sum_sq / (count / 10)) if count > 0 else 0
                     
                     # Phase 7.0.3: Adaptive VAD Algorithm
-                    # TRACER PATCH: Elevar masivamente el umbral para silenciar el ruido de fondo por completo
-                    dynamic_threshold = current_noise_floor + 6000.0 # Subido de 1500 a 6000
-                    # Descomentar si se necesita ver el log continuo:
-                    # logger.debug(f"🔍 TRACER - RMS: {rms:.1f} | Threshold: {dynamic_threshold:.1f}")
+                    dynamic_threshold = current_noise_floor + 1500.0
 
                     if rms > dynamic_threshold:
                         # The user is actually speaking
@@ -210,18 +200,18 @@ async def receive_from_gemini(
                                     name = fc.args.get("name", "Unknown")
                                     relation = fc.args.get("relation", "Associate")
                                     vibe = fc.args.get("vibe", "Mysterious")
-                                    new_agent = await agent_service.create_agent(
+                                    new_agent = await asyncio.wait_for(agent_service.create_agent(
                                         name=name, role="Stranger",
                                         base_instruction=f"You are {name}, a {relation} of {agent_name}.",
                                         voice_name="Puck", traits={"gossip_spawn": True},
                                         tags=["hollow", "gossip"]
-                                    )
+                                    ), timeout=3.0)
                                     if soul_repo and agent_id:
-                                        await soul_repo.create_agent(new_agent)
-                                        await soul_repo.create_edge(GraphEdge(
+                                        await asyncio.wait_for(soul_repo.create_agent(new_agent), timeout=3.0)
+                                        await asyncio.wait_for(soul_repo.create_edge(GraphEdge(
                                             source_id=agent_id, target_id=new_agent.id,
                                             type="Gossip_Source", properties={"relation": relation}
-                                        ))
+                                        )), timeout=3.0)
                                     await session.send(input={"function_responses": [{"name": "spawn_stranger", "response": {"result": "success", "agent_id": new_agent.id}}]})
                                 except Exception as e:
                                     logger.error(f"Tool Failed: {e}")
@@ -246,11 +236,10 @@ async def receive_from_gemini(
                         if part.text:
                             text_to_process = part.text
                             
-                            # 🏰 BASTION: Aggressive Monologue Filter
+                            # 🏰 BASTION: Basic Cognitive Silence Filter
                             if not turn_aborted:
                                 stripped = text_to_process.strip()
-                                is_monologue = any(stripped.startswith(s) for s in ["Okay,", "So,", "I ", "The user", "Thinking:", "Based on"])
-                                if is_monologue or "[THOUGHT]" in stripped or "**" in stripped:
+                                if "[THOUGHT]" in stripped:
                                     continue
 
                                 # Send real dialogue to client
@@ -283,3 +272,6 @@ async def receive_from_gemini(
     except Exception as e:
         logger.error(f"Fatal Session Error: {e}")
         raise e
+    finally:
+        if agent_id:
+            await auction_service.release(agent_id)
