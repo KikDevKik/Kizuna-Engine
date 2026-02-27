@@ -161,7 +161,7 @@ class SubconsciousMind:
                             try:
                                 injection_queue.put_nowait({
                                     "text": whisper,
-                                    "turn_complete": False
+                                    "turn_complete": True
                                 })
                                 self.last_memory_id = episode.id
                                 self.last_injection_time = now
@@ -180,7 +180,7 @@ class SubconsciousMind:
                         try:
                             injection_queue.put_nowait({
                                 "text": whisper,
-                                "turn_complete": False
+                                "turn_complete": True
                             })
                         except asyncio.QueueFull:
                             pass
@@ -193,7 +193,7 @@ class SubconsciousMind:
                         # Producers send RAW TEXT. Consumer adds [SYSTEM_CONTEXT].
                         payload = {
                             "text": f"{hint}",
-                            "turn_complete": False
+                            "turn_complete": True
                         }
                         try:
                             injection_queue.put_nowait(payload)
