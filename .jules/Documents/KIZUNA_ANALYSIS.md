@@ -1,23 +1,19 @@
 # Kizuna Engine: System State & Architecture Analysis
 
 ## 1. CURRENT STAGE OF EVOLUTION
-**Phase:** Phase 7 - The Glass Bridge (World Awareness & Agency)
-**Paradigm:** Relational Temporal Knowledge Graph + Multimodal Social Hub
+**Phase:** Fase 6 - El Distrito Cero (REGRESIÓN TÉCNICA)
+**Paradigm:** Nexo Social con Fallo de Vínculo Neuronal (Audio)
 
 ## 2. ACTIVE ARCHITECTURE (The Reality)
-*(This section must be strictly updated by The Chronicler whenever a Titan alters the core flow)*
-* **Frontend (Forgemaster)**: 3D Revolver Cylinder Roster active. Soul Forge Terminal integrated for ritualistic agent creation. 
-* **Database (Chief Architect)**: Relational JSON-LD Ontology active. Explicit Edges (`ParticipatedIn`, `OccurredAt`, `InteractedWith`) replace flat lists.
-* **Psychology (Anthropologist)**: Social Battery and Ebbinghaus Decay active. Emotional resonance matrices decoupled from logic.
-* **Memory (Soul Architect)**: Hybrid RAG (Recent Episodes + Vector Search + Fact Nodes). Dream consolidation via REM cycles.
-* **Concurrency (Bastion)**: Async graph locking via `asyncio.Lock`. Multi-agent state isolation in `LocalSoulRepository`.
+* **Frontend (Forgemaster)**: Carrusel 3D funcional. Interfaz de "Soul Forge" operativa pero incapaz de mantener una conversación estable.
+* **Database (Chief Architect)**: Grafo JSON-LD migrado a SQLite. Las relaciones son sólidas, pero los eventos de habla no se registran por fallos de sesión.
+* **Vínculo (Bastion/Forgemaster)**: WebSocket inestable. Audio contaminado por lógica experimental.
 
-## 3. IDENTIFIED SYSTEM FRICTIONS (The Backlog)
-*(Instead of a fixed history, list current structural problems that need solving)*
-* [ ] **Audio Colissions**: Multiple agents attempting to speak simultaneously over WebSockets. (Pending Chief Architect / Anthropologist routing).
-* [ ] **VRAM Optimization**: KV Cache needs sharing across instances. (Pending Bastion).
+## 3. IDENTIFIED SYSTEM FRICTIONS (The Backlog) - CRITICAL
+* [🔴] **Audio Deadzone**: El umbral de ruido en `audio_session.py` está configurado en +6000.0, silenciando tanto al usuario como bloqueando la respuesta de la IA.
+* [🔴] **Auction Deadlock**: El `auction_service` marca turnos como abortados preventivamente, impidiendo que Kizuna hable.
+* [🔴] **Phase 7 Pollution**: El código contiene lógica de "Babel Protocol" y "Cognitive Supervisor" que no ha sido probada y está causando efectos secundarios en la estabilidad de la Fase 6.
 
 ## 4. RECENT ARCHITECTURAL SHIFTS (Changelog)
-* 2026-02-25 - Completed Phase 6: Implemented "District Zero" Hub with 3D Carousel UI and Soul Forge Ritual.
-* 2026-02-25 - Completed Phase 5: Shifted from Flat JSON to Relational JSON-LD Ontology with Explicit Edges and Migration Protocols.
-* [Date] - Implemented Stochastic Time-Skips.
+* 2026-02-27 - **AUDITORÍA DEL CRONISTA**: Se confirma que la Fase 7 fue un intento fallido. Se decreta regresión a Fase 6 para saneamiento de código.
+* 2026-02-25 - Implementación de Distrito Cero (Visual).
