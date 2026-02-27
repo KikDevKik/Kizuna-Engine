@@ -172,11 +172,14 @@ class SessionManager:
                     # Gemini Live does not speak until spoken to. For a seamless UX, 
                     # we force the agent to initiate the conversation upon successful connection.
                     try:
+                        # SOLUTION A: Auto-Turn Completion
+                        # We MUST set turn_complete: True, otherwise Gemini waits forever 
+                        # for the 'rest of the sentence' before generating TTS.
                         injection_queue.put_nowait({
                             "text": "The neural link is now active. The user is listening. Initiate the conversation immediately with a greeting that perfectly matches your current relational state, friction, and personality. Do not wait for the user to speak.",
-                            "turn_complete": False
+                            "turn_complete": True
                         })
-                        logger.info(f"⚡ First Strike Initiated for {agent_name}")
+                        logger.info(f"⚡ First Strike Initiated for {agent_name} (Turn Closed)")
                     except asyncio.QueueFull:
                         pass
 

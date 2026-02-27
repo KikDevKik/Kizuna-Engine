@@ -80,7 +80,7 @@ class ReflectionMind:
                         # Inject Correction
                         payload = {
                             "text": f"[{agent.name} Inner Voice]: {correction}",
-                            "turn_complete": False
+                            "turn_complete": True
                         }
                         try:
                             injection_queue.put_nowait(payload)

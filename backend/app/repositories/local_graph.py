@@ -799,11 +799,11 @@ class LocalSoulRepository(SoulRepository):
         try:
             async with AsyncSessionLocal() as session:
                 async with session.begin():
-                    # 1. Delete ALL Nodes (User, Agent, Memories, etc.)
-                    await session.execute(delete(NodeModel))
-
-                    # 2. Delete ALL Edges
+                    # 1. Delete ALL Edges FIRST to prevent Foreign Key Constraint errors
                     await session.execute(delete(EdgeModel))
+
+                    # 2. Delete ALL Nodes (User, Agent, Memories, etc.)
+                    await session.execute(delete(NodeModel))
 
                 logger.info("🔥 THE GREAT REBIRTH COMPLETE: Total Existence Incinerated.")
                 return True

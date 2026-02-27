@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, Save, AlertTriangle, X, Monitor } from 'lucide-react';
+import { useRoster } from '../contexts/RosterContext';
 import '../KizunaHUD.css';
 
 interface ConfigurationPanelProps {
@@ -16,6 +17,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
   showScanlines,
   setShowScanlines
 }) => {
+  const { refreshAgents } = useRoster();
   const [config, setConfig] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -77,6 +79,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
 
       if (res.ok) {
         window.alert("Memory Cleared. The slate is clean.");
+        await refreshAgents(); // 🏰 BASTION: Force Roster update
       } else {
         window.alert("Purge failed. Check server logs.");
       }
