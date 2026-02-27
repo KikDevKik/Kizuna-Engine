@@ -215,7 +215,12 @@ class RitualService:
             "- 'Fenrir' (male/strong)\n"
             "Set 'voice_name' in the JSON.\n"
             "\n"
-            "Return ONLY the raw JSON object with fields: name, role, base_instruction, voice_name, lore, traits (list), native_language, known_languages (list), initial_affinity (int)."
+            "[CRITICAL: NEURAL SIGNATURE]\n"
+            "Include 'neural_signature' object:\n"
+            "   - weights: {volatility: 0.0-1.0, hostility: 0.0-1.0, curiosity: 0.0-1.0}\n"
+            "   - narrative: 'Core Internal Conflict' (1 sentence)\n"
+            "\n"
+            "Return ONLY the raw JSON object with fields: name, role, base_instruction, voice_name, lore, traits (list), native_language, known_languages (list), initial_affinity (int), neural_signature."
             "\nHistory:\n" +
             "\n".join([f"{m.role.upper()}: {m.content}" for m in history])
         )
@@ -252,6 +257,10 @@ class RitualService:
              agent_data.setdefault("traits", [])
              agent_data.setdefault("native_language", "Unknown")
              agent_data.setdefault("known_languages", [])
+             agent_data.setdefault("neural_signature", {
+                 "weights": {"volatility": 0.5, "hostility": 0.2, "curiosity": 0.5},
+                 "narrative": "A soul seeking purpose."
+             })
 
              # ---------------------------------------------------------
              # Linguistic Realism Injection
@@ -269,7 +278,7 @@ class RitualService:
              elif locale.startswith("ru"): interaction_lang = "Russian"
              elif locale.startswith("pt"): interaction_lang = "Portuguese"
              elif locale.startswith("it"): interaction_lang = "Italian"
-             # Defaulting to English for others for now
+             # Defaulting to English for others for others for now
 
              # Check if Native != Interaction (and Native is not Unknown/Binary)
              # We assume if the user is speaking Spanish (locale=es), the interaction lang is Spanish.
@@ -291,5 +300,9 @@ class RitualService:
             "traits": ["Resilient", "Silent"],
             "native_language": "Binary",
             "known_languages": ["Binary", "English"],
-            "initial_affinity": 50
+            "initial_affinity": 50,
+            "neural_signature": {
+                 "weights": {"volatility": 0.5, "hostility": 0.2, "curiosity": 0.5},
+                 "narrative": "A soul seeking purpose."
+             }
         }

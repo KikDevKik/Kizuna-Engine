@@ -15,6 +15,7 @@ from app.services.reflection import reflection_mind
 from app.services.sleep_manager import SleepManager
 from app.services.time_skip import TimeSkipService
 from app.services.cache import cache
+from app.services.supervisor import CognitiveSupervisor
 from app.repositories.base import SoulRepository
 from app.dependencies import verify_user_logic
 from core.config import settings
@@ -145,25 +146,26 @@ class SessionManager:
                 try:
                     # A. Launch Cognitive Tasks (Background - Fire & Forget-ish)
                     # We store them to cancel them gracefully later.
+                    # Module 4: The Cognitive Supervisor (Resilience)
 
                     # 3. Subconscious Mind (Transcripts -> Analysis -> Injection Queue -> Persistence)
                     cognitive_tasks.append(asyncio.create_task(
-                        subconscious_mind.start(
+                        CognitiveSupervisor.supervise("Subconscious", lambda: subconscious_mind.start(
                             transcript_queue, injection_queue, user_id, agent_id
-                        )
+                        ))
                     ))
 
                     # 4. Injection Upstream (Injection Queue -> Gemini)
                     cognitive_tasks.append(asyncio.create_task(
-                        send_injections_to_gemini(session, injection_queue)
+                        CognitiveSupervisor.supervise("InjectionLoop", lambda: send_injections_to_gemini(session, injection_queue))
                     ))
 
                     # 5. Reflection Mind (AI Output -> Self-Critique -> Injection Queue)
                     if agent:
                         cognitive_tasks.append(asyncio.create_task(
-                            reflection_mind.start(
+                            CognitiveSupervisor.supervise("ReflectionMind", lambda: reflection_mind.start(
                                 reflection_queue, injection_queue, agent
-                            )
+                            ))
                         ))
 
                     # B. Critical Motor Loop (The TaskGroup that MUST NOT DIE from cognitive errors)

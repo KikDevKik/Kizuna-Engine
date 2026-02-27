@@ -3,7 +3,7 @@ import logging
 import aiofiles
 import aiofiles.os
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from uuid import uuid4
 from pydantic import BaseModel, Field
 
@@ -32,12 +32,19 @@ class GeneratedMemory(BaseModel):
     memory_text: str = Field(..., description="A specific event from the agent's past.")
     importance: float = Field(..., description="Importance of the memory (0.0 to 1.0).")
 
+class NeuralSignatureSchema(BaseModel):
+    weights: Dict[str, float] = Field(..., description="Cognitive priorities: volatility, hostility, curiosity (0.0-1.0).")
+    narrative: str = Field(..., description="A 1-sentence Core Internal Conflict.")
+
 class HollowAgentProfile(BaseModel):
     name: str = Field(..., description="The name of the agent.")
     backstory: str = Field(..., description="A rich backstory explaining their presence in District Zero.")
     traits: dict = Field(..., description="Personality traits (key-value pairs).")
     voice_name: str = Field(..., description="Selected voice from: Aoede, Kore, Puck, Charon, Fenrir.")
     false_memories: List[GeneratedMemory] = Field(..., description="2-3 distinct memories from their past.")
+
+    # Module 2: Neural Signature
+    neural_signature: NeuralSignatureSchema = Field(..., description="The cognitive DNA of the agent.")
 
     # Module 2: Friction
     base_tolerance: int = Field(..., description="Social tolerance level (1-5). 1=Volatile, 5=Stoic.")
@@ -129,11 +136,18 @@ class AgentService:
             logger.error(f"Failed to load agent {agent_id}: {e}")
             return None
 
-    async def create_agent(self, name: str, role: str, base_instruction: str, voice_name: Optional[str] = None, traits: dict = None, tags: list = None, native_language: str = "Unknown", known_languages: list = None) -> AgentNode:
+    async def create_agent(self, name: str, role: str, base_instruction: str, voice_name: Optional[str] = None, traits: dict = None, tags: list = None, native_language: str = "Unknown", known_languages: list = None, neural_signature: dict = None) -> AgentNode:
         """
         Creates a new agent file and updates cache.
         """
         agent_id = str(uuid4())
+
+        # Default neural signature if not provided (e.g., legacy call)
+        if neural_signature is None:
+             neural_signature = {
+                 "weights": {"volatility": 0.5, "hostility": 0.2, "curiosity": 0.5},
+                 "narrative": "A soul seeking purpose."
+             }
 
         agent = AgentNode(
             id=agent_id,
@@ -144,7 +158,8 @@ class AgentService:
             traits=traits or {},
             tags=tags or [],
             native_language=native_language,
-            known_languages=known_languages or []
+            known_languages=known_languages or [],
+            neural_signature=neural_signature
         )
 
         file_path = self.data_dir / f"{agent_id}.json"
@@ -222,7 +237,10 @@ class AgentService:
             f"5. False Memories: Create 2-3 specific, vivid memories from their past (NOT involving the user).\n"
             f"6. Tolerance Matrix: Generate 'base_tolerance' (int 1-5). 1=Volatile/Sensitive, 5=Stoic/Resilient.\n"
             f"7. Identity Anchors: 3 core metaphors they use to ground themselves (e.g., 'Always smells like ozone', 'Checks watch constantly').\n"
-            f"8. Forbidden Secret: A deep trauma or hidden agenda. Something they would NEVER reveal to a stranger.\n\n"
+            f"8. Forbidden Secret: A deep trauma or hidden agenda. Something they would NEVER reveal to a stranger.\n"
+            f"9. Neural Signature: The cognitive DNA.\n"
+            f"   - weights: volatility (0.0-1.0), hostility (0.0-1.0), curiosity (0.0-1.0).\n"
+            f"   - narrative: A 1-sentence 'Core Internal Conflict'.\n\n"
             f"Output must be valid JSON matching the schema."
         )
 
@@ -247,6 +265,22 @@ class AgentService:
                         "items": {"type": "STRING"}
                     },
                     "forbidden_secret": {"type": "STRING"},
+                    "neural_signature": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "weights": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "volatility": {"type": "NUMBER"},
+                                    "hostility": {"type": "NUMBER"},
+                                    "curiosity": {"type": "NUMBER"}
+                                },
+                                "required": ["volatility", "hostility", "curiosity"]
+                            },
+                            "narrative": {"type": "STRING"}
+                        },
+                        "required": ["weights", "narrative"]
+                    },
                     "false_memories": {
                         "type": "ARRAY",
                         "items": {
@@ -261,7 +295,7 @@ class AgentService:
                 },
                 "required": [
                     "name", "backstory", "voice_name", "traits", 
-                    "base_tolerance", "identity_anchors", "forbidden_secret", "false_memories"
+                    "base_tolerance", "identity_anchors", "forbidden_secret", "neural_signature", "false_memories"
                 ]
             }
 
@@ -295,7 +329,8 @@ class AgentService:
                 base_tolerance=profile.base_tolerance,
                 current_friction=0.0,
                 identity_anchors=profile.identity_anchors,
-                forbidden_secret=profile.forbidden_secret
+                forbidden_secret=profile.forbidden_secret,
+                neural_signature=profile.neural_signature.model_dump()
             )
 
             # Create MemoryEpisodeNodes
@@ -307,34 +342,6 @@ class AgentService:
                     raw_transcript=None # No transcript for false memories
                 )
                 memories.append(episode)
-
-            # --- Module 5: The Gossip Protocol (Web Forging) ---
-            # Create a random edge with an existing agent
-            # We need to do this asynchronously and safely.
-            # Best practice: We return the agent, and the caller (router) handles saving everything.
-            # BUT, the router calls create_agent in repo. The Repo logic saves the agent.
-            # We can invoke the logic here if we have access to repo, but AgentService assumes file-based primarily?
-            # Wait, LocalSoulRepository syncs with AgentService.
-            # Let's perform the Gossip Protocol logic HERE, but using a direct DB call or Repo call if possible.
-            # Problem: AgentService doesn't have reference to SoulRepo.
-            # Solution: We will inject this logic in the Router or simply query DB here if we import it.
-            # Importing LocalSoulRepository might cause circular imports if not careful.
-            # Let's import AsyncSessionLocal and EdgeModel inside the method to avoid circular deps.
-
-            # Actually, `forge_hollow_agent` is called by `POST /api/agents/forge_hollow`.
-            # We can implement the Gossip Protocol logic *after* this function returns in the router,
-            # OR we can do it here if we want `new_agent` to fully embody it before return.
-            # The prompt says: "When a new Hollow is forged, query the SQLite DB for ONE existing agent... Create procedural edge".
-            # The Edge needs to be saved to DB.
-            # `agent_service.py` is lower level.
-            # Let's keep it clean: The Router should handle the Graph connections.
-            # I will return the agent, and the Router will handle Gossip.
-            # WAIT, the prompt says "Inject this edge into the new Hollow's prompt".
-            # If I rely on the router, I can't inject it into the prompt if the prompt is generated here?
-            # Ah, the prompt generated here is the *Profile*, not the *System Prompt* for chat.
-            # The System Prompt is generated by `soul_assembler.py` at runtime.
-            # So, creating the Edge in the DB is sufficient. `soul_assembler` will pick it up later.
-            # Excellent. I will handle Gossip in the Router or a new Service method called `link_hollow_to_web`.
 
             return new_agent, memories
 
