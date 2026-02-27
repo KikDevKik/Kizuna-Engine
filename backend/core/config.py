@@ -30,8 +30,8 @@ class Settings:
     MODEL_LIVE_VOICE: str = os.getenv("MODEL_LIVE_VOICE", "gemini-2.5-flash-native-audio-preview-12-2025")
 
     # 2. Subconscious Worker (Fast Text Analysis - Scout)
-    # Always Flash for speed and cost.
-    MODEL_SUBCONSCIOUS: list[str] = json.loads(os.getenv("MODEL_SUBCONSCIOUS", '["gemini-3-flash-preview", "gemini-2.5-flash"]'))
+    # 🏰 BASTION: Swapped order. Use stable 2.5 first. 3.0 previews have very low rate limits.
+    MODEL_SUBCONSCIOUS: list[str] = json.loads(os.getenv("MODEL_SUBCONSCIOUS", '["gemini-2.5-flash", "gemini-3-flash-preview"]'))
 
     # 3. Dream Cycle (Deep Reasoning / Consolidation - Architect)
     # In Production: Uses Pro (e.g. gemini-3.0-pro-exp) for maximum narrative quality.

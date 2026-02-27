@@ -74,6 +74,12 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
 
         while True:
             message = await websocket.receive()
+            
+            # 🏰 BASTION SHIELD: Graceful Disconnect Handling
+            if message.get("type") == "websocket.disconnect":
+                logger.info("Client disconnected cleanly (websocket.disconnect received).")
+                break # Exit the loop immediately, don't call receive() again.
+
             data = message.get("bytes")
             text = message.get("text")
 
@@ -154,100 +160,98 @@ async def receive_from_gemini(
         # 🏰 BASTION: Turn-scoped state
         turn_aborted = False
         
-        while True:
-            try:
-                async for response in session.receive():
-                    if response.server_content is None:
-                        continue
+        # Removed redundant outer 'while True' loop. 
+        # The 'async for' already handles the stream until it closes.
+        try:
+            async for response in session.receive():
+                if response.server_content is None:
+                    continue
 
-                    server_content = response.server_content
-                    model_turn = server_content.model_turn
+                server_content = response.server_content
+                model_turn = server_content.model_turn
 
-                    if model_turn:
-                        for part in model_turn.parts:
-                            if turn_aborted:
-                                continue
+                if model_turn:
+                    for part in model_turn.parts:
+                        if turn_aborted:
+                            continue
 
-                            # 1. TOOL HANDLING (Gossip)
-                            if part.function_call:
-                                fc = part.function_call
-                                if fc.name == "spawn_stranger":
-                                    try:
-                                        name = fc.args.get("name", "Unknown")
-                                        relation = fc.args.get("relation", "Associate")
-                                        vibe = fc.args.get("vibe", "Mysterious")
-                                        new_agent = await agent_service.create_agent(
-                                            name=name, role="Stranger",
-                                            base_instruction=f"You are {name}, a {relation} of {agent_name}.",
-                                            voice_name="Puck", traits={"gossip_spawn": True},
-                                            tags=["hollow", "gossip"]
-                                        )
-                                        if soul_repo and agent_id:
-                                            await soul_repo.create_agent(new_agent)
-                                            await soul_repo.create_edge(GraphEdge(
-                                                source_id=agent_id, target_id=new_agent.id,
-                                                type="Gossip_Source", properties={"relation": relation}
-                                            ))
-                                        await session.send(input={"function_responses": [{"name": "spawn_stranger", "response": {"result": "success", "agent_id": new_agent.id}}]})
-                                    except Exception as e:
-                                        logger.error(f"Tool Failed: {e}")
-                                continue
-
-                            # 2. AUDIO HANDLING (The Vocal Handshake)
-                            if part.inline_data:
-                                if agent_id:
-                                    # Bid for mic
-                                    won = await auction_service.bid(agent_id, 1.0)
-                                    if not won:
-                                        logger.info(f"🔇 {agent_name} lost auction. Aborting TURN.")
-                                        turn_aborted = True
-                                        continue
-
+                        # 1. TOOL HANDLING (Gossip)
+                        if part.function_call:
+                            fc = part.function_call
+                            if fc.name == "spawn_stranger":
                                 try:
-                                    await websocket.send_bytes(part.inline_data.data)
+                                    name = fc.args.get("name", "Unknown")
+                                    relation = fc.args.get("relation", "Associate")
+                                    vibe = fc.args.get("vibe", "Mysterious")
+                                    new_agent = await agent_service.create_agent(
+                                        name=name, role="Stranger",
+                                        base_instruction=f"You are {name}, a {relation} of {agent_name}.",
+                                        voice_name="Puck", traits={"gossip_spawn": True},
+                                        tags=["hollow", "gossip"]
+                                    )
+                                    if soul_repo and agent_id:
+                                        await soul_repo.create_agent(new_agent)
+                                        await soul_repo.create_edge(GraphEdge(
+                                            source_id=agent_id, target_id=new_agent.id,
+                                            type="Gossip_Source", properties={"relation": relation}
+                                        ))
+                                    await session.send(input={"function_responses": [{"name": "spawn_stranger", "response": {"result": "success", "agent_id": new_agent.id}}]})
+                                except Exception as e:
+                                    logger.error(f"Tool Failed: {e}")
+                            continue
+
+                        # 2. AUDIO HANDLING (The Vocal Handshake)
+                        if part.inline_data:
+                            if agent_id:
+                                # Bid for mic
+                                won = await auction_service.bid(agent_id, 1.0)
+                                if not won:
+                                    logger.info(f"🔇 {agent_name} lost auction. Aborting TURN.")
+                                    turn_aborted = True
+                                    continue
+
+                            try:
+                                await websocket.send_bytes(part.inline_data.data)
+                            except Exception:
+                                raise WebSocketDisconnect()
+
+                        # 3. TEXT HANDLING (Cognitive Silence)
+                        if part.text:
+                            text_to_process = part.text
+                            
+                            # 🏰 BASTION: Aggressive Monologue Filter
+                            if not turn_aborted:
+                                stripped = text_to_process.strip()
+                                is_monologue = any(stripped.startswith(s) for s in ["Okay,", "So,", "I ", "The user", "Thinking:", "Based on"])
+                                if is_monologue or "[THOUGHT]" in stripped or "**" in stripped:
+                                    continue
+
+                                # Send real dialogue to client
+                                if transcript_buffer is not None:
+                                    transcript_buffer.append(f"{agent_name}: {stripped}")
+                                
+                                try:
+                                    await websocket.send_json({"type": "text", "data": stripped})
                                 except Exception:
                                     raise WebSocketDisconnect()
 
-                            # 3. TEXT HANDLING (Cognitive Silence)
-                            if part.text:
-                                text_to_process = part.text
-                                
-                                # 🏰 BASTION: Aggressive Monologue Filter
-                                # If text arrives BEFORE any audio in this turn, it's 99% CoT.
-                                # Also filter common CoT markers.
-                                if not turn_aborted:
-                                    stripped = text_to_process.strip()
-                                    is_monologue = any(stripped.startswith(s) for s in ["Okay,", "So,", "I ", "The user", "Thinking:", "Based on"])
-                                    if is_monologue or "[THOUGHT]" in stripped or "**" in stripped:
-                                        # logger.debug(f"🤫 Filtered Monologue: {stripped[:30]}...")
-                                        continue
+                                if reflection_queue:
+                                    reflection_queue.put_nowait(stripped)
 
-                                    # Send real dialogue to client
-                                    if transcript_buffer is not None:
-                                        transcript_buffer.append(f"{agent_name}: {stripped}")
-                                    
-                                    try:
-                                        await websocket.send_json({"type": "text", "data": stripped})
-                                    except Exception:
-                                        raise WebSocketDisconnect()
+                if server_content.turn_complete:
+                    # Reset turn state
+                    turn_aborted = False
+                    if agent_id:
+                        await auction_service.release(agent_id)
+                    try:
+                        await websocket.send_json({"type": "turn_complete"})
+                    except: pass
 
-                                    if reflection_queue:
-                                        reflection_queue.put_nowait(stripped)
-
-                    if server_content.turn_complete:
-                        # Reset turn state
-                        turn_aborted = False
-                        if agent_id:
-                            await auction_service.release(agent_id)
-                        try:
-                            await websocket.send_json({"type": "turn_complete"})
-                        except: pass
-
-            except (WebSocketDisconnect, ConnectionClosed) as e:
-                raise e
-            except Exception as e:
-                logger.error(f"Loop Error: {e}")
-                raise e
+        except (WebSocketDisconnect, ConnectionClosed) as e:
+            raise e
+        except Exception as e:
+            logger.error(f"Loop Error: {e}")
+            raise e
 
     except Exception as e:
         logger.error(f"Fatal Session Error: {e}")
