@@ -98,7 +98,9 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
                         except: break
                     rms = math.sqrt(sum_sq / (count / 10)) if count > 0 else 0
                     
-                    if rms > 2000: # 🏰 BASTION: Raised from 500 to 2000 to prevent static noise deadlock
+                    # TRACER PATCH: Log the actual RMS value and forcefully disable the Barge-in
+                    logger.info(f"🔍 TRACER - Current Mic RMS: {rms:.2f}")
+                    if rms > 999999: # Impossible threshold to bypass the noise gate completely
                         await auction_service.interrupt()
 
                 if carry_over:
