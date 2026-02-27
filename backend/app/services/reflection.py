@@ -79,7 +79,7 @@ class ReflectionMind:
 
                         # Inject Correction
                         payload = {
-                            "text": f"SYSTEM_HINT: [{agent.name} Inner Voice]: {correction}",
+                            "text": f"[{agent.name} Inner Voice]: {correction}",
                             "turn_complete": False
                         }
                         try:
