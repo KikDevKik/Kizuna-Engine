@@ -344,6 +344,15 @@ class SubconsciousMind:
         Analyzes text for emotional cues.
         Uses Real Gemini Flash if configured, otherwise falls back to keyword matching via Archetypes/Traits.
         """
+        # 🏰 BASTION SHIELD: The Wallet Guard (Cost Optimization)
+        # Prevent API burn on mic static, sighs, or single-word non-answers.
+        clean_text = re.sub(r'[^a-zA-Z0-9\s]', '', text).strip()
+        word_count = len(clean_text.split())
+        
+        if word_count < 3 or clean_text.lower() in ["ah", "um", "uh", "ok", "yes", "no", "silence"]:
+            logger.debug(f"🛡️ Wallet Guard: Blocked API call for low-information text ({word_count} words).")
+            return None
+
         # 1. Real Intelligence (The Guide Dog)
         mock_mode = settings.MOCK_GEMINI
 
