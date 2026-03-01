@@ -41,6 +41,8 @@ class Settings:
     # 4. Soul Forge (Hollow Forging - Agent Generation)
     # Always Flash 2.5 for low latency and structured output reliability.
     MODEL_FORGE: str = os.getenv("MODEL_FORGE", "gemini-2.5-flash")
+    # 5. Time-Skip Narrator (Background Event Generation - Ultra Fast)
+    MODEL_FLASH_LITE: str = os.getenv("MODEL_FLASH_LITE", "gemini-2.5-flash-lite")
 
     @property
     def MODEL_DREAM(self) -> list[str]:
