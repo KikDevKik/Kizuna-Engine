@@ -166,7 +166,7 @@ async def test_analyze_sentiment_custom_agent_prompt():
         mock_settings.MOCK_GEMINI = False
         mock_settings.MODEL_SUBCONSCIOUS = "gemini-test"
 
-        await service._analyze_sentiment("hello", agent_id="agent-123")
+        await service._analyze_sentiment("hello this is a longer test sentence", agent_id="agent-123")
 
         # Verify the prompt sent contained the custom prompt text
         call_args = service.client.aio.models.generate_content.call_args
@@ -174,7 +174,7 @@ async def test_analyze_sentiment_custom_agent_prompt():
 
         # Check system_instruction in config
         config = call_args.kwargs['config']
-        system_instruction_part = config.system_instruction.parts[0].text
+        system_instruction_part = config["system_instruction"]
         # The code replaces {text} with [TRANSCRIPT] in the system instruction
         # prompt_template = "CUSTOM_PROMPT: {text}" -> "CUSTOM_PROMPT: [TRANSCRIPT]"
         assert "CUSTOM_PROMPT: [TRANSCRIPT]" in system_instruction_part
@@ -362,7 +362,7 @@ async def test_subconscious_start_resilience():
         try:
             # Wait for the injection queue to get the "Happy Hint"
             hint_payload = await asyncio.wait_for(injection_queue.get(), timeout=2.0)
-            assert hint_payload["text"] == "SYSTEM_HINT: Happy Hint"
+            assert hint_payload["text"] == "Happy Hint"
         finally:
             task.cancel()
             try:

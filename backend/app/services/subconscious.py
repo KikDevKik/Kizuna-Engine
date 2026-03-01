@@ -19,7 +19,29 @@ except ImportError:
     genai = None
     genai_errors = None
 
+
 logger = logging.getLogger(__name__)
+
+# Palabras y frases que indican que el usuario está referenciando el pasado
+TEMPORAL_REFERENCE_TRIGGERS = [
+    # Español
+    "la vez pasada", "la otra vez", "antes", "recuerdas", "te acuerdas",
+    "me dijiste", "dijiste que", "hablamos de", "como cuando", "igual que",
+    "anteriormente", "en otra ocasión", "la última vez", "ya hablamos",
+    "mencionaste", "me comentaste", "lo que dijiste",
+    # English
+    "last time", "before", "remember when", "you said", "we talked",
+    "you mentioned", "like before", "previously", "earlier", "as before",
+    "you told me", "we discussed",
+]
+
+def _has_temporal_reference(text: str) -> bool:
+    """
+    Detecta si el usuario está haciendo referencia explícita a una interacción pasada.
+    Solo en este caso tiene sentido hacer RAG lookup para inyectar un Flashback.
+    """
+    text_lower = text.lower()
+    return any(trigger in text_lower for trigger in TEMPORAL_REFERENCE_TRIGGERS)
 
 class SubconsciousMind:
     """
@@ -114,7 +136,7 @@ class SubconsciousMind:
                     episodes = []
                     events = []
 
-                    if self.repository:
+                    if self.repository and _has_temporal_reference(full_text):
                         memory_task = asyncio.create_task(
                             self.repository.get_relevant_episodes(user_id, query=full_text, limit=1)
                         )
@@ -157,6 +179,7 @@ class SubconsciousMind:
                                 f"🧠 [Flashback]: The user's current topic relates to a past memory: "
                                 f"{episode.summary}. Use this context naturally."
                             )
+                            logger.info(f"🧠 Flashback triggered by temporal reference: '{full_text[:50]}...'")
                             logger.info(f"🧠 Memory Retrieved: {episode.summary}")
                             try:
                                 injection_queue.put_nowait({
