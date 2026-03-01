@@ -16,7 +16,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class RitualMessage(BaseModel):
-    role: Literal["user", "assistant"]
+    role: Literal["user", "assistant", "system"]
     content: str
 
 class RitualResponse(BaseModel):
@@ -152,7 +152,7 @@ class RitualService:
             "CONCISENESS DIRECTIVE: NEVER write walls of text. Keep your responses extremely concise (maximum 3-4 short sentences). Ask ONLY ONE focused question or offer ONE specific choice at a time."
             f"\n[LANGUAGE DIRECTIVE]: You MUST respond in the same language as the user's last message. If uncertain, use: {locale}."
             "\n\nCurrent Ritual History:\n" +
-            "\n".join([f"{m.role.upper()}: {m.content}" for m in history]) +
+            "\n".join([(f"MODEL: {m.content}" if m.role in ("system", "assistant") else f"USER: {m.content}") for m in history]) +
             "\n\nGATEKEEPER:"
         )
 
@@ -222,7 +222,7 @@ class RitualService:
             "\n"
             "Return ONLY the raw JSON object with fields: name, role, base_instruction, voice_name, lore, traits (list), native_language, known_languages (list), initial_affinity (int), neural_signature."
             "\nHistory:\n" +
-            "\n".join([f"{m.role.upper()}: {m.content}" for m in history])
+            "\n".join([(f"MODEL: {m.content}" if m.role in ("system", "assistant") else f"USER: {m.content}") for m in history])
         )
 
         agent_data = None

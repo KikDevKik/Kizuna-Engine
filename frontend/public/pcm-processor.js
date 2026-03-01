@@ -4,7 +4,7 @@ class PCMProcessor extends AudioWorkletProcessor {
     this.packetCount = 0;
     // 1. THE DISCORD PROTOCOL (Frontend VAD & Noise Gate)
     // Define a SILENCE_THRESHOLD (e.g., 0.01 or 0.02).
-    this.SILENCE_THRESHOLD = 0.01;
+    this.SILENCE_THRESHOLD = 0.003;
   }
 
   process(inputs, outputs, parameters) {
