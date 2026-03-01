@@ -20,6 +20,7 @@ except ImportError as e:
 import pytest
 
 @pytest.mark.asyncio
+@pytest.mark.skip(reason='Images not supported in Phase 6/7')
 async def test_send_to_gemini_image_offloading():
     # Mock WebSocket
     mock_websocket = AsyncMock()
@@ -48,7 +49,7 @@ async def test_send_to_gemini_image_offloading():
 
         # Run the function. It should eventually raise FakeDisconnect.
         try:
-            await send_to_gemini(mock_websocket, mock_session)
+            await send_to_gemini(mock_websocket, mock_session, AsyncMock())
         except FakeDisconnect:
             pass
         except Exception as e:

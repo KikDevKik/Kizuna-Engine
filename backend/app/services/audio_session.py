@@ -5,7 +5,6 @@ import json
 import re
 from fastapi import WebSocket, WebSocketDisconnect
 
-from .auction_service import auction_service
 from .agent_service import agent_service
 from ..models.graph import GraphEdge
 from typing import TYPE_CHECKING, Optional
@@ -29,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # 16000 Hz * 2 bytes = 32000 bytes/sec
 # 3200 bytes = 100ms
-AUDIO_BUFFER_THRESHOLD = 3200
+AUDIO_BUFFER_THRESHOLD = 2048
 
 async def send_injections_to_gemini(session, injection_queue: asyncio.Queue):
     """
@@ -68,7 +67,7 @@ async def send_injections_to_gemini(session, injection_queue: asyncio.Queue):
         pass
 
 
-async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[str] | None = None, transcript_queue: asyncio.Queue | None = None):
+async def send_to_gemini(websocket: WebSocket, session, auction_service, transcript_buffer: list[str] | None = None, transcript_queue: asyncio.Queue | None = None):
     """
     Task A: Client -> Gemini
     Reads audio bytes from WebSocket and sends to Gemini session.
@@ -93,29 +92,7 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
 
             if data:
 
-                # 🏰 BASTION: RMS Energy Gate
-                import math
-                import struct
-                count = len(data) // 2
-                if count > 0:
-                    sum_sq = 0
-                    for i in range(0, len(data), 20): 
-                        try:
-                            sample = struct.unpack_from('<h', data, i)[0]
-                            sum_sq += sample * sample
-                        except: break
-                    rms = math.sqrt(sum_sq / (count / 10)) if count > 0 else 0
-                    
-                    # Phase 7.0.3: Adaptive VAD Algorithm
-                    dynamic_threshold = current_noise_floor + 1500.0
 
-                    if rms > dynamic_threshold:
-                        # The user is actually speaking
-                        await auction_service.interrupt()
-                    else:
-                        # The user is silent. Slowly adapt the noise floor to ambient room changes.
-                        # Using an Exponential Moving Average (EMA) to prevent sudden spikes from ruining the floor.
-                        current_noise_floor = (0.95 * current_noise_floor) + (0.05 * rms)
 
                 if carry_over:
                     data = carry_over + data
@@ -162,6 +139,7 @@ async def send_to_gemini(websocket: WebSocket, session, transcript_buffer: list[
 async def receive_from_gemini(
     websocket: WebSocket,
     session,
+    auction_service,
     transcript_queue: asyncio.Queue | None = None,
     reflection_queue: asyncio.Queue | None = None,
     transcript_buffer: list[str] | None = None,
@@ -223,8 +201,9 @@ async def receive_from_gemini(
                                 # Bid for mic
                                 won = await auction_service.bid(agent_id, 1.0)
                                 if not won:
-                                    logger.info(f"🔇 {agent_name} lost auction. Aborting TURN.")
-                                    turn_aborted = True
+                                    if auction_service._current_winner is not None:
+                                        logger.info(f"🔇 {agent_name} lost auction due to conflict. Aborting TURN.")
+                                        turn_aborted = True
                                     continue
 
                             try:

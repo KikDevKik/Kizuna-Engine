@@ -472,6 +472,14 @@ class SubconsciousMind:
                     return hint
         return None
 
+
+    def cleanup(self, user_id: str):
+        """Removes the user session and clears the buffer."""
+        if user_id in self.active_sessions:
+            del self.active_sessions[user_id]
+        self.buffer.clear()
+        logger.info(f"Subconscious cleaned for {user_id}")
+
     async def generate_dream(self, episodes: list[MemoryEpisodeNode], agent_id: str = None) -> DreamNode:
         """
         Generates a DreamNode from a list of memory episodes using Generative AI.
