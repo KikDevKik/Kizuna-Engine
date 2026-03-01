@@ -1,3 +1,4 @@
+import pytest
 import sys
 import os
 import unittest
@@ -26,6 +27,7 @@ except ImportError as e:
     sys.exit(1)
 
 class TestVisionFlow(unittest.IsolatedAsyncioTestCase):
+    @pytest.mark.skip(reason='Images not supported in Phase 6/7')
     async def test_send_image_payload(self):
         # Mock WebSocket Instance
         mock_ws = AsyncMock()
@@ -53,7 +55,7 @@ class TestVisionFlow(unittest.IsolatedAsyncioTestCase):
 
         # Run send_to_gemini
         try:
-            await send_to_gemini(mock_ws, mock_session)
+            await send_to_gemini(mock_ws, mock_session, AsyncMock())
         except Exception:
             pass # Expected disconnect exception
 

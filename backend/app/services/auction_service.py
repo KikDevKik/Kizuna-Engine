@@ -11,17 +11,14 @@ class AuctionService:
     Updated with Solution B: Priority Thresholding & Silence Watchdog.
     Prevents deadlocks where agents never speak due to VAD jitter.
     """
-    _instance = None
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(AuctionService, cls).__new__(cls)
-            cls._instance._lock = asyncio.Lock()
-            cls._instance._current_winner: Optional[str] = None
-            cls._instance._current_score: float = 0.0
-            cls._instance._last_user_activity: float = 0.0
-            cls._instance._user_priority_window: float = 0.5  # 500ms grace period
-        return cls._instance
+    def __init__(self):
+        self._lock = asyncio.Lock()
+        self._current_winner: Optional[str] = None
+        self._current_score: float = 0.0
+        self._last_user_activity: float = 0.0
+        self._user_priority_window: float = 0.5  # 500ms grace period
+
 
     def _is_user_active(self) -> bool:
         """Checks if the user has spoken within the grace window."""
@@ -80,5 +77,3 @@ class AuctionService:
             self._current_winner = None
             self._current_score = 0.0
 
-# Singleton Instance
-auction_service = AuctionService()

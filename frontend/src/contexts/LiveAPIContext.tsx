@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
 import { createAudioBuffer } from '../utils/audioUtils';
-import type { ServerMessage } from '../types/websocket';
+// import type { ServerMessage } from '../types/websocket';
 
 export interface UseLiveAPI {
   connected: boolean;

@@ -15,6 +15,7 @@ from app.services.reflection import reflection_mind
 from app.services.sleep_manager import SleepManager
 from app.services.time_skip import TimeSkipService
 from app.services.cache import cache
+from app.services.auction_service import AuctionService
 from app.services.supervisor import CognitiveSupervisor
 from app.repositories.base import SoulRepository
 from app.dependencies import verify_user_logic
@@ -91,9 +92,7 @@ class SessionManager:
                 agent_id, user_id, self.soul_repo
             )
 
-            # 🏰 BASTION: The Babel Protocol (Phase 7.5)
-            # Inject the user's browser language directly into the active prompt.
-            system_instruction += f"\n\n[CRITICAL DIRECTIVE]: The user's system language is {lang}. You MUST ALWAYS speak and respond fluently in {lang}, maintaining your established personality."
+
 
         except ValueError as e:
             logger.warning(f"Connection rejected: {e}")
@@ -115,6 +114,9 @@ class SessionManager:
                 await self.soul_repo.record_interaction(user_id, agent_id)
         except Exception as e:
             logger.error(f"Failed to record interaction edge: {e}")
+
+        # Phase 2.1: Isolate Session Auction
+        auction_service = AuctionService()
 
         # Master Session Logger: Global Transcript Accumulation
         session_transcript_buffer: list[str] = []
@@ -173,7 +175,7 @@ class SessionManager:
                         # 1. Audio Upstream (Client -> Gemini)
                         tg.create_task(
                             send_to_gemini(
-                                websocket, session, session_transcript_buffer, transcript_queue
+                                websocket, session, auction_service, session_transcript_buffer, transcript_queue
                             )
                         )
 
@@ -182,6 +184,7 @@ class SessionManager:
                             receive_from_gemini(
                                 websocket,
                                 session,
+                                auction_service,
                                 transcript_queue,
                                 reflection_queue,
                                 session_transcript_buffer,
@@ -232,6 +235,7 @@ class SessionManager:
                 await asyncio.gather(*cognitive_tasks, return_exceptions=True)
 
             logger.info("WebSocket session closed.")
+            subconscious_mind.cleanup(user_id)
 
             # Update Last Seen (Phase 3)
             if hasattr(self.soul_repo, 'update_user_last_seen'):
