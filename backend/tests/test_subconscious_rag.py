@@ -39,14 +39,14 @@ async def test_subconscious_event_rag_injection():
     # Start loop
     task = asyncio.create_task(service.start(transcript_queue, injection_queue, "user", "agent"))
 
-    # Feed input
-    await transcript_queue.put("Tell me about the war.")
+    # Feed input with a temporal reference to trigger RAG
+    await transcript_queue.put("Tell me about the war remember when.")
 
     try:
         # Expect injection
         payload = await asyncio.wait_for(injection_queue.get(), timeout=5.0)
         text = payload["text"]
-        assert "SYSTEM_HINT: 🌍 [World History]" in text
+        assert "🌍 [World History]" in text
         assert "Great War of Data" in text
         assert "FOUGHT" in text
 

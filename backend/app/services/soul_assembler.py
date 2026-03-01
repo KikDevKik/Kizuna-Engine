@@ -8,6 +8,8 @@ from ..models.graph import AgentNode, SystemConfigNode
 
 logger = logging.getLogger(__name__)
 
+SOUL_STATIC_VERSION = "v2"
+
 def get_affinity_modifier(level: float, affinity_matrix: List[List]) -> str:
     """Returns the descriptive modifier for the given affinity level (0-100)."""
     for threshold, description in affinity_matrix:
@@ -57,6 +59,28 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
     forbidden_secret = getattr(agent, 'forbidden_secret', "This agent has no secrets yet.")
     secret_block = f"HIDDEN SECRET DATA: {forbidden_secret}"
 
+    # Language Awareness Block
+    native_lang = getattr(agent, 'native_language', 'Unknown')
+    known_langs = getattr(agent, 'known_languages', [])
+
+    if known_langs:
+        langs_str = ", ".join(known_langs)
+        language_block = (
+            f"--- LANGUAGE PROTOCOL ---\n"
+            f"Your native language is: {native_lang}.\n"
+            f"Languages you know: {langs_str}.\n"
+            f"CRITICAL: You MUST communicate ONLY in the languages listed above. "
+            f"If the user speaks a language you don't know, respond in your native language "
+            f"or in the closest language you do know. "
+            f"NEVER pretend to speak a language not in your known list. "
+            f"This is part of your identity — not a limitation, but who you are."
+        )
+    else:
+        language_block = (
+            f"--- LANGUAGE PROTOCOL ---\n"
+            f"Your native language is: {native_lang}. Communicate in this language by default."
+        )
+
     static_block = (
         f"{system_config.core_directive}\n\n"
         f"--- AGENT DNA ---\n"
@@ -68,6 +92,7 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
         f"{secret_block}\n\n"
         f"--- VISION PROTOCOL ---\n"
         f"{getattr(agent, 'vision_instruction_prompt', 'Analyze the visual input critically.')}\n"
+        f"{language_block}\n"
     )
     return static_block
 
@@ -186,7 +211,7 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
     system_config = await repository.get_system_config()
 
     # 2. Try Cache for Static DNA
-    cache_key = f"soul_static:{agent_id}"
+    cache_key = f"soul_static:{SOUL_STATIC_VERSION}:{agent_id}"
     static_dna = await cache.get(cache_key)
 
     if not static_dna:
