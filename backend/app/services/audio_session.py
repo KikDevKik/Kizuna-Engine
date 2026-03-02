@@ -1,8 +1,6 @@
 import asyncio
-import base64
 import logging
 import json
-import re
 import time
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -31,12 +29,12 @@ logger = logging.getLogger(__name__)
 # 2048 bytes = ~64ms of audio
 AUDIO_BUFFER_THRESHOLD = 2048
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CAUSA 1 FIX: Silence-Based Auto End-of-Turn (VAD)
-# If audio buffer stays below threshold for VAD_SILENCE_MS,
-# flush and signal end_of_turn to Gemini automatically.
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-VAD_SILENCE_MS = 800  # ms of silence before auto-signaling end_of_turn
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# VAD: Silence-based Auto End-of-Turn
+# After VAD_SILENCE_MS of no new audio, flush buffer + fire turn_complete.
+# Uses a SEPARATE asyncio Task so websocket.receive() is never cancelled.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VAD_SILENCE_MS = 900  # ms
 
 
 async def send_injections_to_gemini(session, injection_queue, session_closed_event):
@@ -70,8 +68,6 @@ async def send_injections_to_gemini(session, injection_queue, session_closed_eve
                 continue
 
             logger.info(f"💉 Injecting to Gemini: {text}")
-
-            # 🏰 BASTION SHIELD: Strict SDK Formatting for Live API
             await session.send(
                 input=f"[SYSTEM_CONTEXT]: {text}",
                 end_of_turn=turn_complete
@@ -95,72 +91,85 @@ async def send_to_gemini(
 ):
     """
     Task A: Client -> Gemini
-    Reads audio bytes from WebSocket and sends to Gemini session.
+    Reads audio bytes from WebSocket and forwards to Gemini.
 
-    CAUSA 1 FIX: Implements silence-based VAD.
-    If no new audio arrives within VAD_SILENCE_MS after buffering begins,
-    the buffer is flushed with end_of_turn=True so Gemini generates a response.
+    VAD FIX: Uses a separate asyncio.Task for silence detection so that
+    websocket.receive() is NEVER wrapped in asyncio.wait_for — avoiding
+    Starlette WebSocket internal state corruption on cancellation.
+
+    SDK FIX: The google-genai SDK silently ignores end_of_turn=True when the
+    input is an audio blob (it routes audio as realtime_input, which has no
+    turn_complete field). A separate text message with end_of_turn=True is
+    always sent after audio flushes to correctly signal turn completion.
     """
-    try:
-        audio_buffer = bytearray()
-        carry_over = bytearray()
-        last_audio_time: Optional[float] = None  # Timestamp of last received audio chunk
+    audio_buffer = bytearray()
+    carry_over = bytearray()
+    silence_timer_task: Optional[asyncio.Task] = None
+    eot_lock = asyncio.Lock()  # Prevents overlapping end_of_turn sends
 
-        async def _flush_with_end_of_turn():
-            """Flush the current buffer to Gemini and signal end of turn."""
-            nonlocal last_audio_time
-            if audio_buffer:
-                logger.info(f"🔚 VAD Auto End-of-Turn: Flushing {len(audio_buffer)} bytes to Gemini")
-                try:
-                    await session.send(
-                        input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"},
-                        end_of_turn=True
-                    )
-                except Exception as e:
-                    logger.warning(f"⚠️ Error flushing audio buffer: {e}")
-            else:
-                logger.info("🔚 VAD Auto End-of-Turn: Buffer empty, sending blank turn signal")
-                try:
-                    await session.send(input=" ", end_of_turn=True)
-                except Exception as e:
-                    logger.warning(f"⚠️ Error sending blank turn signal: {e}")
-            audio_buffer.clear()
-            last_audio_time = None
+    async def _send_end_of_turn_signal():
+        """
+        Flush the audio buffer and send an EXPLICIT turn_complete text message.
 
-        while True:
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # CAUSA 1 FIX: VAD Silence Detection
-            # If we have buffered audio and no new data arrives within
-            # VAD_SILENCE_MS, fire end_of_turn automatically.
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            timeout = None
-            if last_audio_time is not None and audio_buffer:
-                elapsed_ms = (time.monotonic() - last_audio_time) * 1000
-                remaining_ms = VAD_SILENCE_MS - elapsed_ms
-                if remaining_ms <= 0:
-                    # Silence window expired, flush now
-                    await _flush_with_end_of_turn()
-                    timeout = None
-                else:
-                    timeout = remaining_ms / 1000.0  # convert to seconds
-
+        This is the critical fix: the SDK ignores end_of_turn=True on audio blob
+        sends (realtime_input path). We must always follow up with a text-based
+        session.send(input=" ", end_of_turn=True) to fire turn_complete correctly.
+        """
+        async with eot_lock:
+            if session_closed_event.is_set():
+                return
             try:
-                message = await asyncio.wait_for(
-                    websocket.receive(),
-                    timeout=timeout
-                )
-            except asyncio.TimeoutError:
-                # Silence window expired mid-wait
                 if audio_buffer:
-                    await _flush_with_end_of_turn()
-                continue
+                    logger.info(f"🔚 EOT: Flushing {len(audio_buffer)} audio bytes to Gemini")
+                    await session.send(
+                        input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"}
+                    )
+                    audio_buffer.clear()
+
+                # SDK FIX: Always send explicit turn_complete via separate text message.
+                # Audio realtime_input does NOT carry turn_complete in the protocol.
+                logger.info("🔚 EOT: Sending explicit turn_complete signal to Gemini")
+                await session.send(input=" ", end_of_turn=True)
+                logger.info("✅ EOT: turn_complete sent. Awaiting Gemini response...")
+
+            except Exception as e:
+                if not session_closed_event.is_set():
+                    logger.warning(f"⚠️ EOT send error: {e}")
+
+    def _reset_vad_timer():
+        """
+        Resets the VAD silence watchdog.
+        Cancels any existing timer and starts a fresh one.
+        Uses a separate asyncio Task — websocket.receive() is NEVER touched.
+        """
+        nonlocal silence_timer_task
+        if silence_timer_task and not silence_timer_task.done():
+            silence_timer_task.cancel()
+
+        async def _vad_watchdog():
+            """Fires end_of_turn after VAD_SILENCE_MS of audio inactivity."""
+            try:
+                await asyncio.sleep(VAD_SILENCE_MS / 1000.0)
+                if audio_buffer and not session_closed_event.is_set():
+                    logger.info(f"🎙️ VAD: {VAD_SILENCE_MS}ms silence detected. Auto-firing EOT.")
+                    await _send_end_of_turn_signal()
+            except asyncio.CancelledError:
+                pass  # Timer was reset by new audio — this is normal
+
+        silence_timer_task = asyncio.create_task(_vad_watchdog())
+
+    try:
+        while True:
+            # Clean receive — no asyncio.wait_for wrapper.
+            # The VAD watchdog Task handles silence detection independently.
+            message = await websocket.receive()
 
             # 🏰 BASTION SHIELD: Graceful Disconnect Handling
             if message.get("type") == "websocket.disconnect":
                 logger.info("Client disconnected cleanly (websocket.disconnect received).")
-                logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Client disconnected cleanly in send_to_gemini")
+                logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Client disconnected in send_to_gemini")
                 session_closed_event.set()
-                break  # Exit the loop immediately, don't call receive() again.
+                break
 
             data = message.get("bytes")
             text = message.get("text")
@@ -175,18 +184,19 @@ async def send_to_gemini(
                     data = data[:-1]
 
                 audio_buffer.extend(data)
-                last_audio_time = time.monotonic()  # Record time of last audio activity
+                _reset_vad_timer()  # Always reset on new audio
 
-                # Send immediately when buffer is full (real-time streaming)
                 if len(audio_buffer) >= AUDIO_BUFFER_THRESHOLD:
                     try:
                         logger.info(f"📤 Sending audio packet: {len(audio_buffer)} bytes")
-                        await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
+                        await session.send(
+                            input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"}
+                        )
                         audio_buffer.clear()
-                        # Keep last_audio_time — silence timer resets from LAST audio activity
+                        # VAD timer keeps running — resets on next audio chunk
                     except (ConnectionClosedError, ConnectionClosedOK) as e:
-                        logger.warning(f"Gemini connection closed during audio send: {e}. Closing session gracefully.")
-                        logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Gemini connection closed during audio send")
+                        logger.warning(f"Gemini connection closed during audio send: {e}.")
+                        logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Gemini closed during audio send")
                         session_closed_event.set()
                         break
                     except Exception as e:
@@ -197,17 +207,21 @@ async def send_to_gemini(
                 logger.info(f"📨 Text message received: repr={repr(text[:100])}")
                 try:
                     control = json.loads(text)
+
                     if control.get("type") == "control" and control.get("action") == "interrupt":
                         logger.info("🛑 SOVEREIGN VOICE: User Interrupted")
-                        await auction_service.interrupt()
-                        # Also flush with end_of_turn on interrupt so Gemini can respond
-                        last_audio_time = None
+                        # Cancel VAD and clear buffer on barge-in
+                        if silence_timer_task and not silence_timer_task.done():
+                            silence_timer_task.cancel()
                         audio_buffer.clear()
+                        await auction_service.interrupt()
                         continue
 
                     if control.get("type") == "end_of_turn":
-                        logger.info("🔚 End of turn signal received from frontend. Flushing to Gemini.")
-                        await _flush_with_end_of_turn()
+                        logger.info("🔚 End of turn signal received from frontend.")
+                        if silence_timer_task and not silence_timer_task.done():
+                            silence_timer_task.cancel()
+                        await _send_end_of_turn_signal()
                         continue
 
                     if control.get("type") == "native_transcript":
@@ -220,6 +234,7 @@ async def send_to_gemini(
                             if transcript_queue:
                                 transcript_queue.put_nowait(transcript_text)
                             continue
+
                 except json.JSONDecodeError:
                     logger.warning(f"📨 Non-JSON text message ignored: {repr(text[:100])}")
                 except Exception as e:
@@ -229,6 +244,11 @@ async def send_to_gemini(
     except Exception as e:
         logger.warning(f"Connection dropped in send_to_gemini: {e}")
         raise e
+    finally:
+        # Cancel VAD watchdog on exit
+        if silence_timer_task and not silence_timer_task.done():
+            silence_timer_task.cancel()
+
 
 async def receive_from_gemini(
     websocket: WebSocket,
@@ -245,11 +265,8 @@ async def receive_from_gemini(
     """
     Task B: Gemini -> Client
     Phase 6 Stable: Cognitive Silence Architecture with robust diagnostics.
-
-    CAUSA 4 FIX: Added detailed pre-auction logging to detect silent failures.
     """
     try:
-        # 🏰 BASTION: Turn-scoped state
         turn_aborted = False
 
         logger.info("📥 receive_from_gemini: Starting receive loop.")
@@ -280,10 +297,6 @@ async def receive_from_gemini(
                             break
 
                 if audio_data:
-                    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                    # CAUSA 2 & 4 FIX: Log auction state BEFORE bidding
-                    # so we can diagnose why audio gets dropped.
-                    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                     logger.info(
                         f"🔊 Audio received from Gemini ({len(audio_data)} bytes). "
                         f"Auction state: winner={auction_service._current_winner!r}, "
@@ -298,17 +311,15 @@ async def receive_from_gemini(
                                 logger.warning(
                                     f"🔇 {agent_name} LOST AUCTION. "
                                     f"Current winner: {current_winner!r}. "
-                                    f"Aborting this turn."
+                                    f"Aborting turn."
                                 )
                                 turn_aborted = True
                             else:
-                                # No winner but bid failed → dirty lock state
                                 logger.error(
                                     f"🚨 AUCTION BUG: bid() returned False but _current_winner is None. "
                                     f"Force-releasing to recover."
                                 )
                                 await auction_service.force_release()
-                                # Retry bid once
                                 won = await auction_service.bid(agent_id, 1.0)
                                 if not won:
                                     logger.error(f"🚨 AUCTION RECOVERY FAILED for {agent_id}. Skipping audio chunk.")
@@ -335,14 +346,12 @@ async def receive_from_gemini(
                         if turn_aborted:
                             continue
 
-                        # 1. TOOL HANDLING (Gossip)
                         if part.function_call:
                             fc = part.function_call
                             if fc.name == "spawn_stranger":
                                 try:
                                     name = fc.args.get("name", "Unknown")
                                     relation = fc.args.get("relation", "Associate")
-                                    vibe = fc.args.get("vibe", "Mysterious")
                                     new_agent = await asyncio.wait_for(agent_service.create_agent(
                                         name=name, role="Stranger",
                                         base_instruction=f"You are {name}, a {relation} of {agent_name}.",
@@ -362,14 +371,11 @@ async def receive_from_gemini(
 
                         if part.text:
                             text_to_process = part.text
-
-                            # 🏰 BASTION: Basic Cognitive Silence Filter
                             if not turn_aborted:
                                 stripped = text_to_process.strip()
                                 if "[THOUGHT]" in stripped:
                                     continue
 
-                                # Send real dialogue to client
                                 if transcript_buffer is not None:
                                     transcript_buffer.append(f"{agent_name}: {stripped}")
 
@@ -382,7 +388,6 @@ async def receive_from_gemini(
                                     reflection_queue.put_nowait(stripped)
 
                 if server_content.turn_complete:
-                    # Reset turn state
                     logger.info(f"✅ Turn complete for {agent_name} (turn_aborted={turn_aborted})")
                     turn_aborted = False
                     if agent_id:
@@ -406,7 +411,7 @@ async def receive_from_gemini(
 
     except (ConnectionClosedError, ConnectionClosedOK) as e:
         logger.warning(f"Gemini connection closed during receive: {e}. Ending session.")
-        logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Gemini connection closed during receive (outer catch)")
+        logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Gemini connection closed (outer catch)")
         session_closed_event.set()
         return
     except Exception as e:
