@@ -171,12 +171,12 @@ class SessionManager:
                     cognitive_tasks.append(asyncio.create_task(
                         CognitiveSupervisor.supervise("Subconscious", lambda: subconscious_mind.start(
                             transcript_queue, injection_queue, user_id, agent_id
-                        ))
+                        ), session_closed_event)
                     ))
 
                     # 4. Injection Upstream (Injection Queue -> Gemini)
                     cognitive_tasks.append(asyncio.create_task(
-                        CognitiveSupervisor.supervise("InjectionLoop", lambda: send_injections_to_gemini(session, injection_queue, session_closed_event))
+                        CognitiveSupervisor.supervise("InjectionLoop", lambda: send_injections_to_gemini(session, injection_queue, session_closed_event), session_closed_event)
                     ))
 
                     # 5. Reflection Mind (AI Output -> Self-Critique -> Injection Queue)
@@ -184,7 +184,7 @@ class SessionManager:
                         cognitive_tasks.append(asyncio.create_task(
                             CognitiveSupervisor.supervise("ReflectionMind", lambda: reflection_mind.start(
                                 reflection_queue, injection_queue, agent
-                            ))
+                            ), session_closed_event)
                         ))
 
                     # B. Critical Motor Loop (The TaskGroup that MUST NOT DIE from cognitive errors)

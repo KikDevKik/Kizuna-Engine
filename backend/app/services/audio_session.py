@@ -186,6 +186,38 @@ async def receive_from_gemini(
                 if session_closed_event.is_set():
                     logger.info("📥 Session closed mid-receive. Stopping.")
                     break
+                
+                # 🛡️ BASTION: Robust Audio Extraction (SDK 0.3.0 path + legacy)
+                audio_data = None
+                if hasattr(response, 'data') and response.data:
+                    audio_data = response.data
+                elif (response.server_content and 
+                      response.server_content.model_turn and
+                      response.server_content.model_turn.parts):
+                    for part in response.server_content.model_turn.parts:
+                        if hasattr(part, 'inline_data') and part.inline_data:
+                            audio_data = part.inline_data.data
+                            break
+                
+                if audio_data:
+                    if agent_id:
+                        # Bid for mic
+                        won = await auction_service.bid(agent_id, 1.0)
+                        if not won:
+                            if auction_service._current_winner is not None:
+                                logger.info(f"🔇 {agent_name} lost auction due to conflict. Aborting TURN.")
+                                turn_aborted = True
+                            # Continue to next response, but we might want to skip sending audio
+                            if turn_aborted:
+                                continue
+
+                    try:
+                        await websocket.send_bytes(audio_data)
+                        logger.info(f"🔊 Audio sent to client: {len(audio_data)} bytes")
+                    except Exception:
+                        raise WebSocketDisconnect()
+
+                # Handle other content (Text, Tools)
                 if response.server_content is None:
                     continue
 
@@ -221,24 +253,6 @@ async def receive_from_gemini(
                                 except Exception as e:
                                     logger.error(f"Tool Failed: {e}")
                             continue
-
-                        # 2. AUDIO HANDLING (The Vocal Handshake)
-                        if part.inline_data:
-                            if agent_id:
-                                # Bid for mic
-                                won = await auction_service.bid(agent_id, 1.0)
-                                if not won:
-                                    if auction_service._current_winner is not None:
-                                        logger.info(f"🔇 {agent_name} lost auction due to conflict. Aborting TURN.")
-                                        turn_aborted = True
-                                    continue
-
-                            try:
-                                await websocket.send_bytes(part.inline_data.data)
-                            except Exception:
-                                raise WebSocketDisconnect()
-
-                        # 3. TEXT HANDLING (Cognitive Silence)
                         if part.text:
                             text_to_process = part.text
                             
