@@ -105,8 +105,15 @@ async def send_to_gemini(websocket: WebSocket, session, auction_service, transcr
                 audio_buffer.extend(data)
 
                 if len(audio_buffer) >= AUDIO_BUFFER_THRESHOLD:
-                    await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
-                    audio_buffer.clear()
+                    try:
+                        await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
+                        audio_buffer.clear()
+                    except (ConnectionClosedError, ConnectionClosedOK) as e:
+                        logger.warning(f"Gemini connection closed during audio send: {e}. Closing session gracefully.")
+                        break
+                    except Exception as e:
+                        logger.error(f"Unexpected error in send_to_gemini: {e}")
+                        raise
 
             elif text:
                 try:
@@ -244,10 +251,16 @@ async def receive_from_gemini(
 
         except (WebSocketDisconnect, ConnectionClosed) as e:
             raise e
+        except (ConnectionClosedError, ConnectionClosedOK) as e:
+            logger.warning(f"Gemini connection closed during receive: {e}. Ending session.")
+            return
         except Exception as e:
             logger.error(f"Loop Error: {e}")
             raise e
 
+    except (ConnectionClosedError, ConnectionClosedOK) as e:
+        logger.warning(f"Gemini connection closed during receive: {e}. Ending session.")
+        return
     except Exception as e:
         logger.error(f"Fatal Session Error: {e}")
         raise e
