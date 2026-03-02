@@ -87,7 +87,8 @@ async def send_to_gemini(
     auction_service,
     session_closed_event: asyncio.Event,
     transcript_buffer: list[str] | None = None,
-    transcript_queue: asyncio.Queue | None = None
+    transcript_queue: asyncio.Queue | None = None,
+    eot_reset_event: asyncio.Event | None = None,
 ):
     """
     Task A: Client -> Gemini
@@ -101,11 +102,15 @@ async def send_to_gemini(
     input is an audio blob (it routes audio as realtime_input, which has no
     turn_complete field). A separate text message with end_of_turn=True is
     always sent after audio flushes to correctly signal turn completion.
+
+    DUPLICATE EOT FIX: _eot_fired flag ensures only one turn_complete is sent
+    per turn. Resets via eot_reset_event when Gemini signals turn_complete.
     """
     audio_buffer = bytearray()
     carry_over = bytearray()
     silence_timer_task: Optional[asyncio.Task] = None
     eot_lock = asyncio.Lock()  # Prevents overlapping end_of_turn sends
+    _eot_fired = False          # Guard: block duplicate EOTs within one turn
 
     async def _send_end_of_turn_signal():
         """
@@ -115,9 +120,22 @@ async def send_to_gemini(
         sends (realtime_input path). We must always follow up with a text-based
         session.send(input=" ", end_of_turn=True) to fire turn_complete correctly.
         """
+        nonlocal _eot_fired
         async with eot_lock:
             if session_closed_event.is_set():
                 return
+            # ── DUPLICATE EOT GUARD ──────────────────────────────────
+            # Only the first caller wins. VAD and frontend both call
+            # this; without the guard Gemini receives two turn_complete
+            # signals per turn, which silences the second response.
+            if _eot_fired:
+                logger.info("🔚 EOT: Already fired this turn — skipping duplicate.")
+                return
+            _eot_fired = True
+            # Clear any queued reset so we wait for the real turn_complete
+            if eot_reset_event:
+                eot_reset_event.clear()
+            # ─────────────────────────────────────────────────────────
             try:
                 if audio_buffer:
                     logger.info(f"🔚 EOT: Flushing {len(audio_buffer)} audio bytes to Gemini")
@@ -133,6 +151,7 @@ async def send_to_gemini(
                 logger.info("✅ EOT: turn_complete sent. Awaiting Gemini response...")
 
             except Exception as e:
+                _eot_fired = False  # Allow retry on send failure
                 if not session_closed_event.is_set():
                     logger.warning(f"⚠️ EOT send error: {e}")
 
@@ -150,7 +169,8 @@ async def send_to_gemini(
             """Fires end_of_turn after VAD_SILENCE_MS of audio inactivity."""
             try:
                 await asyncio.sleep(VAD_SILENCE_MS / 1000.0)
-                if audio_buffer and not session_closed_event.is_set():
+                # Only fire if there's audio and EOT hasn't already been fired
+                if audio_buffer and not session_closed_event.is_set() and not _eot_fired:
                     logger.info(f"🎙️ VAD: {VAD_SILENCE_MS}ms silence detected. Auto-firing EOT.")
                     await _send_end_of_turn_signal()
             except asyncio.CancelledError:
@@ -182,6 +202,20 @@ async def send_to_gemini(
                 if len(data) % 2 != 0:
                     carry_over.extend(data[-1:])
                     data = data[:-1]
+
+                # ── POST-EOT AUDIO GUARD ─────────────────────────────
+                # After EOT is fired, reset the flag only when Gemini has
+                # acknowledged the turn (via eot_reset_event). Until then,
+                # buffer incoming audio but do NOT flush it to Gemini.
+                if _eot_fired:
+                    if eot_reset_event and eot_reset_event.is_set():
+                        _eot_fired = False
+                        logger.info("🔄 EOT reset: ready for next turn.")
+                    else:
+                        # Gemini hasn't finished yet — keep buffering silently
+                        audio_buffer.extend(data)
+                        continue
+                # ─────────────────────────────────────────────────────
 
                 audio_buffer.extend(data)
                 _reset_vad_timer()  # Always reset on new audio
@@ -221,6 +255,8 @@ async def send_to_gemini(
                         logger.info("🔚 End of turn signal received from frontend.")
                         if silence_timer_task and not silence_timer_task.done():
                             silence_timer_task.cancel()
+                        # _send_end_of_turn_signal is idempotent: guard inside will
+                        # skip if VAD already fired EOT this turn.
                         await _send_end_of_turn_signal()
                         continue
 
@@ -260,7 +296,8 @@ async def receive_from_gemini(
     transcript_buffer: list[str] | None = None,
     agent_name: str = "AI",
     agent_id: Optional[str] = None,
-    soul_repo: Optional["SoulRepository"] = None
+    soul_repo: Optional["SoulRepository"] = None,
+    eot_reset_event: asyncio.Event | None = None,
 ):
     """
     Task B: Gemini -> Client
@@ -392,6 +429,9 @@ async def receive_from_gemini(
                     turn_aborted = False
                     if agent_id:
                         await auction_service.release(agent_id)
+                    # Signal send_to_gemini that it's safe to start the next turn
+                    if eot_reset_event:
+                        eot_reset_event.set()
                     try:
                         await websocket.send_json({"type": "turn_complete"})
                     except: pass

@@ -162,6 +162,9 @@ class SessionManager:
                 # Manage bidirectional streams and subconscious concurrently
                 # If either task fails (e.g. disconnect), the TaskGroup will cancel the others.
                 session_closed_event = asyncio.Event()
+                # Shared event: receive_from_gemini sets this on turn_complete;
+                # send_to_gemini reads it to unlock audio for the next turn.
+                eot_reset_event = asyncio.Event()
 
                 # Phase 3: Inject Repository into Subconscious
                 subconscious_mind.set_repository(self.soul_repo)
@@ -197,7 +200,10 @@ class SessionManager:
                         # 1. Audio Upstream (Client -> Gemini)
                         tg.create_task(
                             send_to_gemini(
-                                websocket, session, auction_service, session_closed_event, session_transcript_buffer, transcript_queue
+                                websocket, session, auction_service,
+                                session_closed_event, session_transcript_buffer,
+                                transcript_queue,
+                                eot_reset_event=eot_reset_event,
                             )
                         )
 
@@ -212,8 +218,9 @@ class SessionManager:
                                 reflection_queue,
                                 session_transcript_buffer,
                                 agent_name=agent_name,
-                                agent_id=agent_id, # Module 6: Audio Concurrency ID
-                                soul_repo=self.soul_repo # Module 1.5: Gossip Protocol
+                                agent_id=agent_id,
+                                soul_repo=self.soul_repo,
+                                eot_reset_event=eot_reset_event,
                             )
                         )
 
