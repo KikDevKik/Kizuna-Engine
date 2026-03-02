@@ -125,6 +125,11 @@ class SessionManager:
         # Phase 2.1: Isolate Session Auction
         auction_service = AuctionService()
 
+        # CAUSA 2 FIX: Force-release any dirty state from a previous session
+        # (e.g. server survived an abrupt disconnect and lock was never released)
+        await auction_service.force_release()
+        logger.info("🔧 AuctionService: Clean state guaranteed for new session.")
+
         # Master Session Logger: Global Transcript Accumulation
         session_transcript_buffer: list[str] = []
 

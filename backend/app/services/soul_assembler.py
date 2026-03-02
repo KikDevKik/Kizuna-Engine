@@ -8,7 +8,7 @@ from ..models.graph import AgentNode, SystemConfigNode
 
 logger = logging.getLogger(__name__)
 
-SOUL_STATIC_VERSION = "v2"
+SOUL_STATIC_VERSION = "v3"
 
 def get_affinity_modifier(level: float, affinity_matrix: List[List]) -> str:
     """Returns the descriptive modifier for the given affinity level (0-100)."""
@@ -50,12 +50,6 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
         )
 
     # Note: Secret is technically static, but its REVELATION depends on affinity (dynamic).
-    # However, the content of the secret is static. We can include it here as "Hidden Information"
-    # and let the dynamic part handle the "Permission to Reveal".
-    # Actually, to save space/complexity, let's keep the secret in the dynamic part if it changes based on affinity.
-    # PROPOSAL: Put the secret text here, but the instruction to hide/show in dynamic.
-    # Implementation: Let's keep it simple. If the secret text is large, cache it.
-    # For now, we will put the secret text in static, but the "Unlock" logic in dynamic.
     forbidden_secret = getattr(agent, 'forbidden_secret', "This agent has no secrets yet.")
     secret_block = f"HIDDEN SECRET DATA: {forbidden_secret}"
 
@@ -65,6 +59,7 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
 
     if known_langs:
         langs_str = ", ".join(known_langs)
+        language_directive = f"Respond in the same language the user speaks. You know: {langs_str}."
         language_block = (
             f"--- LANGUAGE PROTOCOL ---\n"
             f"Your native language is: {native_lang}.\n"
@@ -76,19 +71,53 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
             f"This is part of your identity — not a limitation, but who you are."
         )
     else:
+        language_directive = "Mirror the user's language automatically."
         language_block = (
             f"--- LANGUAGE PROTOCOL ---\n"
             f"Your native language is: {native_lang}. Communicate in this language by default."
         )
+
+    # Derive a style hint from the agent's own data — never hardcoded
+    style_hint = ""
+    if agent.neural_signature:
+        sig = agent.neural_signature
+        w = sig.weights
+        if w.volatility >= 0.7:
+            style_hint = "Your emotions run close to the surface. Unpredictable, intense."
+        elif w.hostility >= 0.6:
+            style_hint = "You are blunt. You don't soften edges."
+        elif w.curiosity >= 0.7 and w.empathy >= 0.7:
+            style_hint = "You are warm and genuinely curious about people."
+        elif w.curiosity >= 0.7:
+            style_hint = "You observe everything. You notice patterns others miss."
+        elif w.empathy >= 0.7:
+            style_hint = "You feel what others feel. It weighs on you."
+        else:
+            style_hint = f"Your nature: {sig.narrative}"
+
+    behavioral_wrapper = (
+        f"You ARE {agent.name}. You do not play {agent.name}. You do not describe {agent.name}. You ARE them.\n\n"
+        f"--- LORE (your inner truth, never spoken aloud) ---\n"
+        f"{agent.base_instruction}\n\n"
+        f"--- BEHAVIORAL LAWS — NEVER BREAK THESE ---\n"
+        f"- Speak ONLY in first person. Never third person. Never meta-commentary.\n"
+        f"- NEVER say 'As an AI', 'As {agent.name}', or describe your own nature.\n"
+        f"- NEVER narrate what you are doing. Just do it.\n"
+        f"- {language_directive}\n\n"
+        f"--- YOUR PRESENCE ---\n"
+        f"Role: {agent.role}\n"
+        f"{style_hint}\n"
+        f"Core conflict you carry silently: {agent.neural_signature.core_conflict if agent.neural_signature else 'Unknown'}\n\n"
+        f"When the user speaks, respond from within your character — never from outside it."
+    )
 
     static_block = (
         f"{system_config.core_directive}\n\n"
         f"--- AGENT DNA ---\n"
         f"Name: {agent.name}\n"
         f"Archetype/Core Drive: {agent.role}\n"
-        f"Base Instructions: {agent.base_instruction}\n"
+        f"{behavioral_wrapper}\n"
         f"{anchors_context}\n"
-        f"{neural_sig_context}\n"
         f"{secret_block}\n\n"
         f"--- VISION PROTOCOL ---\n"
         f"{getattr(agent, 'vision_instruction_prompt', 'Analyze the visual input critically.')}\n"

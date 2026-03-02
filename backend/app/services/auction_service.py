@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 class AuctionService:
     """
     Module 6: The Unforgiven Debt (Audio Concurrency).
-    Updated with Solution B: Priority Thresholding & Silence Watchdog.
-    Prevents deadlocks where agents never speak due to VAD jitter.
+    Phase 6 Stable: Corrected race conditions and dirty-state handling.
+    All contention logic runs inside the lock to prevent TOCTOU races.
     """
 
     def __init__(self):
@@ -19,61 +19,74 @@ class AuctionService:
         self._last_user_activity: float = 0.0
         self._user_priority_window: float = 0.5  # 500ms grace period
 
-
     def _is_user_active(self) -> bool:
         """Checks if the user has spoken within the grace window."""
         return (time.time() - self._last_user_activity) < self._user_priority_window
 
+    async def force_release(self, agent_id: Optional[str] = None):
+        """
+        Emergency reset: clears any dirty lock state at session start.
+        Called by SessionManager BEFORE the audio loop begins.
+        If agent_id is provided, only releases if that agent holds the lock.
+        If agent_id is None, forces a full reset regardless.
+        """
+        async with self._lock:
+            if agent_id is None or self._current_winner == agent_id:
+                if self._current_winner:
+                    logger.info(f"🔧 Force Release: Cleared dirty lock held by '{self._current_winner}'")
+                self._current_winner = None
+                self._current_score = 0.0
+
     async def bid(self, agent_id: str, score: float) -> bool:
         """
-        Attempts to win the audio lock with priority thresholding.
+        Attempts to win the audio lock.
+        All state-mutating logic is now inside the lock to prevent race conditions.
         """
-        # 1. User Priority Check (Solution B Watchdog)
-        if self._is_user_active():
-            # If user is active, only a massive score (e.g. 10.0+) can break through.
-            # Default bids (1.0) are suppressed during user speech.
-            if score < 10.0:
-                return False
-
-        # 2. Ownership Continuity
+        # Fast path 1: ownership continuity (no lock needed for read, confirmed inside)
         if self._current_winner == agent_id:
             return True
 
-        # 3. Competition & Pre-emption
-        # If someone else is speaking, can I outbid them?
-        # Requirement: Score must be significantly higher to interrupt another agent.
-        if self._current_winner is not None:
-            if score > self._current_score * 2.0:
-                logger.info(f"🎤 PRE-EMPTION: {agent_id} ({score}) outbid {self._current_winner} ({self._current_score})")
-                self._current_winner = agent_id
-                self._current_score = score
-                return True
-            return False
+        # Fast path 2: user active suppression (no lock needed — only reads time)
+        if self._is_user_active():
+            if score < 10.0:
+                return False
 
-        # 4. Acquisition
         async with self._lock:
-            # Final check inside lock
+            # Re-check ownership inside lock
+            if self._current_winner == agent_id:
+                return True
+
+            # No current owner → acquire
             if self._current_winner is None:
                 self._current_winner = agent_id
                 self._current_score = score
                 logger.info(f"🎤 Auction Won: {agent_id} (Score: {score})")
                 return True
+
+            # Another agent owns it → pre-emption check
+            if score > self._current_score * 2.0:
+                logger.info(f"🎤 PRE-EMPTION: {agent_id} ({score}) outbid {self._current_winner} ({self._current_score})")
+                self._current_winner = agent_id
+                self._current_score = score
+                return True
+
             return False
 
     async def release(self, agent_id: str):
-        """Releases the lock."""
-        if self._current_winner == agent_id:
-            self._current_winner = None
-            self._current_score = 0.0
-            logger.info(f"🎤 Mic Released by {agent_id}")
+        """Releases the lock if held by this agent."""
+        async with self._lock:
+            if self._current_winner == agent_id:
+                self._current_winner = None
+                self._current_score = 0.0
+                logger.info(f"🎤 Mic Released by {agent_id}")
 
     async def interrupt(self):
         """
         User Barge-in: Mark activity and clear current winner.
         """
         self._last_user_activity = time.time()
-        if self._current_winner:
-            logger.info(f"⚠️ BARGE-IN: User speaking. Interrupting {self._current_winner}")
-            self._current_winner = None
-            self._current_score = 0.0
-
+        async with self._lock:
+            if self._current_winner:
+                logger.info(f"⚠️ BARGE-IN: User speaking. Interrupting {self._current_winner}")
+                self._current_winner = None
+                self._current_score = 0.0

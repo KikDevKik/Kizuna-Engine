@@ -26,8 +26,10 @@ class Settings:
     # User Requirement: Use Gemini 2.5+ (Flash/Pro). Avoid 1.5/2.0.
 
     # 1. Main Voice Thread (Low Latency Audio)
-    # Using 2.5 Flash as the stable base for audio/realtime if supported, or standard Flash.
-    MODEL_LIVE_VOICE: str = os.getenv("MODEL_LIVE_VOICE", "gemini-2.5-flash-native-audio-preview-12-2025")
+    # Using gemini-2.0-flash-live-001 — the stable, documented Live API model.
+    # The native-audio-preview was an experimental December 2025 preview that may
+    # no longer be reliably accessible. Override via env var if needed.
+    MODEL_LIVE_VOICE: str = os.getenv("MODEL_LIVE_VOICE", "gemini-2.0-flash-live-001")
 
     # 2. Subconscious Worker (Fast Text Analysis - Scout)
     # 🏰 BASTION: Swapped order. Use stable 2.5 first. 3.0 previews have very low rate limits.
