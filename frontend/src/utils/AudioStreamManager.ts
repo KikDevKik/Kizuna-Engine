@@ -21,13 +21,16 @@ export class AudioStreamManager {
 
   private volumeRef: MutableRefObject<number>;
   private onAudioInput: (data: ArrayBuffer) => void;
+  private onControl: (payload: any) => void;
 
   constructor(
     volumeRef: MutableRefObject<number>,
-    onAudioInput: (data: ArrayBuffer) => void
+    onAudioInput: (data: ArrayBuffer) => void,
+    onControl: (payload: any) => void
   ) {
     this.volumeRef = volumeRef;
     this.onAudioInput = onAudioInput;
+    this.onControl = onControl;
   }
 
   async initialize() {
@@ -106,7 +109,11 @@ export class AudioStreamManager {
       this.workletNode = new AudioWorkletNode(this.ctx, 'pcm-processor');
 
       this.workletNode.port.onmessage = (event) => {
-        this.onAudioInput(event.data);
+        if (event.data instanceof ArrayBuffer || event.data instanceof Int16Array) {
+            this.onAudioInput(event.data);
+        } else {
+            this.onControl(event.data);
+        }
       };
 
       // Connect Source -> Worklet (but not to destination to avoid feedback)

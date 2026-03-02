@@ -236,6 +236,14 @@ export const useLiveAPI = (): UseLiveAPI => {
                              }));
                         }
                     }
+                },
+                (payload: any) => {
+                    // Handle non-audio messages (like end_of_turn)
+                    if (payload && payload.type === 'end_of_turn') {
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ type: 'end_of_turn' }));
+                        }
+                    }
                 }
             );
 
