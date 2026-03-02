@@ -239,19 +239,17 @@ async def send_to_gemini(
                     carry_over.extend(data[-1:])
                     data = data[:-1]
 
-                # ── POST-EOT AUDIO GUARD ─────────────────────────────
-                # After EOT is fired, reset the flag only when Gemini has
-                # acknowledged the turn (via eot_reset_event). Until then,
-                # buffer incoming audio but do NOT flush it to Gemini.
-                if _eot_fired:
-                    if eot_reset_event and eot_reset_event.is_set():
-                        _eot_fired = False
-                        logger.info("🔄 EOT reset: ready for next turn.")
-                    else:
-                        # Gemini hasn't finished yet — keep buffering silently
-                        audio_buffer.extend(data)
-                        continue
+                # ── EOT RESET CHECK ──────────────────────────────────
+                # Audio ALWAYS flows — server-VAD needs continuous audio
+                # (speech → silence) to detect end of speech correctly.
+                # _eot_fired only gates duplicate EOT SIGNAL calls, not audio.
+                # When Gemini finishes responding, eot_reset_event fires and
+                # we allow the next EOT signal to be sent.
+                if _eot_fired and eot_reset_event and eot_reset_event.is_set():
+                    _eot_fired = False
+                    logger.info("🔄 EOT reset: ready for next turn.")
                 # ─────────────────────────────────────────────────────
+
 
                 audio_buffer.extend(data)
                 _reset_vad_timer()  # Always reset on new audio
