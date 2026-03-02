@@ -30,59 +30,50 @@ logger = logging.getLogger(__name__)
 # 3200 bytes = 100ms
 AUDIO_BUFFER_THRESHOLD = 2048
 
-async def send_injections_to_gemini(session, injection_queue: asyncio.Queue, session_closed_event: asyncio.Event):
-    """
-    Task C: Subconscious -> Gemini
-    Injects system hints (text) into the active session without ending the turn.
-    """
-    try:
-        while True:
-            try:
-                try:
-                    hint_payload = await asyncio.wait_for(
-                        injection_queue.get(),
-                        timeout=1.0
-                    )
-                except asyncio.TimeoutError:
-                    if session_closed_event.is_set():
-                        logger.info("InjectionLoop: Session closed. Stopping injections.")
-                        break
-                    continue
+async def send_injections_to_gemini(session, injection_queue, session_closed_event):
+    logger.info("InjectionLoop: Started.")
+    running = True
+    while running:
+        try:
+            injection = await asyncio.wait_for(
+                injection_queue.get(),
+                timeout=1.0
+            )
+        except asyncio.TimeoutError:
+            if session_closed_event.is_set():
+                logger.info("InjectionLoop: Session closed. Exiting.")
+                running = False
+            continue
+        except asyncio.CancelledError:
+            logger.info("InjectionLoop: Cancelled.")
+            running = False
+            continue
 
-                if session_closed_event.is_set():
-                    logger.info("InjectionLoop: Session closed. Dropping pending injection.")
-                    break
+        if session_closed_event.is_set():
+            logger.info("InjectionLoop: Dropping injection — session closed.")
+            running = False
+            continue
 
-                text = hint_payload.get("text", "")
-                turn_complete = hint_payload.get("turn_complete", False)
-
-                if not text:
-                    continue
-
-                logger.info(f"🤫 Whispering to Gemini: {text}")
-                system_text = f"[SYSTEM_CONTEXT]: {text}"
-
-                # 🏰 BASTION SHIELD: Strict SDK Formatting for Live API
-                # The Live API 'send' method natively accepts raw strings and wraps them in user turns.
-                # Passing types.Part or dicts causes SDK validation crashes in v0.3.0.
-                await session.send(input=system_text, end_of_turn=turn_complete)
-
-            except asyncio.CancelledError:
-                raise 
-            except (ConnectionClosedError, ConnectionClosedOK) as e:
-                logger.warning(f"Injection failed (session closed): {e}")
-                session_closed_event.set()
-                break
-            except Exception as e:
-                logger.error(f"⚠️ Injection failed (continuing): {e}")
+        try:
+            text = injection.get("text", "")
+            turn_complete = injection.get("turn_complete", False)
+            if not text:
                 continue
 
-    except asyncio.CancelledError:
-        logger.info("Injection loop cancelled.")
-        raise # 🏰 BASTION SHIELD: Propagate to Supervisor
-    except Exception as e:
-        logger.error(f"CRITICAL: Injection loop died: {e}")
-        pass
+            logger.info(f"💉 Injecting to Gemini: {text}")
+
+            # 🏰 BASTION SHIELD: Strict SDK Formatting for Live API
+            await session.send(
+                input=f"[SYSTEM_CONTEXT]: {text}",
+                end_of_turn=turn_complete
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Injection failed: {e}")
+            logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Injection failed in send_injections_to_gemini")
+            session_closed_event.set()
+            running = False
+
+    logger.info("InjectionLoop: Fully stopped.")
 
 
 async def send_to_gemini(websocket: WebSocket, session, auction_service, session_closed_event: asyncio.Event, transcript_buffer: list[str] | None = None, transcript_queue: asyncio.Queue | None = None):
@@ -103,6 +94,7 @@ async def send_to_gemini(websocket: WebSocket, session, auction_service, session
             # 🏰 BASTION SHIELD: Graceful Disconnect Handling
             if message.get("type") == "websocket.disconnect":
                 logger.info("Client disconnected cleanly (websocket.disconnect received).")
+                logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Client disconnected cleanly in send_to_gemini")
                 session_closed_event.set()
                 break # Exit the loop immediately, don't call receive() again.
 
@@ -130,6 +122,7 @@ async def send_to_gemini(websocket: WebSocket, session, auction_service, session
                         audio_buffer.clear()
                     except (ConnectionClosedError, ConnectionClosedOK) as e:
                         logger.warning(f"Gemini connection closed during audio send: {e}. Closing session gracefully.")
+                        logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Gemini connection closed during audio send")
                         session_closed_event.set()
                         break
                     except Exception as e:
@@ -186,8 +179,13 @@ async def receive_from_gemini(
         
         # Removed redundant outer 'while True' loop. 
         # The 'async for' already handles the stream until it closes.
+        logger.info("📥 receive_from_gemini: Starting receive loop.")
         try:
             async for response in session.receive():
+                logger.info(f"📥 Gemini raw response: {type(response).__name__} | {str(response)[:150]}")
+                if session_closed_event.is_set():
+                    logger.info("📥 Session closed mid-receive. Stopping.")
+                    break
                 if response.server_content is None:
                     continue
 
@@ -272,10 +270,12 @@ async def receive_from_gemini(
                     except: pass
 
         except (WebSocketDisconnect, ConnectionClosed) as e:
+            logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: receive_from_gemini stream exception")
             session_closed_event.set()
             raise e
         except (ConnectionClosedError, ConnectionClosedOK) as e:
             logger.warning(f"Gemini connection closed during receive: {e}. Ending session.")
+            logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Gemini connection closed during receive")
             session_closed_event.set()
             return
         except Exception as e:
@@ -284,6 +284,7 @@ async def receive_from_gemini(
 
     except (ConnectionClosedError, ConnectionClosedOK) as e:
         logger.warning(f"Gemini connection closed during receive: {e}. Ending session.")
+        logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Gemini connection closed during receive (outer catch)")
         session_closed_event.set()
         return
     except Exception as e:
