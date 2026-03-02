@@ -83,6 +83,13 @@ class SessionManager:
             if agent:
                 voice_name = agent.voice_name
                 agent_name = agent.name
+            else:
+                # soul_repo no tiene el agente — buscar en agent_service (JSON)
+                from app.services.agent_service import get_agent as agent_service_get_agent
+                agent_from_file = await agent_service_get_agent(agent_id)
+                if agent_from_file:
+                    voice_name = agent_from_file.voice_name
+                    agent_name = agent_from_file.name
 
             # Phase 5: Neural Sync (Modular Caching)
             # assemble_soul internally fetches the static DNA from cache (Zero Latency)
