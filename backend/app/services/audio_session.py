@@ -130,16 +130,16 @@ async def send_to_gemini(websocket: WebSocket, session, auction_service, session
                         raise
 
             elif text:
+                logger.info(f"📨 Text message received: repr={repr(text[:100])}")
                 try:
-                    payload = json.loads(text)
-                    if payload.get("type") == "control" and payload.get("action") == "interrupt":
+                    control = json.loads(text)
+                    if control.get("type") == "control" and control.get("action") == "interrupt":
                         logger.info("🛑 SOVEREIGN VOICE: User Interrupted")
                         await auction_service.interrupt()
                         continue
 
-                    if payload.get("type") == "end_of_turn":
+                    if control.get("type") == "end_of_turn":
                         logger.info("🔚 End of turn signal received. Flushing to Gemini.")
-                        # Enviar cualquier audio pendiente en el buffer
                         if audio_buffer:
                             await session.send(
                                 input={"data": bytes(audio_buffer), 
@@ -148,25 +148,24 @@ async def send_to_gemini(websocket: WebSocket, session, auction_service, session
                             )
                             audio_buffer.clear()
                         else:
-                            # No hay audio pendiente, solo cerrar el turno
                             await session.send(input=" ", end_of_turn=True)
                         continue
 
-                    if payload.get("type") == "native_transcript":
-                        transcript_text = payload.get("text")
+                    if control.get("type") == "native_transcript":
+                        transcript_text = control.get("text")
                         if transcript_text:
-                            # Kill echo if agent is speaking
                             if auction_service._current_winner is not None:
                                 continue
-                            
                             if transcript_buffer is not None:
                                 transcript_buffer.append(f"User: {transcript_text}")
                             if transcript_queue:
                                 transcript_queue.put_nowait(transcript_text)
                             continue
-
+                except json.JSONDecodeError as e:
+                    logger.warning(f"📨 Non-JSON text message ignored: {repr(text[:100])}")
                 except Exception as e:
                     logger.error(f"Error handling text message: {e}")
+                continue
 
     except Exception as e:
         logger.warning(f"Connection dropped in send_to_gemini: {e}")
