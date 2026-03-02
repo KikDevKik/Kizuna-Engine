@@ -130,75 +130,66 @@ async def send_to_gemini(
 
     async def _send_end_of_turn_signal():
         """
-        Flush the audio buffer and send an EXPLICIT turn_complete text message.
+        Flush the remaining audio buffer to Gemini and wait for server-VAD.
 
-        This is the critical fix: the SDK ignores end_of_turn=True on audio blob
-        sends (realtime_input path). We must always follow up with a text-based
-        session.send(input=" ", end_of_turn=True) to fire turn_complete correctly.
+        NATIVE AUDIO MODEL FIX:
+        session.send(input=" ", end_of_turn=True) creates a client_content TEXT
+        TURN. The native-audio server-VAD model interprets this as the user's
+        message being a space " " and responds with silence (empty turn_complete),
+        IGNORING the realtime audio that was sent. Never send that text message.
+
+        Correct protocol for gemini-*-native-audio-* with server-VAD:
+          1. Stream audio via realtime_input (already done continuously).
+          2. Flush any remaining buffered audio so Gemini has everything.
+          3. Do NOT send any client_content — let server-VAD detect silence.
+          4. Gemini will reply with audio + turn_complete when it's ready.
         """
         nonlocal _eot_fired
         async with eot_lock:
             if session_closed_event.is_set():
                 return
-            # ── DUPLICATE EOT GUARD ──────────────────────────────────
-            # Only the first caller wins. VAD and frontend both call
-            # this; without the guard Gemini receives two turn_complete
-            # signals per turn, which silences the second response.
             if _eot_fired:
                 logger.info("🔚 EOT: Already fired this turn — skipping duplicate.")
                 return
             _eot_fired = True
-            # Clear reset event so we wait for the real turn_complete
             if eot_reset_event:
                 eot_reset_event.clear()
-            # ─────────────────────────────────────────────────────────
             try:
                 if audio_buffer:
-                    # Flush remaining audio first via realtime_input path.
-                    # NOTE: end_of_turn=True is silently ignored on audio blobs (the SDK
-                    # routes them via realtime_input which has no turn_complete field).
-                    # The text-based send below is the ONLY correct EOT mechanism.
-                    logger.info(f"🔚 EOT: Flushing {len(audio_buffer)} audio bytes to Gemini")
+                    logger.info(f"🔚 EOT: Flushing {len(audio_buffer)} audio bytes to Gemini (server-VAD will detect silence)")
                     await session.send(
                         input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"},
                     )
                     audio_buffer.clear()
+                else:
+                    logger.info("🔚 EOT: Buffer empty — server-VAD will detect silence and respond")
 
-                # ── EOT SIGNAL ───────────────────────────────────────────
-                # session.send(input=" ", end_of_turn=True) generates:
-                #   {"client_content": {"turns": [<text part>], "turn_complete": true}}
-                # This is the only working mechanism — LiveClientContent with
-                # empty turns causes WS 1007 error (turns field is required).
-                logger.info("🔚 EOT: Sending turn_complete via client_content")
-                await session.send(input=" ", end_of_turn=True)
-                logger.info("✅ EOT: turn_complete sent. Awaiting Gemini response...")
+                logger.info("⏳ EOT: Audio flushed. Waiting for server-VAD turn_complete...")
 
-                # ── DEADLOCK RECOVERY WATCHDOG ───────────────────────────────
-                # If Gemini does not send turn_complete within 12s, reset the
-                # flag so the user can speak again (prevents permanent lock).
+                # Deadlock recovery: if server-VAD doesn't fire in 12s, reset
                 async def _eot_recovery_watchdog():
                     nonlocal _eot_fired
                     try:
                         await asyncio.sleep(12.0)
                         if _eot_fired and not session_closed_event.is_set():
                             logger.warning(
-                                "⏰ EOT watchdog: Gemini did not respond in 12s. "
+                                "⏰ EOT watchdog: Server-VAD did not respond in 12s. "
                                 "Resetting _eot_fired. Stale audio buffer cleared."
                             )
                             _eot_fired = False
-                            audio_buffer.clear()  # Discard stale audio
+                            audio_buffer.clear()
                             if eot_reset_event:
                                 eot_reset_event.set()
                     except asyncio.CancelledError:
-                        pass  # Normal — cancelled when turn_complete arrives
+                        pass
 
                 asyncio.create_task(_eot_recovery_watchdog())
-                # ───────────────────────────────────────────────────────────────
 
             except Exception as e:
-                _eot_fired = False  # Allow retry on send failure
+                _eot_fired = False
                 if not session_closed_event.is_set():
-                    logger.warning(f"⚠️ EOT send error: {e}")
+                    logger.warning(f"⚠️ EOT flush error: {e}")
+
 
     def _reset_vad_timer():
         """
