@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import logging
 import json
 import time
@@ -144,28 +145,33 @@ async def send_to_gemini(
 
                 audio_data = bytes(audio_buffer)
                 audio_buffer.clear()
+                audio_b64 = base64.b64encode(audio_data).decode("utf-8")
                 logger.info(f"🔚 EOT: Sending {len(audio_data)} bytes as client_content audio turn")
 
-                if types is not None:
-                    await session.send(
-                        input=types.LiveClientContent(
-                            turns=[
-                                types.Content(
-                                    role="user",
-                                    parts=[types.Part(
-                                        inline_data=types.Blob(
-                                            data=audio_data,
-                                            mime_type="audio/pcm;rate=16000"
-                                        )
-                                    )]
-                                )
+                # Send via the SDK's raw-dict path ('content' key → client_content).
+                # This bypasses Pydantic model_dump() which returns raw bytes
+                # (not JSON-serializable). Audio is already base64-encoded above.
+                await session.send(
+                    input={
+                        "content": {
+                            "turns": [
+                                {
+                                    "role": "user",
+                                    "parts": [
+                                        {
+                                            "inlineData": {
+                                                "data": audio_b64,
+                                                "mimeType": "audio/pcm;rate=16000"
+                                            }
+                                        }
+                                    ]
+                                }
                             ],
-                            turn_complete=True
-                        )
-                    )
-                    logger.info("✅ EOT: Audio client_content turn sent. Awaiting Gemini response...")
-                else:
-                    await session.send(input=" ", end_of_turn=True)
+                            "turnComplete": True
+                        }
+                    }
+                )
+                logger.info("✅ EOT: Audio client_content turn sent. Awaiting Gemini response...")
 
                 async def _eot_recovery_watchdog():
                     nonlocal _eot_fired
