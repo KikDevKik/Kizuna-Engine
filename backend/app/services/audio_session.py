@@ -37,7 +37,7 @@ AUDIO_BUFFER_THRESHOLD = 2048
 VAD_SILENCE_MS = 900  # ms
 
 
-async def send_injections_to_gemini(session, injection_queue, session_closed_event):
+async def send_injections_to_gemini(session, injection_queue, session_closed_event, eot_reset_event=None):
     logger.info("InjectionLoop: Started.")
     running = True
     while running:
@@ -60,6 +60,22 @@ async def send_injections_to_gemini(session, injection_queue, session_closed_eve
             logger.info("InjectionLoop: Dropping injection — session closed.")
             running = False
             continue
+
+        # ── INJECTION GATE ─────────────────────────────────────
+        # Wait for Gemini to finish responding before injecting.
+        # Injecting while Gemini is generating audio interrupts it,
+        # causing the native audio model to drop the response.
+        if eot_reset_event and not eot_reset_event.is_set():
+            logger.info("💉 Injection queued: waiting for Gemini turn_complete...")
+            # Poll until turn completes or session closes (max 15s)
+            for _ in range(150):
+                if session_closed_event.is_set() or eot_reset_event.is_set():
+                    break
+                await asyncio.sleep(0.1)
+            if session_closed_event.is_set():
+                running = False
+                continue
+        # ─────────────────────────────────────────────────────────
 
         try:
             text = injection.get("text", "")
@@ -167,9 +183,10 @@ async def send_to_gemini(
                         if _eot_fired and not session_closed_event.is_set():
                             logger.warning(
                                 "⏰ EOT watchdog: Gemini did not respond in 12s. "
-                                "Resetting _eot_fired to unblock next turn."
+                                "Resetting _eot_fired. Stale audio buffer cleared."
                             )
                             _eot_fired = False
+                            audio_buffer.clear()  # Discard stale audio
                             if eot_reset_event:
                                 eot_reset_event.set()
                     except asyncio.CancelledError:

@@ -184,7 +184,7 @@ class SessionManager:
 
                     # 4. Injection Upstream (Injection Queue -> Gemini)
                     cognitive_tasks.append(asyncio.create_task(
-                        CognitiveSupervisor.supervise("InjectionLoop", lambda: send_injections_to_gemini(session, injection_queue, session_closed_event), session_closed_event)
+                        CognitiveSupervisor.supervise("InjectionLoop", lambda: send_injections_to_gemini(session, injection_queue, session_closed_event, eot_reset_event), session_closed_event)
                     ))
 
                     # 5. Reflection Mind (AI Output -> Self-Critique -> Injection Queue)
