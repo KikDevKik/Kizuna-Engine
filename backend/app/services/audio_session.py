@@ -137,6 +137,21 @@ async def send_to_gemini(websocket: WebSocket, session, auction_service, session
                         await auction_service.interrupt()
                         continue
 
+                    if payload.get("type") == "end_of_turn":
+                        logger.info("🔚 End of turn signal received. Flushing to Gemini.")
+                        # Enviar cualquier audio pendiente en el buffer
+                        if audio_buffer:
+                            await session.send(
+                                input={"data": bytes(audio_buffer), 
+                                       "mime_type": "audio/pcm;rate=16000"},
+                                end_of_turn=True
+                            )
+                            audio_buffer.clear()
+                        else:
+                            # No hay audio pendiente, solo cerrar el turno
+                            await session.send(input=" ", end_of_turn=True)
+                        continue
+
                     if payload.get("type") == "native_transcript":
                         transcript_text = payload.get("text")
                         if transcript_text:

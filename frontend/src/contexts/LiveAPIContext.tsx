@@ -137,6 +137,13 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
             // Only send audio if the session is ready
             if (statusRef.current !== 'ready') return;
 
+            if (event.data.type === 'end_of_turn') {
+              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({ type: 'end_of_turn' }));
+              }
+              return;
+            }
+
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(event.data);
             }

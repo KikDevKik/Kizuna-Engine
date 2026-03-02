@@ -5,6 +5,10 @@ class PCMProcessor extends AudioWorkletProcessor {
     // 1. THE DISCORD PROTOCOL (Frontend VAD & Noise Gate)
     // Define a SILENCE_THRESHOLD (e.g., 0.01 or 0.02).
     this.SILENCE_THRESHOLD = 0.003;
+    this.silenceFrames = 0;
+    this.isSpeaking = false;
+    this.MIN_SPEAKING_RMS = 0.005; // Slightly higher to trigger "speaking" state
+    this.SILENCE_FRAMES_THRESHOLD = 25; // ~500ms at 16khz if process is 128 samples (~8ms per call)
   }
 
   process(inputs, outputs, parameters) {
@@ -24,6 +28,20 @@ class PCMProcessor extends AudioWorkletProcessor {
         this.packetCount++;
         const int16Data = this.float32ToInt16(float32Data);
         this.port.postMessage(int16Data, [int16Data.buffer]);
+        
+        if (rms > this.MIN_SPEAKING_RMS) {
+          this.isSpeaking = true;
+          this.silenceFrames = 0;
+        }
+      } else {
+        if (this.isSpeaking) {
+          this.silenceFrames++;
+          if (this.silenceFrames > this.SILENCE_FRAMES_THRESHOLD) {
+            this.isSpeaking = false;
+            this.silenceFrames = 0;
+            this.port.postMessage({ type: 'end_of_turn' });
+          }
+        }
       }
     }
     return true;
