@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useLiveAPI } from './hooks/useLiveAPI';
+import { isSessionActive } from './contexts/LiveAPIContext';
 import { Layout } from './components/Layout';
 import { KizunaCore } from './components/KizunaCore';
 import { AgentRoster } from './components/AgentRoster';
@@ -43,7 +44,7 @@ function App() {
   });
 
   // Derived state for Law 4 logic (passed to Core)
-  const isListening = connected && !isAiSpeaking;
+  const isListening = isSessionActive(status) && !isAiSpeaking;
 
   // Persist Scanlines
   useEffect(() => {
@@ -63,7 +64,7 @@ function App() {
   }, []);
 
   const handleToggleConnection = () => {
-    if (connected) {
+    if (isSessionActive(status)) {
       disconnect();
     } else {
       if (selectedAgentId) {
@@ -179,7 +180,7 @@ function App() {
                   <span className="kizuna-shard-btn-inner">
                     {status === 'connecting' ? (
                       'SYNCING...'
-                    ) : connected ? (
+                    ) : isSessionActive(status) ? (
                       <>TERMINATE <Power size={20} /></>
                     ) : (
                       <>{selectedAgentId ? 'INITIATE LINK' : 'SELECT AGENT'} <Power size={20} /></>
@@ -220,7 +221,7 @@ function App() {
 
       {/* PERIPHERAL PANELS */}
       <VisionPanel
-        connected={connected}
+        status={status}
         sendImage={sendImage}
         addSystemAudio={addSystemAudio}
         removeSystemAudio={removeSystemAudio}
@@ -266,7 +267,7 @@ function App() {
            MEMORY_USAGE: 64TB // LATENCY: 12ms
         </div>
         <div>
-           SECURE_CHANNEL: {connected ? 'ENCRYPTED' : 'OPEN'} // TARGET: {selectedAgentId || 'NULL'}
+           SECURE_CHANNEL: {isSessionActive(status) ? 'ENCRYPTED' : 'OPEN'} // TARGET: {selectedAgentId || 'NULL'}
         </div>
       </footer>
     </Layout>

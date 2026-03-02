@@ -1,3 +1,4 @@
+import { isSessionActive } from '../contexts/LiveAPIContext';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, Activity, Camera, Monitor, EyeOff } from 'lucide-react';
@@ -5,14 +6,14 @@ import { useVision, type VisionMode } from '../hooks/useVision';
 import '../KizunaHUD.css';
 
 interface VisionPanelProps {
-  connected: boolean;
+  status: string;
   sendImage: (base64: string) => void;
   addSystemAudio: (track: MediaStreamTrack) => void;
   removeSystemAudio: () => void;
 }
 
 // Optimization: Prevent re-renders when parent re-renders (e.g. audio loop) but props are stable.
-export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage, addSystemAudio, removeSystemAudio }) => {
+export const VisionPanel = React.memo<VisionPanelProps>(({ status, sendImage, addSystemAudio, removeSystemAudio }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [visionMode, setVisionMode] = useState<VisionMode>('off');
   const [pulse, setPulse] = useState(false);
@@ -22,7 +23,7 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage,
 
   // Effect: Connect System Audio when available
   useEffect(() => {
-    if (audioTrack && connected) {
+    if (audioTrack && isSessionActive(status)) {
         addSystemAudio(audioTrack);
     } else {
         removeSystemAudio();
@@ -31,19 +32,19 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage,
     return () => {
         removeSystemAudio();
     };
-  }, [audioTrack, connected, addSystemAudio, removeSystemAudio]);
+  }, [audioTrack, status, addSystemAudio, removeSystemAudio]);
 
   // Force vision off if disconnected
   useEffect(() => {
-    if (!connected && visionMode !== 'off') {
+    if (!isSessionActive(status) && visionMode !== 'off') {
         // eslint-disable-next-line
         setVisionMode('off');
     }
-  }, [connected, visionMode]);
+  }, [status, visionMode]);
 
   // Visual Heartbeat Loop
   useEffect(() => {
-    if (!connected || !isReady || visionMode === 'off') return;
+    if (!isSessionActive(status) || !isReady || visionMode === 'off') return;
 
     // Argus: Muestreo Inteligente (2.0s heartbeat)
     const interval = setInterval(async () => {
@@ -57,7 +58,7 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage,
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [connected, isReady, visionMode, captureFrame, sendImage]);
+  }, [status, isReady, visionMode, captureFrame, sendImage]);
 
   return (
     <div className="fixed top-24 right-4 z-40 flex flex-col items-end pointer-events-auto">
@@ -107,14 +108,14 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage,
                       muted
                    />
 
-                   {(visionMode === 'off' || !connected) && (
+                   {(visionMode === 'off' || !isSessionActive(status)) && (
                        <div className="absolute inset-0 flex items-center justify-center text-vintage-navy font-monumental text-2xl opacity-20 tracking-wider">
-                           {!connected ? 'NO LINK' : 'SENSOR OFF'}
+                           {!isSessionActive(status) ? 'NO LINK' : 'SENSOR OFF'}
                        </div>
                    )}
 
                    {/* Loading State */}
-                   {visionMode !== 'off' && !isReady && connected && (
+                   {visionMode !== 'off' && !isReady && isSessionActive(status) && (
                        <div className="absolute inset-0 flex items-center justify-center">
                            <div className="w-8 h-8 border-2 border-electric-blue/30 border-t-electric-blue rounded-full animate-spin" />
                        </div>
@@ -143,21 +144,21 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ connected, sendImage,
                         onClick={() => setVisionMode('camera')}
                         icon={<Camera size={18} />}
                         label="CAMERA"
-                        disabled={!connected}
+                        disabled={!isSessionActive(status)}
                     />
                     <VisionButton
                         active={visionMode === 'screen'}
                         onClick={() => setVisionMode('screen')}
                         icon={<Monitor size={18} />}
                         label="SCREEN"
-                        disabled={!connected}
+                        disabled={!isSessionActive(status)}
                     />
                     <VisionButton
                         active={visionMode === 'off'}
                         onClick={() => setVisionMode('off')}
                         icon={<EyeOff size={18} />}
                         label="DISABLE"
-                        disabled={!connected && visionMode === 'off'}
+                        disabled={!isSessionActive(status) && visionMode === 'off'}
                         isDestructive
                     />
                 </div>

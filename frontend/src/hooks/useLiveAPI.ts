@@ -3,9 +3,11 @@ import type { ServerMessage } from '../types/websocket';
 import { getWebSocketUrl } from '../utils/connection';
 import { AudioStreamManager } from '../utils/AudioStreamManager';
 
+export const isSessionActive = (status: string) => status === 'connected' || status === 'ready';
+
 export interface UseLiveAPI {
   connected: boolean;
-  status: 'disconnected' | 'connecting' | 'connected' | 'error';
+  status: 'disconnected' | 'connecting' | 'connected' | 'ready' | 'error';
   isAiSpeaking: boolean;
   isSevered: boolean;
   severanceReason: string | null;
@@ -19,7 +21,12 @@ export interface UseLiveAPI {
 }
 
 export const useLiveAPI = (): UseLiveAPI => {
-  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'ready' | 'error'>('disconnected');
+  const statusRef = useRef(status);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
   const [connected, setConnected] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [lastAiMessage, setLastAiMessage] = useState<string | null>(null);
@@ -260,7 +267,14 @@ export const useLiveAPI = (): UseLiveAPI => {
           if (typeof event.data === 'string') {
             const message = JSON.parse(event.data) as ServerMessage;
 
-            if (message.type === 'text') {
+            if (message.type === 'session_ready') {
+              setStatus('ready');
+              statusRef.current = 'ready'; // Update ref immediately
+              console.log('✅ Session ready - mic activated');
+              if (audioManagerRef.current) {
+                  audioManagerRef.current.enableMic();
+              }
+            } else if (message.type === 'text') {
               setLastAiMessage(message.data);
             } else if (message.type === 'turn_complete') {
               console.log("Turn complete signal received.");

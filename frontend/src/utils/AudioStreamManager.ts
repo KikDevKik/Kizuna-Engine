@@ -8,6 +8,7 @@ export class AudioStreamManager {
   private systemSourceNode: MediaStreamAudioSourceNode | null = null;
   private mediaStream: MediaStream | null = null;
   private analyser: AnalyserNode | null = null;
+  private isMicEnabled: boolean = false;
   private animationFrame: number | null = null;
   private nextStartTime: number = 0;
 
