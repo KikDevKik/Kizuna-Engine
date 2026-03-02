@@ -56,9 +56,16 @@ else:
                 genai.live.AsyncSession: The active session for sending and receiving messages.
             """
             # Configure the session
-            speech_config = None
+            config_params = {
+                "response_modalities": ["AUDIO"],
+                "system_instruction": types.Content(
+                    parts=[types.Part(text=system_instruction)]
+                ),
+                "tools": []
+            }
+
             if voice_name:
-                speech_config = types.SpeechConfig(
+                config_params["speech_config"] = types.SpeechConfig(
                     voice_config=types.VoiceConfig(
                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
                             voice_name=voice_name
@@ -66,16 +73,7 @@ else:
                     )
                 )
 
-
-            # Response modalities is set to AUDIO to ensure we get audio back.
-            config = types.LiveConnectConfig(
-                response_modalities=["AUDIO"],
-                speech_config=speech_config,
-                system_instruction=types.Content(
-                    parts=[types.Part(text=system_instruction)]
-                ),
-                tools=[]
-            )
+            config = types.LiveConnectConfig(**config_params)
 
             model_id = settings.MODEL_LIVE_VOICE
             logger.info(f"Connecting to Gemini Live API with model: {model_id}")

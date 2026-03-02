@@ -125,6 +125,7 @@ async def send_to_gemini(websocket: WebSocket, session, auction_service, session
 
                 if len(audio_buffer) >= AUDIO_BUFFER_THRESHOLD:
                     try:
+                        logger.info(f"📤 Sending audio packet: {len(audio_buffer)} bytes")
                         await session.send(input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"})
                         audio_buffer.clear()
                     except (ConnectionClosedError, ConnectionClosedOK) as e:
