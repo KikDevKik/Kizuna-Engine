@@ -336,7 +336,11 @@ async def receive_from_gemini(
 
         logger.info("📥 receive_from_gemini: Starting receive loop.")
         try:
-            async for response in session.receive():
+            # ── CRITICAL: The SDK's session.receive() is a SINGLE-TURN
+            # generator — it breaks internally after turn_complete. We must
+            # re-call it in an outer while loop to stay alive across turns.
+            while not session_closed_event.is_set():
+              async for response in session.receive():
                 logger.info(f"📥 Gemini raw response FULL: {response}")
                 logger.info(
                     f"📥 has data attr: {hasattr(response, 'data')} | "
