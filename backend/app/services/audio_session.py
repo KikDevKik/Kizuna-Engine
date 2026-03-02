@@ -132,23 +132,59 @@ async def send_to_gemini(
                 logger.info("🔚 EOT: Already fired this turn — skipping duplicate.")
                 return
             _eot_fired = True
-            # Clear any queued reset so we wait for the real turn_complete
+            # Clear reset event so we wait for the real turn_complete
             if eot_reset_event:
                 eot_reset_event.clear()
             # ─────────────────────────────────────────────────────────
             try:
                 if audio_buffer:
+                    # Flush remaining audio first via realtime_input path.
+                    # NOTE: end_of_turn=True is silently ignored on audio blobs (the SDK
+                    # routes them via realtime_input which has no turn_complete field).
+                    # The text-based send below is the ONLY correct EOT mechanism.
                     logger.info(f"🔚 EOT: Flushing {len(audio_buffer)} audio bytes to Gemini")
                     await session.send(
-                        input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"}
+                        input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"},
                     )
                     audio_buffer.clear()
 
-                # SDK FIX: Always send explicit turn_complete via separate text message.
-                # Audio realtime_input does NOT carry turn_complete in the protocol.
-                logger.info("🔚 EOT: Sending explicit turn_complete signal to Gemini")
-                await session.send(input=" ", end_of_turn=True)
+                # ── CORRECT EOT FOR REALTIME AUDIO ────────────────────────
+                # For native audio + server-VAD models, the cleanest
+                # turn_complete signal is LiveClientContent(turn_complete=True)
+                # with no `turns`. This maps to:
+                #   {"client_content": {"turn_complete": true}}
+                # and does NOT add spurious text to conversation history,
+                # unlike session.send(input=" ", end_of_turn=True).
+                logger.info("🔚 EOT: Sending turn_complete via LiveClientContent")
+                if types is not None:
+                    await session.send(
+                        input=types.LiveClientContent(turn_complete=True)
+                    )
+                else:
+                    # Fallback if types not available
+                    await session.send(input=" ", end_of_turn=True)
                 logger.info("✅ EOT: turn_complete sent. Awaiting Gemini response...")
+
+                # ── DEADLOCK RECOVERY WATCHDOG ───────────────────────────────
+                # If Gemini does not send turn_complete within 12s, reset the
+                # flag so the user can speak again (prevents permanent lock).
+                async def _eot_recovery_watchdog():
+                    nonlocal _eot_fired
+                    try:
+                        await asyncio.sleep(12.0)
+                        if _eot_fired and not session_closed_event.is_set():
+                            logger.warning(
+                                "⏰ EOT watchdog: Gemini did not respond in 12s. "
+                                "Resetting _eot_fired to unblock next turn."
+                            )
+                            _eot_fired = False
+                            if eot_reset_event:
+                                eot_reset_event.set()
+                    except asyncio.CancelledError:
+                        pass  # Normal — cancelled when turn_complete arrives
+
+                asyncio.create_task(_eot_recovery_watchdog())
+                # ───────────────────────────────────────────────────────────────
 
             except Exception as e:
                 _eot_fired = False  # Allow retry on send failure
