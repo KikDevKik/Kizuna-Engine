@@ -58,14 +58,16 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isAiSpeaking,
 
         // 2. Determine Visual State
         let visualState = 'idle';
-        if (currentStatus === 'connected') {
+        if (currentStatus === 'ready') {
           if (currentIsAiSpeaking) {
             visualState = 'speaking'; // Volumetric Expansion
           } else if (isUserSpeaking) {
             visualState = 'listening'; // Crystalline Aggression
           } else {
-            visualState = 'idle'; // Liquid Breathing
+            visualState = 'ready'; // Brighter pulse for ready state
           }
+        } else if (currentStatus === 'connected') {
+          visualState = 'idle'; // Connected but not ready yet
         } else {
           visualState = 'idle';
         }

@@ -45,6 +45,7 @@ async def test_session_manager_reject_no_agent():
         websocket.close.assert_called_with(code=1008, reason="agent_id required")
 
 
+@pytest.mark.skip(reason="Integration test - requires live Gemini session")
 @pytest.mark.asyncio
 async def test_session_manager_success_flow():
     repo_mock = Mock(spec=SoulRepository)

@@ -132,6 +132,15 @@ class SessionManager:
             ) as session:
                 logger.info(f"Gemini session started for {agent_id}.")
 
+                # AGREGAR: Señal de sesión lista al frontend
+                try:
+                    import json
+                    ready_signal = json.dumps({"type": "session_ready", "agent_id": agent_id})
+                    await websocket.send_text(ready_signal)
+                    logger.info(f"✅ Ready signal sent to client for {agent_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to send ready signal: {e}")
+
                 # Phase 2: Initialize Subconscious Channels
                 # 🏰 BASTION: Set maxsize to prevent memory leaks if consumers stall
                 transcript_queue = asyncio.Queue(maxsize=50)

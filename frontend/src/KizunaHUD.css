@@ -224,6 +224,26 @@ body {
 }
 
 
+.ai-core-indicator[data-state="ready"] {
+  animation: liquid-ready 4s ease-in-out infinite;
+  box-shadow: 0 0 35px rgba(0, 209, 255, 0.7);
+  background: radial-gradient(circle, rgba(0, 209, 255, 0.4) 0%, transparent 60%);
+}
+
+@keyframes liquid-ready {
+  0%, 100% {
+    transform: translateY(0px) scale(1) rotate(0deg);
+    border-radius: 40% 60% 50% 50% / 40% 50% 60% 50%;
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(-5px) scale(1.15) rotate(5deg);
+    border-radius: 50% 50% 40% 60% / 50% 40% 50% 60%;
+    opacity: 1;
+    filter: drop-shadow(0 0 40px rgba(0, 209, 255, 0.8));
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* 6. 3D AGENT CAROUSEL                                                       */
 /* -------------------------------------------------------------------------- */

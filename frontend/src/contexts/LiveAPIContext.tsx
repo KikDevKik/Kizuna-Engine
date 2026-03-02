@@ -4,7 +4,7 @@ import { createAudioBuffer } from '../utils/audioUtils';
 
 export interface UseLiveAPI {
   connected: boolean;
-  status: 'disconnected' | 'connecting' | 'connected' | 'error';
+  status: 'disconnected' | 'connecting' | 'connected' | 'ready' | 'error';
   isAiSpeaking: boolean;
   volumeRef: React.MutableRefObject<number>;
   lastAiMessage: string | null;
@@ -16,7 +16,13 @@ export interface UseLiveAPI {
 const LiveAPIContext = createContext<UseLiveAPI | undefined>(undefined);
 
 export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'ready' | 'error'>('disconnected');
+  const statusRef = useRef(status);
+
+  // Keep the ref in sync with the state
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
   const [connected, setConnected] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [lastAiMessage, setLastAiMessage] = useState<string | null>(null);
@@ -126,6 +132,10 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
 
           // Worklet -> WebSocket
           worklet.port.onmessage = (event) => {
+            // Only send audio if the session is ready
+            const currentStatus = statusRef.current;
+            if (currentStatus !== 'ready' && currentStatus !== 'connected') return;
+
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(event.data);
             }
@@ -206,7 +216,10 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
           if (typeof event.data === 'string') {
             const message = JSON.parse(event.data) as any;
 
-            if (message.type === 'text') {
+            if (message.type === 'session_ready') {
+                setStatus('ready');
+                console.log('Session ready signal received. Mic now active.');
+            } else if (message.type === 'text') {
                 setLastAiMessage(message.data);
             } else if (message.type === 'turn_complete') {
               console.log("Turn complete signal received.");
