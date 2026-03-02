@@ -56,10 +56,12 @@ else:
                         )
                     )
                 ),
-                "tools": [],  # ← Deshabilita AFC en la sesión Live.
-                "generation_config": {
-                    "response_modalities": ["AUDIO"]
-                }
+                "tools": [],
+                "realtime_input_config": types.RealtimeInputConfig(
+                    voice_activity_detection=types.VoiceActivityDetection(
+                        disabled=False
+                    )
+                )
             }
 
         @asynccontextmanager
