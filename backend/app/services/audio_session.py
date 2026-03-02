@@ -26,25 +26,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# 16000 Hz * 2 bytes = 32000 bytes/sec
-# 2048 bytes = ~64ms of audio
+# SDK v1.65.0: use send_realtime_input(audio=Blob) / audio_stream_end=True
+# 16000 Hz * 2 bytes/sample = 32000 bytes/sec; 2048 bytes ~= 64ms
 AUDIO_BUFFER_THRESHOLD = 2048
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# VAD: Silence-based Auto End-of-Turn
-# After VAD_SILENCE_MS of no new audio, flush buffer + fire turn_complete.
-# Uses a SEPARATE asyncio Task so websocket.receive() is never cancelled.
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 VAD_SILENCE_MS = 900  # ms
-
-# ── AUDIO MODE ────────────────────────────────────────────────────────────────
-# For native audio models (gemini-*-native-audio-*), mixing realtime_input
-# (audio stream) with client_content (text) corrupts the conversation history.
-# SOLUTION: Never send audio via realtime_input. Buffer ALL audio and send it
-# as a single client_content audio Part on EOT. This keeps conversation history
-# clean: [audio turn] → [assistant audio] → [audio turn] → ...
-# Setting threshold to a huge value prevents any mid-turn streaming flushes.
-AUDIO_BUFFER_THRESHOLD = 10 * 1024 * 1024  # 10MB — effectively never flush mid-turn
 
 
 async def send_injections_to_gemini(session, injection_queue, session_closed_event, eot_reset_event=None):
@@ -136,41 +121,18 @@ async def send_to_gemini(
             if eot_reset_event:
                 eot_reset_event.clear()
             try:
-                if not audio_buffer:
-                    logger.info("🔚 EOT: No audio buffered — resetting.")
-                    _eot_fired = False
-                    if eot_reset_event:
-                        eot_reset_event.set()
-                    return
+                # Flush any remaining buffered audio first
+                if audio_buffer:
+                    logger.info(f"🔚 EOT: Flushing {len(audio_buffer)} remaining bytes")
+                    await session.send_realtime_input(
+                        audio=types.Blob(data=bytes(audio_buffer), mime_type="audio/pcm;rate=16000")
+                    )
+                    audio_buffer.clear()
 
-                audio_data = bytes(audio_buffer)
-                audio_buffer.clear()
-                audio_b64 = base64.b64encode(audio_data).decode("utf-8")
-                logger.info(f"🔚 EOT: Sending {len(audio_data)} bytes as client_content audio turn")
-
-                # Bypass session.send() — the SDK has no routing path that correctly
-                # serializes audio bytes in client_content (all paths either add wrong
-                # nesting or fail to base64-encode). Send the wire JSON directly.
-                wire_message = json.dumps({
-                    "client_content": {
-                        "turns": [
-                            {
-                                "role": "user",
-                                "parts": [
-                                    {
-                                        "inline_data": {
-                                            "data": audio_b64,
-                                            "mime_type": "audio/pcm;rate=16000"
-                                        }
-                                    }
-                                ]
-                            }
-                        ],
-                        "turn_complete": True
-                    }
-                })
-                await session._ws.send(wire_message)
-                logger.info("✅ EOT: Audio client_content turn sent. Awaiting Gemini response...")
+                # Signal end of audio stream — server-VAD triggers Gemini response
+                logger.info("🔚 EOT: Sending audio_stream_end to Gemini")
+                await session.send_realtime_input(audio_stream_end=True)
+                logger.info("✅ EOT: audio_stream_end sent. Awaiting Gemini response...")
 
                 async def _eot_recovery_watchdog():
                     nonlocal _eot_fired
@@ -261,11 +223,13 @@ async def send_to_gemini(
                 if len(audio_buffer) >= AUDIO_BUFFER_THRESHOLD:
                     try:
                         logger.info(f"📤 Sending audio packet: {len(audio_buffer)} bytes")
-                        await session.send(
-                            input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"}
+                        await session.send_realtime_input(
+                            audio=types.Blob(
+                                data=bytes(audio_buffer),
+                                mime_type="audio/pcm;rate=16000"
+                            )
                         )
                         audio_buffer.clear()
-                        # VAD timer keeps running — resets on next audio chunk
                     except (ConnectionClosedError, ConnectionClosedOK) as e:
                         logger.warning(f"Gemini connection closed during audio send: {e}.")
                         logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Gemini closed during audio send")
