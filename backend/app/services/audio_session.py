@@ -182,7 +182,10 @@ async def receive_from_gemini(
         logger.info("📥 receive_from_gemini: Starting receive loop.")
         try:
             async for response in session.receive():
-                logger.info(f"📥 Gemini raw response: {type(response).__name__} | {str(response)[:150]}")
+                logger.info(f"📥 Gemini raw response FULL: {response}")
+                logger.info(f"📥 has data attr: {hasattr(response, 'data')} | data value: {getattr(response, 'data', None) is not None}")
+                logger.info(f"📥 server_content: {response.server_content is not None} | model_turn: {response.server_content.model_turn is not None if response.server_content else False}")
+                
                 if session_closed_event.is_set():
                     logger.info("📥 Session closed mid-receive. Stopping.")
                     break
