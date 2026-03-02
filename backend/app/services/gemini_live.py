@@ -64,14 +64,14 @@ else:
                 "tools": []
             }
 
-            if voice_name:
-                config_params["speech_config"] = types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name=voice_name
-                        )
+            effective_voice = voice_name or "Kore"
+            config_params["speech_config"] = types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name=effective_voice
                     )
                 )
+            )
 
             config = types.LiveConnectConfig(**config_params)
 
