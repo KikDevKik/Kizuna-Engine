@@ -148,21 +148,13 @@ async def send_to_gemini(
                     )
                     audio_buffer.clear()
 
-                # ── CORRECT EOT FOR REALTIME AUDIO ────────────────────────
-                # For native audio + server-VAD models, the cleanest
-                # turn_complete signal is LiveClientContent(turn_complete=True)
-                # with no `turns`. This maps to:
-                #   {"client_content": {"turn_complete": true}}
-                # and does NOT add spurious text to conversation history,
-                # unlike session.send(input=" ", end_of_turn=True).
-                logger.info("🔚 EOT: Sending turn_complete via LiveClientContent")
-                if types is not None:
-                    await session.send(
-                        input=types.LiveClientContent(turn_complete=True)
-                    )
-                else:
-                    # Fallback if types not available
-                    await session.send(input=" ", end_of_turn=True)
+                # ── EOT SIGNAL ───────────────────────────────────────────
+                # session.send(input=" ", end_of_turn=True) generates:
+                #   {"client_content": {"turns": [<text part>], "turn_complete": true}}
+                # This is the only working mechanism — LiveClientContent with
+                # empty turns causes WS 1007 error (turns field is required).
+                logger.info("🔚 EOT: Sending turn_complete via client_content")
+                await session.send(input=" ", end_of_turn=True)
                 logger.info("✅ EOT: turn_complete sent. Awaiting Gemini response...")
 
                 # ── DEADLOCK RECOVERY WATCHDOG ───────────────────────────────
