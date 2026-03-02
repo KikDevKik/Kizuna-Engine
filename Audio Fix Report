@@ -1,0 +1,48 @@
+# Reporte de Estabilización: Motor de Audio (Fase 6 - Distrito Cero)
+
+**Estado:** Estabilizado.
+**Modelo Actual:** `gemini-2.5-flash-native-audio-preview-12-2025`
+**Fecha de Resolución:** 3 de Marzo de 2026
+
+---
+
+## 🛑 El Problema Original
+Durante la Fase 6, el Agente podía escuchar al usuario pero después del primer o segundo turno de habla, **dejaba de responder permanentemente**. El frontend enviaba el audio y la señal de Fin de Turno (EOT), pero el WebSocket terminaba en *timeout* sin respuesta del servidor Gemini.
+
+## 🕵️‍♂️ La Travesía de Diagnóstico
+
+La depuración del problema nos llevó a través de varias capas del protocolo `google-genai`:
+
+1. **Conflictos de Historial:** Descubrimos que enviar audio continuo por `realtime_input` y luego enviar una señal EOT de texto como `client_content` (ej. enviar un espacio `" "`) **corrompía el historial de la conversación**. Los modelos nativos de audio se confundían al recibir texto intercalado con audio y dejaban de procesar.
+   
+2. **Errores de Serialización (1007 y 1011):** Para evitar mezclar modalidades, intentamos mandar el audio empaquetado como un objeto `client_content` estructurado. Esto provocó errores de serialización JSON (`bytes is not JSON serializable`) con el SDK v0.3.0. Al forzar el envío en Base64 de forma manual saltándonos el SDK, la API devolvía un error interno `1011`, indicando que el modelo nativo no podía procesar audio inyectado como un mensaje secuencial de texto.
+
+3. **El Falso EOT:** La señal de EOT se estaba enviando incorrectamente, lo que nos empujó a buscar la ruta correcta para decirle a la IA "terminé de hablar".
+
+## 🛠️ La Solución Definitiva
+
+El descubrimiento más importante fue identificar que **la versión del SDK (`0.3.0`) estaba severamente obsoleta** frente a los requerimientos de la API iterada.
+
+1. **Actualización del SDK (v1.65.0):** Actualizamos la librería a su versión estable más reciente.
+2. **Refactorización del Flujo a la Nueva API:**
+   - **Streaming en Vivo:** Ahora enviamos los trozos (*chunks*) de audio puro de 2048 bytes usando `session.send_realtime_input(audio=Blob(...))`. 
+   - **Señal EOT Nativa:** Sustituimos el envío de texto o mensajes complejos por la bandera nativa `audio_stream_end=True`. Esta es la señal exacta que espera Gemini para activar el VAD (Voice Activity Detection) del servidor y detonar la respuesta.
+3. **Aislamiento de Texto (Inyecciones Deshabilitadas):** Se deshabilitaron temporalmente las inyecciones de pensamiento o "subconsciente" (texto puro) hacia el modelo nativo para garantizar que el contexto se mantenga 100% acústico, evadiendo la corrupción de historial.
+
+## ⚙️ ¿Cómo funciona ahora el flujo?
+
+1. El usuario habla → El frontal envía audio puro.
+2. Cada bloque de **2048 bytes** reajusta el VAD local local (Watchdog de 900ms).
+3. Cuando el usuario se calla o pausa (900ms) → El sistema vacía cualquier byte remanente y envía `audio_stream_end=True`.
+4. El servidor procesa inmediatamente el corte y Gemini responde con audios generados progresivamente.
+5. El servidor enruta la respuesta al frontend → El usuario escucha.
+6. El ciclo se resetea limpiamente para el siguiente turno.
+
+---
+
+## ⚠️ Advertencias y Limitaciones (Saber Archivar)
+
+Para mantener una conversación fluida, se deben cumplir los siguientes requerimientos actuales del modelo `preview`:
+
+- **Hablar Lento, Fuerte y Claro:** A diferencia de transcribir a texto localmente, el modelo escucha el audio crudo. Entradas a bajo volumen o murmullo provocan que el API asuma que es "ruido de fondo", resultando en silencios donde Gemini no responde nada (los 12 segs de VAD re-despiertan el flujo).
+- **Inconsistencia de Voz del Agente:** El modelo `native-audio-preview-12-2025` de Gemini no tiene aún fijación de timbre/vocodificador estable. Esto quiere decir que **la voz puede mutar o cambiar de tonalidad, acento y velocidad** constantemente entre un turno y otro de la conversación. Es una limitación actual del modelo preview de Google.
