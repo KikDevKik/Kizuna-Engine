@@ -36,6 +36,15 @@ AUDIO_BUFFER_THRESHOLD = 2048
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 VAD_SILENCE_MS = 900  # ms
 
+# ── AUDIO MODE ────────────────────────────────────────────────────────────────
+# For native audio models (gemini-*-native-audio-*), mixing realtime_input
+# (audio stream) with client_content (text) corrupts the conversation history.
+# SOLUTION: Never send audio via realtime_input. Buffer ALL audio and send it
+# as a single client_content audio Part on EOT. This keeps conversation history
+# clean: [audio turn] → [assistant audio] → [audio turn] → ...
+# Setting threshold to a huge value prevents any mid-turn streaming flushes.
+AUDIO_BUFFER_THRESHOLD = 10 * 1024 * 1024  # 10MB — effectively never flush mid-turn
+
 
 async def send_injections_to_gemini(session, injection_queue, session_closed_event, eot_reset_event=None):
     logger.info("InjectionLoop: Started.")
@@ -61,38 +70,13 @@ async def send_injections_to_gemini(session, injection_queue, session_closed_eve
             running = False
             continue
 
-        # ── INJECTION GATE ─────────────────────────────────────
-        # Wait for Gemini to finish responding before injecting.
-        # Injecting while Gemini is generating audio interrupts it,
-        # causing the native audio model to drop the response.
-        if eot_reset_event and not eot_reset_event.is_set():
-            logger.info("💉 Injection queued: waiting for Gemini turn_complete...")
-            # Poll until turn completes or session closes (max 15s)
-            for _ in range(150):
-                if session_closed_event.is_set() or eot_reset_event.is_set():
-                    break
-                await asyncio.sleep(0.1)
-            if session_closed_event.is_set():
-                running = False
-                continue
-        # ─────────────────────────────────────────────────────────
-
-        try:
-            text = injection.get("text", "")
-            turn_complete = injection.get("turn_complete", False)
-            if not text:
-                continue
-
-            logger.info(f"💉 Injecting to Gemini: {text}")
-            await session.send(
-                input=f"[SYSTEM_CONTEXT]: {text}",
-                end_of_turn=turn_complete
-            )
-        except Exception as e:
-            logger.warning(f"⚠️ Injection failed: {e}")
-            logger.warning(f"🔴 session_closed_event SET at: {__name__} — reason: Injection failed in send_injections_to_gemini")
-            session_closed_event.set()
-            running = False
+        # ── INJECTION DISABLED FOR NATIVE AUDIO MODEL ────────────────────
+        # Injecting text into a native audio session corrupts conversation
+        # history — the model stops responding to audio after seeing text.
+        text = injection.get("text", "")
+        if text:
+            logger.info(f"💉 Injection SKIPPED (native audio mode): {text[:60]}")
+        continue
 
     logger.info("InjectionLoop: Fully stopped.")
 
@@ -130,19 +114,15 @@ async def send_to_gemini(
 
     async def _send_end_of_turn_signal():
         """
-        Flush the remaining audio buffer to Gemini and wait for server-VAD.
+        Collect all buffered audio and send as client_content audio turn.
 
-        NATIVE AUDIO MODEL FIX:
-        session.send(input=" ", end_of_turn=True) creates a client_content TEXT
-        TURN. The native-audio server-VAD model interprets this as the user's
-        message being a space " " and responds with silence (empty turn_complete),
-        IGNORING the realtime audio that was sent. Never send that text message.
+        ROOT CAUSE FIX: Mixing realtime_input + client_content (text ' ') in the
+        same session corrupts native audio model history. After 2 turns with text
+        entries ('\u0020', '[SYSTEM_CONTEXT]...'), Gemini stops responding entirely.
 
-        Correct protocol for gemini-*-native-audio-* with server-VAD:
-          1. Stream audio via realtime_input (already done continuously).
-          2. Flush any remaining buffered audio so Gemini has everything.
-          3. Do NOT send any client_content — let server-VAD detect silence.
-          4. Gemini will reply with audio + turn_complete when it's ready.
+        FIX: Buffer ALL audio (threshold=10MB, never flushes mid-turn) and send
+        on EOT as types.LiveClientContent(turns=[audio Part], turn_complete=True).
+        History becomes: [audio] → [assistant audio] → [audio] → ... (no text ever)
         """
         nonlocal _eot_fired
         async with eot_lock:
@@ -155,27 +135,44 @@ async def send_to_gemini(
             if eot_reset_event:
                 eot_reset_event.clear()
             try:
-                if audio_buffer:
-                    logger.info(f"🔚 EOT: Flushing {len(audio_buffer)} audio bytes to Gemini (server-VAD will detect silence)")
+                if not audio_buffer:
+                    logger.info("🔚 EOT: No audio buffered — resetting.")
+                    _eot_fired = False
+                    if eot_reset_event:
+                        eot_reset_event.set()
+                    return
+
+                audio_data = bytes(audio_buffer)
+                audio_buffer.clear()
+                logger.info(f"🔚 EOT: Sending {len(audio_data)} bytes as client_content audio turn")
+
+                if types is not None:
                     await session.send(
-                        input={"data": bytes(audio_buffer), "mime_type": "audio/pcm;rate=16000"},
+                        input=types.LiveClientContent(
+                            turns=[
+                                types.Content(
+                                    role="user",
+                                    parts=[types.Part(
+                                        inline_data=types.Blob(
+                                            data=audio_data,
+                                            mime_type="audio/pcm;rate=16000"
+                                        )
+                                    )]
+                                )
+                            ],
+                            turn_complete=True
+                        )
                     )
-                    audio_buffer.clear()
+                    logger.info("✅ EOT: Audio client_content turn sent. Awaiting Gemini response...")
                 else:
-                    logger.info("🔚 EOT: Buffer empty — server-VAD will detect silence and respond")
+                    await session.send(input=" ", end_of_turn=True)
 
-                logger.info("⏳ EOT: Audio flushed. Waiting for server-VAD turn_complete...")
-
-                # Deadlock recovery: if server-VAD doesn't fire in 12s, reset
                 async def _eot_recovery_watchdog():
                     nonlocal _eot_fired
                     try:
                         await asyncio.sleep(12.0)
                         if _eot_fired and not session_closed_event.is_set():
-                            logger.warning(
-                                "⏰ EOT watchdog: Server-VAD did not respond in 12s. "
-                                "Resetting _eot_fired. Stale audio buffer cleared."
-                            )
+                            logger.warning("⏰ EOT watchdog: No response in 12s — unlocking.")
                             _eot_fired = False
                             audio_buffer.clear()
                             if eot_reset_event:
@@ -188,7 +185,7 @@ async def send_to_gemini(
             except Exception as e:
                 _eot_fired = False
                 if not session_closed_event.is_set():
-                    logger.warning(f"⚠️ EOT flush error: {e}")
+                    logger.warning(f"⚠️ EOT send error: {e}")
 
 
     def _reset_vad_timer():
@@ -239,17 +236,19 @@ async def send_to_gemini(
                     carry_over.extend(data[-1:])
                     data = data[:-1]
 
-                # ── EOT RESET CHECK ──────────────────────────────────
-                # Audio ALWAYS flows — server-VAD needs continuous audio
-                # (speech → silence) to detect end of speech correctly.
-                # _eot_fired only gates duplicate EOT SIGNAL calls, not audio.
-                # When Gemini finishes responding, eot_reset_event fires and
-                # we allow the next EOT signal to be sent.
-                if _eot_fired and eot_reset_event and eot_reset_event.is_set():
-                    _eot_fired = False
-                    logger.info("🔄 EOT reset: ready for next turn.")
+                # ── POST-EOT AUDIO GUARD ─────────────────────────────
+                # Block audio while _eot_fired=True (Gemini is generating).
+                # Audio flowing during generation sends stale silence that
+                # confuses the model on subsequent turns.
+                # Reset flag when Gemini sends turn_complete (eot_reset_event).
+                if _eot_fired:
+                    if eot_reset_event and eot_reset_event.is_set():
+                        _eot_fired = False
+                        logger.info("\U0001f504 EOT reset: ready for next turn.")
+                    else:
+                        # Still waiting for Gemini — discard this audio chunk
+                        continue
                 # ─────────────────────────────────────────────────────
-
 
                 audio_buffer.extend(data)
                 _reset_vad_timer()  # Always reset on new audio
