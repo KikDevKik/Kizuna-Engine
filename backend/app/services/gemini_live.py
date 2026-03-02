@@ -42,9 +42,28 @@ else:
         Service to handle Gemini Live API connections.
         """
 
-        @staticmethod
+        def _get_config(self, system_instruction: str, voice_name: str = "Puck") -> dict:
+            """Genera la configuración para la Live API."""
+            return {
+                "response_modalities": ["AUDIO"],
+                "system_instruction": types.Content(
+                    parts=[types.Part(text=system_instruction)]
+                ),
+                "speech_config": types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name=voice_name
+                        )
+                    )
+                ),
+                "tools": [],  # ← Deshabilita AFC en la sesión Live.
+                "generation_config": {
+                    "response_modalities": ["AUDIO"]
+                }
+            }
+
         @asynccontextmanager
-        async def connect(system_instruction: str, voice_name: Optional[str] = None) -> AsyncGenerator['genai.live.AsyncSession', None]:
+        async def connect(self, system_instruction: str, voice_name: Optional[str] = None) -> AsyncGenerator['genai.live.AsyncSession', None]:
             """
             Establishes an asynchronous connection to the Gemini Live API.
 
@@ -55,24 +74,10 @@ else:
             Yields:
                 genai.live.AsyncSession: The active session for sending and receiving messages.
             """
-            # Configure the session
-            config_params = {
-                "response_modalities": ["AUDIO"],
-                "system_instruction": types.Content(
-                    parts=[types.Part(text=system_instruction)]
-                ),
-                "tools": []
-            }
-
-            effective_voice = voice_name or "Kore"
-            config_params["speech_config"] = types.SpeechConfig(
-                voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name=effective_voice
-                    )
-                )
-            )
-
+            effective_voice = voice_name or "Puck"
+            config_params = self._get_config(system_instruction, effective_voice)
+            
+            # 🛡️ BASTION: Use types.LiveConnectConfig for strict SDK compliance
             config = types.LiveConnectConfig(**config_params)
 
             model_id = settings.MODEL_LIVE_VOICE
