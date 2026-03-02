@@ -56,12 +56,7 @@ else:
                         )
                     )
                 ),
-                "tools": [],
-                "realtime_input_config": types.RealtimeInputConfig(
-                    voice_activity_detection=types.VoiceActivityDetection(
-                        disabled=False
-                    )
-                )
+                "tools": []
             }
 
         @asynccontextmanager
