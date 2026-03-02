@@ -149,6 +149,7 @@ class SessionManager:
 
                 # Manage bidirectional streams and subconscious concurrently
                 # If either task fails (e.g. disconnect), the TaskGroup will cancel the others.
+                session_closed_event = asyncio.Event()
 
                 # Phase 3: Inject Repository into Subconscious
                 subconscious_mind.set_repository(self.soul_repo)
@@ -168,7 +169,7 @@ class SessionManager:
 
                     # 4. Injection Upstream (Injection Queue -> Gemini)
                     cognitive_tasks.append(asyncio.create_task(
-                        CognitiveSupervisor.supervise("InjectionLoop", lambda: send_injections_to_gemini(session, injection_queue))
+                        CognitiveSupervisor.supervise("InjectionLoop", lambda: send_injections_to_gemini(session, injection_queue, session_closed_event))
                     ))
 
                     # 5. Reflection Mind (AI Output -> Self-Critique -> Injection Queue)
@@ -184,7 +185,7 @@ class SessionManager:
                         # 1. Audio Upstream (Client -> Gemini)
                         tg.create_task(
                             send_to_gemini(
-                                websocket, session, auction_service, session_transcript_buffer, transcript_queue
+                                websocket, session, auction_service, session_closed_event, session_transcript_buffer, transcript_queue
                             )
                         )
 
@@ -194,6 +195,7 @@ class SessionManager:
                                 websocket,
                                 session,
                                 auction_service,
+                                session_closed_event,
                                 transcript_queue,
                                 reflection_queue,
                                 session_transcript_buffer,

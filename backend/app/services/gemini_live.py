@@ -66,25 +66,6 @@ else:
                     )
                 )
 
-            # Define Tools (Module 1.5: Social Spawning)
-            # Solution B: Native Dictionary Schema (Resilience against namespace shadowing)
-            spawn_stranger_tool = {
-                "function_declarations": [
-                    {
-                        "name": "spawn_stranger",
-                        "description": "Use this tool when you gossip about someone the user doesn't know. It creates a new 'Stranger' agent in the database and links them to you. The 'vibe' parameter must be a rich aesthetic description.",
-                        "parameters": {
-                            "type": "OBJECT",
-                            "properties": {
-                                "name": {"type": "STRING"},
-                                "relation": {"type": "STRING"},
-                                "vibe": {"type": "STRING"},
-                            },
-                            "required": ["name", "relation", "vibe"]
-                        }
-                    }
-                ]
-            }
 
             # Response modalities is set to AUDIO to ensure we get audio back.
             config = types.LiveConnectConfig(
@@ -93,7 +74,7 @@ else:
                 system_instruction=types.Content(
                     parts=[types.Part(text=system_instruction)]
                 ),
-                tools=[spawn_stranger_tool]
+                tools=[]
             )
 
             model_id = settings.MODEL_LIVE_VOICE
