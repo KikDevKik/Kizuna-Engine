@@ -2,6 +2,7 @@ import asyncio
 import logging
 import random
 import httpx
+import time
 from asyncio import Queue
 from datetime import datetime
 from core.config import settings
@@ -27,6 +28,7 @@ class ReflectionMind:
     """
     def __init__(self):
         self.repository: SoulRepository | None = None
+        self._last_reflection_time: float = 0.0
         self.client = None
         if genai and settings.GEMINI_API_KEY:
             self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
@@ -70,6 +72,11 @@ class ReflectionMind:
                     if random.random() > reflection_chance:
                         # Skip reflection this turn to save latency/tokens and avoid overthinking
                         continue
+
+                    now = time.monotonic()
+                    if now - self._last_reflection_time < 45.0:
+                        continue  # Todavía en cooldown
+                    self._last_reflection_time = now
 
                     # Analyze (Real or Mock)
                     correction = await self._reflect(text_segment, agent)
