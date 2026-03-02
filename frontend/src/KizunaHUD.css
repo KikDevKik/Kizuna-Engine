@@ -594,3 +594,24 @@ body {
   top: 0;
   left: 0;
 }
+
+/* STATE: READY (Mic Active - Awaiting Voice) */
+.ai-core-indicator[data-state="ready"] {
+    background: radial-gradient(circle at center, rgba(0, 209, 255, 0.4), transparent 70%);
+    border-radius: 50%;
+    box-shadow: 0 0 30px rgba(0, 209, 255, 0.3);
+    animation: ready-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ready-pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 20px rgba(0, 209, 255, 0.3);
+        opacity: 0.7;
+    }
+    50% {
+        transform: scale(1.08);
+        box-shadow: 0 0 40px rgba(0, 209, 255, 0.6);
+        opacity: 1;
+    }
+}

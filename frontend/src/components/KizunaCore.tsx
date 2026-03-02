@@ -39,37 +39,30 @@ export const KizunaCore: React.FC<KizunaCoreProps> = ({ volumeRef, isAiSpeaking,
         const currentStatus = statusRef.current;
 
         // 1. VAD Logic (Update internal state without re-render)
-        let isUserSpeaking = userSpeakingRef.current;
-        if (vol > 0.02) {
-          if (!isUserSpeaking) {
-             userSpeakingRef.current = true;
-             isUserSpeaking = true;
-          }
-          silenceCounter = 0;
+        let isUserSpeaking = false;
+        if (currentStatus === 'ready' && vol > 0.02) {
+            if (!userSpeakingRef.current) {
+                userSpeakingRef.current = true;
+            }
+            silenceCounter = 0;
+            isUserSpeaking = true;
         } else {
-          silenceCounter++;
-          if (silenceCounter > SILENCE_THRESHOLD) {
-             if (isUserSpeaking) {
+            silenceCounter++;
+            if (silenceCounter > SILENCE_THRESHOLD) {
                 userSpeakingRef.current = false;
-                isUserSpeaking = false;
-             }
-          }
+            }
         }
 
         // 2. Determine Visual State
         let visualState = 'idle';
-        if (currentStatus === 'ready') {
-          if (currentIsAiSpeaking) {
-            visualState = 'speaking'; // Volumetric Expansion
-          } else if (isUserSpeaking) {
-            visualState = 'listening'; // Crystalline Aggression
-          } else {
-            visualState = 'ready'; // Brighter pulse for ready state
-          }
-        } else if (currentStatus === 'connected') {
-          visualState = 'idle'; // Connected but not ready yet
-        } else {
-          visualState = 'idle';
+        if (currentStatus === 'ready' || currentStatus === 'connected') {
+            if (currentIsAiSpeaking) {
+                visualState = 'speaking';
+            } else if (userSpeakingRef.current && currentStatus === 'ready') {
+                visualState = 'listening';
+            } else if (currentStatus === 'ready') {
+                visualState = 'ready'; // Orbe en estado "listo para escuchar"
+            }
         }
 
         // Direct DOM Update to avoid React render cycle

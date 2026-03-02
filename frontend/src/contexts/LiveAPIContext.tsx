@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useRef, useCallback, useEff
 import { createAudioBuffer } from '../utils/audioUtils';
 // import type { ServerMessage } from '../types/websocket';
 
+export const isSessionActive = (status: string) => status === 'connected' || status === 'ready';
+
 export interface UseLiveAPI {
   connected: boolean;
   status: 'disconnected' | 'connecting' | 'connected' | 'ready' | 'error';
@@ -133,8 +135,7 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
           // Worklet -> WebSocket
           worklet.port.onmessage = (event) => {
             // Only send audio if the session is ready
-            const currentStatus = statusRef.current;
-            if (currentStatus !== 'ready' && currentStatus !== 'connected') return;
+            if (statusRef.current !== 'ready') return;
 
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(event.data);
@@ -218,7 +219,8 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
 
             if (message.type === 'session_ready') {
                 setStatus('ready');
-                console.log('Session ready signal received. Mic now active.');
+                statusRef.current = 'ready'; // Update ref immediately
+                console.log('✅ Session ready - mic activated');
             } else if (message.type === 'text') {
                 setLastAiMessage(message.data);
             } else if (message.type === 'turn_complete') {

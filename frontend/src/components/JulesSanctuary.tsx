@@ -1,3 +1,4 @@
+import { isSessionActive } from '../contexts/LiveAPIContext';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { UseLiveAPI } from '../hooks/useLiveAPI';
@@ -47,7 +48,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
   // Auto-Sync Logic
   useEffect(() => {
     let interval: number;
-    if (autoSync && isCameraReady && api.connected) {
+    if (autoSync && isCameraReady && isSessionActive(api.status)) {
       interval = window.setInterval(async () => {
         const frame = await captureFrame();
         if (frame) {
@@ -57,7 +58,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
       }, 2000);
     }
     return () => clearInterval(interval);
-  }, [autoSync, isCameraReady, api.connected, captureFrame, api]);
+  }, [autoSync, isCameraReady, api.status, captureFrame, api]);
 
   // Manual Capture
   const handleCapture = async () => {
@@ -112,7 +113,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
                     muted
                   />
                   {!isCameraReady && <div className="absolute text-vintage-navy font-technical">NO SIGNAL</div>}
-                  {api.connected && isCameraReady && (
+                  {isSessionActive(api.status) && isCameraReady && (
                       <div className="absolute top-2 right-2 flex gap-1">
                           <div className="w-2 h-2 bg-alert-red rounded-full animate-pulse" />
                           <span className="text-[10px] text-alert-red font-mono">LIVE</span>
@@ -123,7 +124,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
                 <div className="flex gap-2">
                   <button
                     onClick={handleCapture}
-                    disabled={!isCameraReady || !api.connected}
+                    disabled={!isCameraReady || !isSessionActive(api.status)}
                     className="kizuna-shard-btn-wrapper flex-1"
                   >
                     <div className="kizuna-shard-btn-inner gap-2">
@@ -150,7 +151,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
                   <div className="space-y-2 text-sm font-mono text-electric-blue">
                     <div className="flex justify-between">
                       <span>CONNECTION:</span>
-                      <span className={api.connected ? "text-green-400" : "text-alert-red"}>
+                      <span className={isSessionActive(api.status) ? "text-green-400" : "text-alert-red"}>
                         {api.status.toUpperCase()}
                       </span>
                     </div>
