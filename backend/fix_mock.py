@@ -1,4 +1,6 @@
-import asyncio
+import json
+
+mock_content = '''import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
@@ -62,7 +64,7 @@ class MockSession:
                     )
                 ))
                 for _ in range(5):
-                    dummy_audio = b'\x00' * 320
+                    dummy_audio = b'\\x00' * 320
                     await self._output_queue.put(MockResponse(
                         server_content=MockServerContent(
                             model_turn=MockModelTurn(
@@ -144,3 +146,7 @@ class MockGeminiService:
         session = MockSession()
         yield session
         logger.info("Mock Gemini Session closed.")
+'''
+
+with open('app/services/mock_gemini.py', 'w') as f:
+    f.write(mock_content)
