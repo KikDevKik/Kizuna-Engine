@@ -18,11 +18,9 @@ async def main():
             model="gemini-2.5-flash",
             contents="Hello",
             config=types.GenerateContentConfig(
-                response_mime_type="application/json",
                 response_schema=manual_schema
             )
-        )
-        print(f"Parsed: {response.parsed}")
+        )        print(f"Parsed: {response.parsed}")
     except Exception as e:
         # We expect 400 for API key, but we want to see if it passes local validation
         if "API key not valid" in str(e):

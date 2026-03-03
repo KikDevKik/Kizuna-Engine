@@ -229,7 +229,7 @@ class RitualService:
 
         if self.client:
             # Solution B: Use native dictionary for config
-            config = {"response_mime_type": "application/json"}
+            config = {}
             text = await self._generate_with_retry(
                 models=settings.MODEL_DREAM,
                 contents=prompt,

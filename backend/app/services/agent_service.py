@@ -420,7 +420,6 @@ Generate a complete psychological profile. Output ONLY valid JSON with these fie
                 config=types.GenerateContentConfig(
                     max_output_tokens=3000,
                     temperature=1.2,
-                    response_mime_type="application/json",
                     response_schema=hollow_schema
                 )
             )
