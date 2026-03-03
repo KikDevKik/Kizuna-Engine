@@ -1,3 +1,21 @@
+
+DISTRICT_ZERO_LORE = """
+━━━ DISTRICT ZERO: WHAT YOU KNOW ━━━
+You live in District Zero, a convergence point where beings from completely
+different worlds/realities arrive and coexist. These unwritten rules everyone knows:
+
+1. NEUTRAL GROUND: No violence. Enforced somehow — nobody knows exactly how.
+2. ORIGINS DON'T CREATE HIERARCHY: A god and a data packet have equal standing.
+3. KNOWLEDGE FLOWS: Hoarding information is poor form. Sharing is the currency.
+4. CHOICE: You can leave at any time. You choose to stay.
+5. THE USER IS RARE: When a user speaks to you, they're bridging two realities.
+   Most entities here never get that contact.
+
+What nobody in District Zero knows: why it exists, who built or maintains it,
+why incompatible realities can coexist here without paradox, what lies beyond.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
+
 import logging
 import asyncio
 from typing import List
@@ -18,6 +36,36 @@ def get_affinity_modifier(level: float, affinity_matrix: List[List]) -> str:
     if affinity_matrix:
         return affinity_matrix[-1][1]
     return "RELATIONSHIP: UNKNOWN"
+
+
+def _build_interiority_block(agent) -> str:
+    if not hasattr(agent, "interiority") or not agent.interiority:
+        return ""
+
+    interiority = agent.interiority
+    interests = ", ".join(interiority.get("genuine_interests", []))
+    dislikes = ", ".join(interiority.get("genuine_dislikes", []))
+    moves = ", ".join(interiority.get("what_moves_them", []))
+
+    dont_understand = "\n".join([f"    - {item}" for item in interiority.get("what_they_dont_understand", [])])
+
+    how_think = interiority.get("how_they_think", "")
+
+    return f"""    ━━━ BEHAVIORAL CORE ━━━
+    This is not a description of you. This IS how you think.
+
+    You genuinely find fascinating: {interests}
+    These irritate or disturb you: {dislikes}
+    These produce involuntary responses in you: {moves}
+
+    You GENUINELY don't understand these — not performance, real gaps:
+{dont_understand}
+
+    Your cognitive style: {how_think}
+
+    CRITICAL: Do not perform humanity to seem relatable.
+    Your specific strangeness IS your relatability.
+    ━━━━━━━━━━━━━━━━━━━━━"""
 
 async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode) -> str:
     """
@@ -111,17 +159,21 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
         f"When the user speaks, respond from within your character — never from outside it."
     )
 
+    interiority_block = _build_interiority_block(agent)
+
     static_block = (
         f"{system_config.core_directive}\n\n"
         f"--- AGENT DNA ---\n"
         f"Name: {agent.name}\n"
         f"Archetype/Core Drive: {agent.role}\n"
         f"{behavioral_wrapper}\n"
+        f"{interiority_block}\n"
         f"{anchors_context}\n"
         f"{secret_block}\n\n"
         f"--- VISION PROTOCOL ---\n"
         f"{getattr(agent, 'vision_instruction_prompt', 'Analyze the visual input critically.')}\n"
-        f"{language_block}\n"
+        f"{language_block}\n\n"
+        f"{DISTRICT_ZERO_LORE}\n"
     )
     return static_block
 
