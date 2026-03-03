@@ -425,7 +425,22 @@ Generate a complete psychological profile. Output ONLY valid JSON with these fie
             if not response.text:
                 raise ValueError("Soul Forge returned empty response.")
 
-            profile = HollowAgentProfile.model_validate_json(response.text)
+            raw = response.text.strip()
+            # Strip markdown code fences if Gemini wrapped the response
+            if raw.startswith("```"):
+                # Split and take the second part (the content inside the fences)
+                # This handles ```json ... ``` or just ``` ... ```
+                parts = raw.split("```")
+                if len(parts) >= 3:
+                    raw = parts[1]
+                else:
+                    raw = parts[0] # Fallback
+                
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.strip()
+
+            profile = HollowAgentProfile.model_validate_json(raw)
 
             # Create AgentNode
             # We treat 'backstory' as 'base_instruction'
