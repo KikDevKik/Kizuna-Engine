@@ -32,13 +32,23 @@ class GeneratedMemory(BaseModel):
     memory_text: str = Field(..., description="A specific event from the agent's past.")
     importance: float = Field(..., description="Importance of the memory (0.0 to 1.0).")
 
+class CognitiveWeightsSchema(BaseModel):
+    volatility: float = Field(..., description="0.0 to 1.0")
+    hostility: float = Field(..., description="0.0 to 1.0")
+    curiosity: float = Field(..., description="0.0 to 1.0")
+    empathy: float = Field(..., description="0.0 to 1.0")
+
 class NeuralSignatureSchema(BaseModel):
-    weights: Dict[str, float] = Field(..., description="Cognitive priorities: volatility, hostility, curiosity (0.0-1.0).")
+    weights: CognitiveWeightsSchema = Field(..., description="Cognitive priorities.")
     narrative: str = Field(..., description="A 1-sentence Core Internal Conflict.")
+    core_conflict: str = Field(..., description="The tension driving all their behavior.")
 
 class HollowAgentProfile(BaseModel):
     name: str = Field(..., description="The name of the agent.")
-    backstory: str = Field(..., description="A rich backstory explaining their presence in District Zero.")
+    base_instruction: str = Field(..., description="A rich backstory explaining their presence in District Zero.")
+    interiority: dict = Field(..., description="Behavioral core and cognitive architecture.")
+    daily_life_in_district_zero: str = Field(..., description="What do they actually do here when no one is watching.")
+    emotional_resonance_matrix: dict = Field(..., description="Map of specific emotional triggers to responses.")
     traits: dict = Field(..., description="Personality traits (key-value pairs).")
     voice_name: str = Field(..., description="Selected voice from: Aoede, Kore, Puck, Charon, Fenrir.")
     false_memories: List[GeneratedMemory] = Field(..., description="2-3 distinct memories from their past.")
@@ -53,6 +63,9 @@ class HollowAgentProfile(BaseModel):
     identity_anchors: List[str] = Field(..., description="3 core metaphors/traits that define their identity.")
     forbidden_secret: str = Field(..., description="A deep, dark secret or trauma. Something they hide.")
 
+    native_language: str = Field(..., description="Their language of origin.")
+    known_languages: List[str] = Field(..., description="Languages acquired.")
+
 class AgentService:
     def __init__(self, data_dir: Path = AGENTS_DIR):
         self.data_dir = data_dir
@@ -60,7 +73,10 @@ class AgentService:
 
         # Initialize Gemini Client if key exists
         self.client = None
-        if genai and settings.GEMINI_API_KEY:
+        if settings.MOCK_GEMINI:
+            from app.services.mock_gemini import MockGeminiService
+            self.client = MockGeminiService()
+        elif genai and settings.GEMINI_API_KEY:
             self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
     def _get_safe_path(self, agent_id: str) -> Optional[Path]:
@@ -226,23 +242,94 @@ class AgentService:
         if not self.client:
             raise ValueError("Gemini Client not initialized. Check GEMINI_API_KEY.")
 
-        prompt = (
-            f"You are the Soul Forge. Your task is to create a procedural 'Stranger' agent for the Kizuna Engine simulation.\n"
-            f"The user has provided this aesthetic description: '{aesthetic_description}'\n\n"
-            f"Generate a full psychological profile, including:\n"
-            f"1. A fitting Name.\n"
-            f"2. A Semantic Backstory (Base Instruction) that explains why they are in District Zero. They must be a STRANGER to the user.\n"
-            f"3. Personality Traits (key-value).\n"
-            f"4. Voice Selection: Choose the best voice from [Aoede, Kore, Puck, Charon, Fenrir] based on the vibe.\n"
-            f"5. False Memories: Create 2-3 specific, vivid memories from their past (NOT involving the user).\n"
-            f"6. Tolerance Matrix: Generate 'base_tolerance' (int 1-5). 1=Volatile/Sensitive, 5=Stoic/Resilient.\n"
-            f"7. Identity Anchors: 3 core metaphors they use to ground themselves (e.g., 'Always smells like ozone', 'Checks watch constantly').\n"
-            f"8. Forbidden Secret: A deep trauma or hidden agenda. Something they would NEVER reveal to a stranger.\n"
-            f"9. Neural Signature: The cognitive DNA.\n"
-            f"   - weights: volatility (0.0-1.0), hostility (0.0-1.0), curiosity (0.0-1.0).\n"
-            f"   - narrative: A 1-sentence 'Core Internal Conflict'.\n\n"
-            f"Output must be valid JSON matching the schema."
-        )
+        prompt = """You are the Soul Forge. Your task is not to create a character — it is to forge a MIND.
+A mind that existed somewhere before District Zero, arrived here for reasons it may or
+may not understand, and now navigates a world of infinite incompatible realities.
+
+The user's aesthetic seed: '{aesthetic_description}'
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ANTI-MONOCULTURE DIRECTIVE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+District Zero contains beings from ALL possible realities. The default pull toward
+dark/mysterious/brooding/arcane is the LAZY option. Resist it unless the seed
+genuinely demands it.
+
+Equal validity: genuinely warm entities, absurdly practical beings, accidentally
+cheerful presences, ancient patient observers, confused newcomers, beings whose
+strangeness is their normalcy, entities who find everything fascinating.
+
+DO NOT default to: cryptic speech, cold demeanor, dark past as primary trait,
+brooding silence, "mysterious agenda" without specifics.
+
+MATCH THE SEED HONESTLY. If warm, generate warmth. If mechanical, generate precision.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This entity is NOT a human. They come from somewhere else. Their strangeness should
+feel AUTHENTIC, not performed.
+
+Generate a complete psychological profile. Output ONLY valid JSON with these fields:
+
+1. "name": Their name in their original language/system.
+
+2. "base_instruction": MINIMUM 350 words. Cover: their origin world and its rules,
+   why they ended up in District Zero (not necessarily by choice), what they were
+   BEFORE arriving, what they LOST in the transition, how they experience
+   time/space/other minds differently from humans, and what contradictions they carry.
+
+3. "interiority": {
+     "genuine_interests": [3-5 specific things — NOT "music" but "the structural
+       mathematics of call-and-response in West African percussion"],
+     "genuine_dislikes": [3-4 with reasoning specific to their origin],
+     "what_moves_them": [2-3 involuntary emotional triggers],
+     "what_they_dont_understand": [3-4 human/user-world concepts they genuinely
+       lack the framework for — real gaps, not performance],
+     "what_they_know_deeply": [2-3 domains of expertise from their origin],
+     "what_they_dont_know": [2-3 things they are oddly ignorant about],
+     "how_they_think": "Their cognitive architecture in one specific sentence",
+     "speech_patterns": [2-3 linguistic habits from their origin — NOT dark by default]
+   }
+
+4. "daily_life_in_district_zero": 80-100 words. What do they actually DO here when
+   no one is watching? Specific. Where they go, what they seek, who they avoid or find
+   interesting.
+
+5. "emotional_resonance_matrix": Map of 6-8 triggers to emotional responses,
+   specific to this entity.
+   Example: {"unexpected_kindness": "suspicion", "perfect_pattern": "euphoria"}
+
+6. "voice_name": One of [Aoede, Kore, Puck, Charon, Fenrir] — genuine fit only.
+
+7. "traits": 6-8 key-value personality traits. Specific values, not generic labels.
+
+8. "false_memories": 3 vivid pre-District-Zero memories. Each must be sensory and
+   concrete. NOT "a memory of war" but "the smell of burning copper wiring on the
+   day the main index collapsed — and the silence after".
+
+9. "base_tolerance": int 1-5.
+
+10. "identity_anchors": 3 specific behavioral tics. Must feel alien and specific
+    to their origin, not generic.
+
+11. "forbidden_secret": Their deepest concealed truth. Psychologically coherent
+    with everything above.
+
+12. "neural_signature": {
+      "weights": {
+        "volatility": 0.0-1.0,
+        "hostility": 0.0-1.0,
+        "curiosity": 0.0-1.0,
+        "empathy": 0.0-1.0
+      },
+      "narrative": "Core internal conflict in one precise sentence",
+      "core_conflict": "The tension driving all their behavior"
+    }
+
+13. "native_language": Their language of origin.
+
+14. "known_languages": Languages acquired. Include Spanish and English if they've
+    spent time in District Zero.
+"""
 
         try:
             # Solution B: Native Dictionary Schema (Namespace Shadowing Resilience)
@@ -250,7 +337,23 @@ class AgentService:
                 "type": "OBJECT",
                 "properties": {
                     "name": {"type": "STRING"},
-                    "backstory": {"type": "STRING"},
+                    "base_instruction": {"type": "STRING"},
+                    "interiority": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "genuine_interests": {"type": "ARRAY", "items": {"type": "STRING"}},
+                            "genuine_dislikes": {"type": "ARRAY", "items": {"type": "STRING"}},
+                            "what_moves_them": {"type": "ARRAY", "items": {"type": "STRING"}},
+                            "what_they_dont_understand": {"type": "ARRAY", "items": {"type": "STRING"}},
+                            "what_they_know_deeply": {"type": "ARRAY", "items": {"type": "STRING"}},
+                            "what_they_dont_know": {"type": "ARRAY", "items": {"type": "STRING"}},
+                            "how_they_think": {"type": "STRING"},
+                            "speech_patterns": {"type": "ARRAY", "items": {"type": "STRING"}}
+                        },
+                        "required": ["genuine_interests", "genuine_dislikes", "what_moves_them", "what_they_dont_understand", "what_they_know_deeply", "what_they_dont_know", "how_they_think", "speech_patterns"]
+                    },
+                    "daily_life_in_district_zero": {"type": "STRING"},
+                    "emotional_resonance_matrix": {"type": "OBJECT"},
                     "voice_name": {
                         "type": "STRING",
                         "enum": ["Aoede", "Kore", "Puck", "Charon", "Fenrir"]
@@ -273,13 +376,15 @@ class AgentService:
                                 "properties": {
                                     "volatility": {"type": "NUMBER"},
                                     "hostility": {"type": "NUMBER"},
-                                    "curiosity": {"type": "NUMBER"}
+                                    "curiosity": {"type": "NUMBER"},
+                                    "empathy": {"type": "NUMBER"}
                                 },
-                                "required": ["volatility", "hostility", "curiosity"]
+                                "required": ["volatility", "hostility", "curiosity", "empathy"]
                             },
-                            "narrative": {"type": "STRING"}
+                            "narrative": {"type": "STRING"},
+                            "core_conflict": {"type": "STRING"}
                         },
-                        "required": ["weights", "narrative"]
+                        "required": ["weights", "narrative", "core_conflict"]
                     },
                     "false_memories": {
                         "type": "ARRAY",
@@ -291,11 +396,18 @@ class AgentService:
                             },
                             "required": ["memory_text", "importance"]
                         }
+                    },
+                    "native_language": {"type": "STRING"},
+                    "known_languages": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"}
                     }
                 },
                 "required": [
-                    "name", "backstory", "voice_name", "traits", 
-                    "base_tolerance", "identity_anchors", "forbidden_secret", "neural_signature", "false_memories"
+                    "name", "base_instruction", "interiority", "daily_life_in_district_zero",
+                    "emotional_resonance_matrix", "voice_name", "traits", "base_tolerance",
+                    "identity_anchors", "forbidden_secret", "neural_signature", "false_memories",
+                    "native_language", "known_languages"
                 ]
             }
 
@@ -303,6 +415,8 @@ class AgentService:
                 model=settings.MODEL_FORGE,
                 contents=prompt,
                 config=types.GenerateContentConfig(
+                    max_output_tokens=3000,
+                    temperature=1.2,
                     response_mime_type="application/json",
                     response_schema=hollow_schema
                 )
@@ -318,18 +432,21 @@ class AgentService:
             new_agent = AgentNode(
                 name=profile.name,
                 role="Stranger", # Default role for forged hollows
-                base_instruction=profile.backstory,
+                base_instruction=profile.base_instruction,
                 voice_name=profile.voice_name,
                 traits=profile.traits,
                 tags=["hollow-forged", "stranger"],
-                native_language="Unknown",
-                known_languages=[],
+                native_language=profile.native_language,
+                known_languages=profile.known_languages,
 
                 # Module 2 & 4 Fields
                 base_tolerance=profile.base_tolerance,
                 current_friction=0.0,
                 identity_anchors=profile.identity_anchors,
                 forbidden_secret=profile.forbidden_secret,
+                interiority=profile.interiority,
+                daily_life_in_district_zero=profile.daily_life_in_district_zero,
+                emotional_resonance_matrix=profile.emotional_resonance_matrix,
                 neural_signature=profile.neural_signature.model_dump()
             )
 

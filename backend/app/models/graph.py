@@ -57,6 +57,12 @@ class AgentNode(BaseModel, JSONLDMixin):
     native_language: str = "Unknown"
     known_languages: List[str] = Field(default_factory=list)
 
+
+    # Deep Soul (Phase 7 Week 1)
+    interiority: Optional[dict] = None
+    daily_life_in_district_zero: Optional[str] = None
+    emotional_resonance_matrix: Optional[dict] = None
+
     # Anthropologist Protocol: Social Battery & Decay
     social_battery: float = 100.0 # 0.0 to 100.0
     last_battery_update: datetime = Field(default_factory=datetime.now)
@@ -94,7 +100,7 @@ class AgentNode(BaseModel, JSONLDMixin):
 
     # New: Emotional Resonance Matrix Override (Optional)
     # Allows agents to react differently to emotions (e.g., a sadist might gain affinity from anger)
-    emotional_resonance_matrix: Optional[Dict[str, float]] = None
+    emotional_resonance_matrix: Optional[dict] = None
 
 class MemoryEpisodeNode(BaseModel, JSONLDMixin):
     id: str = Field(default_factory=lambda: str(uuid4()))
