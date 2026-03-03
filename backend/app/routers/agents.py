@@ -161,9 +161,27 @@ async def list_strangers(
                 is_gossip=True
             ))
 
-        # Note: We return ONLY backend-managed strangers.
-        # The frontend will merge these with static Enigma Shells if needed,
-        # or use these primarily.
+        # 3. Fetch hollow-forged agents from filesystem (not yet in user's roster)
+        all_agents = await agent_service.list_agents()
+        roster_edges = await repository.get_edges(source_id=user_id, type="interactedWith") if hasattr(repository, 'get_edges') else []
+        roster_ids = {edge.target_id for edge in roster_edges}
+        existing_ids = {r.id for r in results}
+
+        for agent in all_agents:
+            if (
+                "hollow-forged" in (agent.tags or [])
+                and agent.id not in roster_ids
+                and agent.id not in existing_ids
+            ):
+                vibe = agent.base_instruction[:120] + "..." if agent.base_instruction else "Unknown entity."
+                results.append(StrangerNode(
+                    id=agent.id,
+                    description=vibe,
+                    tempAlias=f"Unknown_0x{agent.id[:4].upper()}",
+                    visualHint="bg-purple-500/10",
+                    is_nemesis=False,
+                    is_gossip=True
+                ))
 
         return results
 
@@ -195,6 +213,7 @@ async def create_agent(request: CreateAgentRequest):
 @router.post("/forge_hollow", response_model=AgentNode, status_code=status.HTTP_201_CREATED)
 async def forge_hollow_agent(
     request: HollowForgeRequest,
+    user_id: str = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
     """
@@ -267,6 +286,8 @@ async def forge_hollow_agent(
         except Exception as e:
             logger.error(f"Gossip Protocol failed: {e}")
 
+        # 6. Record Interaction so the agent appears in the user's roster
+        await repository.record_interaction(user_id, saved_agent.id)
         logger.info(f"Hollow Forging Complete: {saved_agent.name} ({saved_agent.id}) with {len(memories)} memories.")
         return saved_agent
 
