@@ -423,23 +423,28 @@ Generate a complete psychological profile. Output ONLY valid JSON with these fie
                 )
             )
 
+            import re, json
+
+            raw = response.candidates[0].content.parts[0].text.strip()
+
+            # Strip markdown fences
+            if "```" in raw:
+                match = re.search(r'```(?:json)?\s*([\s\S]*?)```', raw)
+                if match:
+                    raw = match.group(1).strip()
+
+            # DUMP ANTES DE PARSEAR
+            with open("C:/Users/User/forge_raw.txt", "w", encoding="utf-8") as f:
+                f.write(raw)
+
+            # Parse como dict primero, luego validar con Pydantic
             try:
-                raw = response.text.strip()
-            except Exception as text_err:
-                logging.getLogger("DEBUG_FORGE").error(f"response.text FAILED: {text_err}")
-                logging.getLogger("DEBUG_FORGE").error(f"response type: {type(response)}")
-                logging.getLogger("DEBUG_FORGE").error(f"response candidates: {response.candidates}")
-                raise
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                raw = re.sub(r'(?<!\\)\n', '\\n', raw)
+                data = json.loads(raw)
 
-            logging.getLogger("DEBUG_FORGE").error(f"RAW (first 200): {repr(raw[:200])}")
-
-            if raw.startswith("```"):
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
-                raw = raw.strip()
-
-            profile = HollowAgentProfile.model_validate_json(raw)
+            profile = HollowAgentProfile.model_validate(data)
             # Create AgentNode
             # We treat 'backstory' as 'base_instruction'
             new_agent = AgentNode(
@@ -479,7 +484,7 @@ Generate a complete psychological profile. Output ONLY valid JSON with these fie
             # DUMP TEMPORAL - borrar después
             try:
                 with open("forge_debug.txt", "w", encoding="utf-8") as f:
-                    f.write(repr(response.text))
+                    f.write(repr(response.candidates[0].content.parts[0].text))
             except:
                 pass
             logger.error(f"Soul Forge failed: {e}")
