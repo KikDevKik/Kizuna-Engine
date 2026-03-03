@@ -2,6 +2,7 @@ import json
 import logging
 import aiofiles
 import aiofiles.os
+
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 from uuid import uuid4
@@ -426,22 +427,18 @@ Generate a complete psychological profile. Output ONLY valid JSON with these fie
                 raise ValueError("Soul Forge returned empty response.")
 
             raw = response.text.strip()
-            # Strip markdown code fences if Gemini wrapped the response
             if raw.startswith("```"):
-                # Split and take the second part (the content inside the fences)
-                # This handles ```json ... ``` or just ``` ... ```
-                parts = raw.split("```")
-                if len(parts) >= 3:
-                    raw = parts[1]
-                else:
-                    raw = parts[0] # Fallback
-                
+                raw = raw.split("```")[1]
                 if raw.startswith("json"):
                     raw = raw[4:]
                 raw = raw.strip()
 
-            profile = HollowAgentProfile.model_validate_json(raw)
+            # DEBUG TEMPORAL - borrar después
+            import logging
+            logging.getLogger("DEBUG_FORGE").error(f"RAW RESPONSE (first 500 chars): {raw[:500]}")
+            logging.getLogger("DEBUG_FORGE").error(f"RAW RESPONSE (chars around error): {raw[7600:7700]}")
 
+            profile = HollowAgentProfile.model_validate_json(raw)
             # Create AgentNode
             # We treat 'backstory' as 'base_instruction'
             new_agent = AgentNode(
