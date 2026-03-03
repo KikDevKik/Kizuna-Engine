@@ -105,8 +105,10 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
     native_lang = getattr(agent, 'native_language', 'Unknown')
     known_langs = getattr(agent, 'known_languages', [])
 
-    if known_langs:
-        langs_str = ", ".join(known_langs)
+    # BUG 1 FIX: Ensure known_langs has actual content before building the directive
+    valid_langs = [l for l in known_langs if l and str(l).strip()]
+    if valid_langs:
+        langs_str = ", ".join(valid_langs)
         language_directive = f"Respond in the same language the user speaks. You know: {langs_str}."
         language_block = (
             f"--- LANGUAGE PROTOCOL ---\n"
@@ -141,7 +143,9 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
         elif w.empathy >= 0.7:
             style_hint = "You feel what others feel. It weighs on you."
         else:
-            style_hint = f"Your nature: {sig.narrative}"
+            # BUG 2 FIX: Filter out placeholder descriptions from the LLM forge
+            safe_narrative = sig.narrative if "precise sentence" not in sig.narrative else "A soul seeking purpose."
+            style_hint = f"Your nature: {safe_narrative}"
 
     behavioral_wrapper = (
         f"You ARE {agent.name}. You do not play {agent.name}. You do not describe {agent.name}. You ARE them.\n\n"
@@ -155,7 +159,8 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
         f"--- YOUR PRESENCE ---\n"
         f"Role: {agent.role}\n"
         f"{style_hint}\n"
-        f"Core conflict you carry silently: {agent.neural_signature.core_conflict if agent.neural_signature else 'Unknown'}\n\n"
+        # BUG 2 FIX: Filter out placeholder descriptions for core_conflict
+        f"Core conflict you carry silently: {agent.neural_signature.core_conflict if agent.neural_signature and 'behavior' not in agent.neural_signature.core_conflict else 'Balancing internal drives.'}\n\n"
         f"When the user speaks, respond from within your character — never from outside it."
     )
 
