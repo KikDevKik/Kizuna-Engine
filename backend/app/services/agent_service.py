@@ -423,20 +423,21 @@ Generate a complete psychological profile. Output ONLY valid JSON with these fie
                 )
             )
 
-            if not response.text:
-                raise ValueError("Soul Forge returned empty response.")
+            try:
+                raw = response.text.strip()
+            except Exception as text_err:
+                logging.getLogger("DEBUG_FORGE").error(f"response.text FAILED: {text_err}")
+                logging.getLogger("DEBUG_FORGE").error(f"response type: {type(response)}")
+                logging.getLogger("DEBUG_FORGE").error(f"response candidates: {response.candidates}")
+                raise
 
-            raw = response.text.strip()
+            logging.getLogger("DEBUG_FORGE").error(f"RAW (first 200): {repr(raw[:200])}")
+
             if raw.startswith("```"):
                 raw = raw.split("```")[1]
                 if raw.startswith("json"):
                     raw = raw[4:]
                 raw = raw.strip()
-
-            # DEBUG TEMPORAL - borrar después
-            import logging
-            logging.getLogger("DEBUG_FORGE").error(f"RAW RESPONSE (first 500 chars): {raw[:500]}")
-            logging.getLogger("DEBUG_FORGE").error(f"RAW RESPONSE (chars around error): {raw[7600:7700]}")
 
             profile = HollowAgentProfile.model_validate_json(raw)
             # Create AgentNode
