@@ -16,3 +16,4 @@ pytest-asyncio>=0.23.0
 numpy==2.2.0
 sqlalchemy==2.0.47
 aiosqlite==0.22.1
+json-repair==0.30.3

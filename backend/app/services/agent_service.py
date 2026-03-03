@@ -2,7 +2,9 @@ import json
 import logging
 import aiofiles
 import aiofiles.os
+import re
 
+from json_repair import repair_json
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 from uuid import uuid4
@@ -423,8 +425,6 @@ Generate a complete psychological profile. Output ONLY valid JSON with these fie
                 )
             )
 
-            import re, json
-
             raw = response.candidates[0].content.parts[0].text.strip()
 
             # Strip markdown fences
@@ -433,17 +433,8 @@ Generate a complete psychological profile. Output ONLY valid JSON with these fie
                 if match:
                     raw = match.group(1).strip()
 
-            # DUMP ANTES DE PARSEAR
-            with open("C:/Users/User/forge_raw.txt", "w", encoding="utf-8") as f:
-                f.write(raw)
-
-            # Parse como dict primero, luego validar con Pydantic
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError:
-                raw = re.sub(r'(?<!\\)\n', '\\n', raw)
-                data = json.loads(raw)
-
+            # Repair y parsear
+            data = repair_json(raw, return_objects=True)
             profile = HollowAgentProfile.model_validate(data)
             # Create AgentNode
             # We treat 'backstory' as 'base_instruction'
