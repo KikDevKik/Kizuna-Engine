@@ -476,6 +476,12 @@ Generate a complete psychological profile. Output ONLY valid JSON with these fie
             return new_agent, memories
 
         except Exception as e:
+            # DUMP TEMPORAL - borrar después
+            try:
+                with open("forge_debug.txt", "w", encoding="utf-8") as f:
+                    f.write(repr(response.text))
+            except:
+                pass
             logger.error(f"Soul Forge failed: {e}")
             raise
 
