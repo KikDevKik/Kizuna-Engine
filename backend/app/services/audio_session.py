@@ -273,6 +273,30 @@ async def send_to_gemini(
                                 transcript_queue.put_nowait(transcript_text)
                             continue
 
+                    if control.get("type") == "image":
+                        try:
+                            image_b64 = control.get("data", "")
+                            if not image_b64:
+                                continue
+                            if types is None:
+                                logger.warning("Vision frame dropped: google.genai.types not available — SDK import failed")
+                                continue
+
+                            if image_b64.startswith("data:"):
+                                image_b64 = image_b64.split(",")[1]
+
+                            image_bytes = base64.b64decode(image_b64)
+                            await session.send_realtime_input(
+                                video=types.Blob(
+                                    data=image_bytes,
+                                    mime_type="image/jpeg"
+                                )
+                            )
+                            logger.debug(f"🎥 Vision frame relayed to Gemini ({len(image_bytes)} bytes)")
+                        except Exception as img_err:
+                            logger.warning(f"Vision frame relay failed: {img_err}")
+                        continue
+
                 except json.JSONDecodeError:
                     logger.warning(f"📨 Non-JSON text message ignored: {repr(text[:100])}")
                 except Exception as e:
