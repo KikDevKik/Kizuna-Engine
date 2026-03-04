@@ -31,3 +31,29 @@ class EdgeModel(Base):
     __table_args__ = (
         Index("ix_edges_source_target_type", "source_id", "target_id", "type"),
     )
+
+from sqlalchemy import UniqueConstraint, Integer, JSON
+
+class KizunaChronicleModel(Base):
+    """
+    Kizuna's Eternal Memory — immune to purge_all_memories().
+    Records the relational dynamics Kizuna observes between users and agents.
+    Survives all wipes. This is Kizuna's private truth.
+    """
+    __tablename__ = "kizuna_chronicle"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    user_id = Column(String, nullable=False, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    agent_name = Column(String, nullable=False)  # stored separately — agent JSON may be deleted
+    relationship_summary = Column(String, nullable=True)  # "Siempre discutían pero se buscaban"
+    dominant_topics = Column(JSON, default=list)  # ["anime", "música", "filosofía"]
+    emotional_tone = Column(String, nullable=True)  # "tensa_cercana" / "admiración" / "dependencia"
+    interaction_count = Column(Integer, default=0)
+    survived_wipes = Column(Integer, default=0)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'agent_id', name='uq_user_agent_chronicle'),
+    )

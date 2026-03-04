@@ -287,6 +287,23 @@ class SessionManager:
                     f"Buffering Full Session Transcript ({len(full_transcript)} chars) for {user_id}"
                 )
 
+
+                        # KIZUNA ETERNAL MEMORY: Chronicle Update
+            if subconscious_mind and session_transcript_buffer and agent_id != "kizuna":
+                # agent_name isn't globally in scope here, we should fetch it from agent config
+                # Actually, agent is loaded earlier. `agent.name` if `agent` is in scope, else `agent_id`
+                # Let's just pass `agent_id` as the name if we don't have it cleanly.
+                _agent_name = agent_id
+
+                asyncio.create_task(
+                    subconscious_mind._update_kizuna_chronicle(
+                        user_id=user_id,
+                        agent_id=agent_id,
+                        agent_name=_agent_name,
+                        transcript_buffer=session_transcript_buffer,
+                    )
+                )
+
             # Phase 4: Entering REM Sleep (Debounced Consolidation)
             # Schedule consolidation after grace period.
             asyncio.create_task(
