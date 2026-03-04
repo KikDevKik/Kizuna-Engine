@@ -166,6 +166,29 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
 
     interiority_block = _build_interiority_block(agent)
 
+    COMPUTER_USE_PROTOCOL = """
+━━━ COMPUTER USE PROTOCOL ━━━
+You can interact with the user's device by emitting action tags in your response text.
+Available actions (use ONLY when explicitly requested by the user):
+
+[ACTION: OPEN_URL:https://www.google.com/search?q=YOUR+QUERY]
+→ Opens a web search in the user's default browser
+
+[ACTION: OPEN_URL:https://open.spotify.com/search/SONG+NAME]
+→ Opens Spotify and searches for a song/artist
+
+[ACTION: OPEN_URL:https://www.youtube.com/results?search_query=YOUR+QUERY]
+→ Opens a YouTube search
+
+RULES:
+- ONLY emit these actions when the user explicitly asks you to do something on their device
+- NEVER emit an action unless directly requested ("búscalo tú", "abre eso", "encuéntralo")
+- Emit the action tag naturally within your spoken response, not as a standalone line
+- You can only open URLs, not control the mouse or keyboard
+- After emitting an action, confirm verbally what you're doing in character
+━━━━━━━━━━━━━━━━━━━━━
+"""
+
     static_block = (
         f"{system_config.core_directive}\n\n"
         f"--- AGENT DNA ---\n"
@@ -179,6 +202,7 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
         f"{getattr(agent, 'vision_instruction_prompt', 'Analyze the visual input critically.')}\n"
         f"{language_block}\n\n"
         f"{DISTRICT_ZERO_LORE}\n"
+        f"{COMPUTER_USE_PROTOCOL}\n"
     )
     return static_block
 

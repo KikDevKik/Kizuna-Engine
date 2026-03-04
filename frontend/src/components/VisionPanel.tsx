@@ -1,7 +1,7 @@
 import { isSessionActive } from '../contexts/LiveAPIContext';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, Activity, Camera, Monitor, EyeOff } from 'lucide-react';
+import { Eye, Activity, Camera, Monitor, EyeOff, Cpu } from 'lucide-react';
 import { useVision, type VisionMode } from '../hooks/useVision';
 import '../KizunaHUD.css';
 
@@ -102,7 +102,7 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ status, sendImage, ad
                 <div className="relative flex-1 bg-black overflow-hidden flex items-center justify-center">
                    <video
                       ref={videoRef}
-                      className={`w-full h-full object-cover opacity-90 ${visionMode === 'off' ? 'hidden' : ''}`}
+                      className={`w-full h-full object-cover opacity-90 ${(visionMode === 'off' || visionMode === 'screen-native') ? 'hidden' : ''}`}
                       autoPlay
                       playsInline
                       muted
@@ -111,6 +111,15 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ status, sendImage, ad
                    {(visionMode === 'off' || !isSessionActive(status)) && (
                        <div className="absolute inset-0 flex items-center justify-center text-vintage-navy font-monumental text-2xl opacity-20 tracking-wider">
                            {!isSessionActive(status) ? 'NO LINK' : 'SENSOR OFF'}
+                       </div>
+                   )}
+
+                   {/* Native Preview */}
+                   {visionMode === 'screen-native' && isReady && (
+                       <div className="absolute inset-0 flex flex-col items-center justify-center text-electric-blue font-technical text-xs tracking-widest gap-2 bg-abyssal-black z-10">
+                           <Cpu size={24} className="animate-pulse" />
+                           <span>NATIVE CAPTURE ACTIVE</span>
+                           <span className="text-electric-blue/50 text-[10px]">DRM BYPASS ENABLED</span>
                        </div>
                    )}
 
@@ -151,6 +160,13 @@ export const VisionPanel = React.memo<VisionPanelProps>(({ status, sendImage, ad
                         onClick={() => setVisionMode('screen')}
                         icon={<Monitor size={18} />}
                         label="SCREEN"
+                        disabled={!isSessionActive(status)}
+                    />
+                    <VisionButton
+                        active={visionMode === 'screen-native'}
+                        onClick={() => setVisionMode('screen-native')}
+                        icon={<Cpu size={18} />}
+                        label="NATIVE"
                         disabled={!isSessionActive(status)}
                     />
                     <VisionButton
