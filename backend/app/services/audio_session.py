@@ -32,9 +32,14 @@ logger = logging.getLogger(__name__)
 AUDIO_BUFFER_THRESHOLD = 2048
 VAD_SILENCE_MS = 900  # ms
 
-ACTION_KEYWORDS = [
-    "búscalo", "búscala", "busca", "abre", "pon",
-    "search", "open", "find", "play", "buscar", "reproduce",
+# Requires explicit platform name alongside action verb — prevents false triggers in normal conversation
+ACTION_PATTERNS = [
+    # "busca X en YouTube", "search X on Spotify", "find X on Google"
+    r'\b(busca|b\u00fascalo|b\u00fascala|buscar|search|find|abre|open)\b.{1,60}\b(youtube|spotify|google|web)\b',
+    # "en YouTube busca X", "Spotify pon X"
+    r'\b(youtube|spotify|google)\b.{0,40}\b(busca|b\u00fascalo|search|find|pon|play|reproduce)\b',
+    # "pon X en Spotify", "play X on YouTube"
+    r'\b(pon|play|reproduce)\b.{1,60}\b(youtube|spotify)\b',
 ]
 
 ALLOWED_ACTION_URLS = (
@@ -340,9 +345,9 @@ async def send_to_gemini(
                                 transcript_queue.put_nowait(transcript_text)
 
                             # Computer Use — Intent Detection
-                            # Fire-and-forget: never blocks the audio pipeline.
-                            if any(kw in transcript_text.lower() for kw in ACTION_KEYWORDS):
-                                logger.info(f"🎯 Action keyword detected in transcript — launching intent detection")
+                            # Requires explicit platform mention to avoid triggering on normal conversation.
+                            if any(re.search(p, transcript_text.lower()) for p in ACTION_PATTERNS):
+                                logger.info(f"🎯 Computer Use pattern matched — launching intent detection")
                                 asyncio.create_task(
                                     _detect_and_execute_action(transcript_text, websocket)
                                 )
