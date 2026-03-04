@@ -599,4 +599,75 @@ class SubconsciousMind:
             surrealism_level=surrealism
         )
 
+
+    async def _update_kizuna_chronicle(
+        self,
+        user_id: str,
+        agent_id: str,
+        agent_name: str,
+        transcript_buffer: list[str],
+    ):
+        """
+        Analyzes the session transcript and updates Kizuna's Chronicle
+        with a summary of the relational dynamic observed.
+        Called at end of session if agent_id != 'kizuna'.
+        """
+        if agent_id == "kizuna":
+            return  # Kizuna doesn't chronicle herself
+        if not transcript_buffer or len(transcript_buffer) < 3:
+            return  # Not enough data
+
+        if not self.repository:
+            return
+
+        if os.getenv("MOCK_GEMINI") == "true":
+            logger.warning("MOCK_GEMINI is active. Skipping Kizuna Chronicle update.")
+            return
+
+        transcript_text = "\n".join(transcript_buffer[-20:])  # Last 20 turns max
+
+        try:
+            from google import genai as _genai
+            client = _genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+            prompt = f"""Analyze this conversation transcript between a user and an AI agent named "{agent_name}".
+
+    Transcript:
+    {transcript_text}
+
+    Return ONLY a JSON object with these fields:
+    {{
+      "relationship_summary": "One sentence describing the dynamic (e.g., 'Talked mostly about anime and had playful arguments')",
+      "dominant_topics": ["topic1", "topic2", "topic3"],
+      "emotional_tone": "one of: warm/tense_close/intellectual/playful/dependent/conflictive/admiration/indifferent"
+    }}
+
+    Be specific and observational. No preamble, just the JSON."""
+
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt
+            )
+            raw = response.text.strip()
+            if raw.startswith("```"):
+                match = re.search(r'```(?:json)?\s*([\s\S]*?)```', raw)
+                if match:
+                    raw = match.group(1).strip()
+
+            data = json.loads(raw)
+
+            await self.repository.upsert_chronicle(
+                user_id=user_id,
+                agent_id=agent_id,
+                agent_name=agent_name,
+                relationship_summary=data.get("relationship_summary", ""),
+                dominant_topics=data.get("dominant_topics", []),
+                emotional_tone=data.get("emotional_tone", "indifferent"),
+                interaction_count=1,
+            )
+            # logger.info(f"📖 Chronicle updated for {user_id} ↔ {agent_name}") # Handled in upsert_chronicle
+
+        except Exception as e:
+            logger.warning(f"Chronicle update failed for {agent_name}: {e}")
+
 subconscious_mind = SubconsciousMind()

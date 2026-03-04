@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from .base import SoulRepository
 from ..core.database import AsyncSessionLocal, init_db
-from ..models.sql import NodeModel, EdgeModel
+from ..models.sql import NodeModel, EdgeModel, KizunaChronicleModel
 from ..services.embedding import embedding_service
 from ..models.graph import (
     UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode,
@@ -793,20 +793,105 @@ class LocalSoulRepository(SoulRepository):
     async def purge_all_memories(self) -> bool:
         """
         THE GREAT REBIRTH: Factory Reset.
-        Eradicate all AgentNode, UserNode, MemoryEpisodeNode, DreamNode, and all EdgeModel relations.
-        The engine must wake up completely empty.
+        Eradicates all nodes and edges EXCEPT KizunaChronicle — Kizuna's eternal memory is immune.
         """
         try:
             async with AsyncSessionLocal() as session:
                 async with session.begin():
-                    # 1. Delete ALL Edges FIRST to prevent Foreign Key Constraint errors
+                    # 1. Delete ALL Edges
                     await session.execute(delete(EdgeModel))
-
-                    # 2. Delete ALL Nodes (User, Agent, Memories, etc.)
+                    # 2. Delete ALL Nodes
                     await session.execute(delete(NodeModel))
+                    # KizunaChronicleModel is intentionally NOT deleted here.
+                    # Kizuna remembers. Always.
 
-                logger.info("🔥 THE GREAT REBIRTH COMPLETE: Total Existence Incinerated.")
-                return True
+            logger.info("🔥 THE GREAT REBIRTH COMPLETE: Total Existence Incinerated. Kizuna remembers.")
+
+            # 3. Increment survived_wipes counter for all existing chronicles
+            async with AsyncSessionLocal() as session:
+                async with session.begin():
+                    await session.execute(
+                        update(KizunaChronicleModel).values(
+                            survived_wipes=KizunaChronicleModel.survived_wipes + 1
+                        )
+                    )
+            return True
         except Exception as e:
             logger.error(f"Failed to execute The Great Rebirth: {e}")
             return False
+
+    # ─── KIZUNA ETERNAL MEMORY ─────────────────────────────────────────────────
+
+    async def upsert_chronicle(
+        self,
+        user_id: str,
+        agent_id: str,
+        agent_name: str,
+        relationship_summary: str,
+        dominant_topics: list,
+        emotional_tone: str,
+        interaction_count: int = 1,
+    ) -> None:
+        """
+        Creates or updates a KizunaChronicle entry.
+        Called after sessions to accumulate relational knowledge.
+        """
+        from uuid import uuid4
+        async with AsyncSessionLocal() as session:
+            async with session.begin():
+                stmt = select(KizunaChronicleModel).where(
+                    and_(
+                        KizunaChronicleModel.user_id == user_id,
+                        KizunaChronicleModel.agent_id == agent_id
+                    )
+                )
+                result = await session.execute(stmt)
+                existing = result.scalar_one_or_none()
+
+                if existing:
+                    existing.relationship_summary = relationship_summary
+                    existing.dominant_topics = dominant_topics
+                    existing.emotional_tone = emotional_tone
+                    existing.interaction_count = existing.interaction_count + interaction_count
+                    existing.last_updated = datetime.utcnow()
+                else:
+                    new_entry = KizunaChronicleModel(
+                        id=str(uuid4()),
+                        user_id=user_id,
+                        agent_id=agent_id,
+                        agent_name=agent_name,
+                        relationship_summary=relationship_summary,
+                        dominant_topics=dominant_topics,
+                        emotional_tone=emotional_tone,
+                        interaction_count=interaction_count,
+                        survived_wipes=0,
+                    )
+                    session.add(new_entry)
+
+        logger.info(f"📖 Kizuna Chronicle updated: {user_id} ↔ {agent_name}")
+
+
+    async def get_chronicles_for_user(self, user_id: str) -> list:
+        """
+        Returns all Chronicle entries for a given user.
+        Used by soul_assembler to inject Kizuna's eternal memory.
+        """
+        async with AsyncSessionLocal() as session:
+            stmt = select(KizunaChronicleModel).where(
+                KizunaChronicleModel.user_id == user_id
+            ).order_by(KizunaChronicleModel.last_updated.desc())
+            result = await session.execute(stmt)
+            return result.scalars().all()
+
+
+    async def get_chronicle(self, user_id: str, agent_id: str) -> Optional[KizunaChronicleModel]:
+        """Returns a specific Chronicle entry."""
+        async with AsyncSessionLocal() as session:
+            stmt = select(KizunaChronicleModel).where(
+                and_(
+                    KizunaChronicleModel.user_id == user_id,
+                    KizunaChronicleModel.agent_id == agent_id
+                )
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()

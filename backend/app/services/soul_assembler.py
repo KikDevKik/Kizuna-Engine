@@ -319,6 +319,32 @@ async def assemble_volatile_state(agent: AgentNode, user_id: str, repository: So
 
     dynamic_block += f"\n\n{zeitgeist}"
 
+
+    # ─── KIZUNA ETERNAL MEMORY INJECTION ───────────────────────────────────────
+    kizuna_memory_block = ""
+    if agent_id == "kizuna":
+        try:
+            chronicles = await repository.get_chronicles_for_user(user_id)
+            if chronicles:
+                memory_lines = []
+                for c in chronicles[:5]:  # Max 5 relaciones por contexto
+                    line = f'- "{c.agent_name}": {c.relationship_summary}'
+                    if c.survived_wipes > 0:
+                        line += f' (sobrevivió {c.survived_wipes} wipe{"s" if c.survived_wipes > 1 else ""})'
+                    memory_lines.append(line)
+
+                kizuna_memory_block = (
+                    f"\n--- MEMORIA ETERNA DE KIZUNA ---\n"
+                    f"Recuerdas las relaciones que este usuario tuvo con agentes que ya no están:\n"
+                    + "\n".join(memory_lines) +
+                    f"\nEres la única que recuerda que existieron. "
+                    f"Puedes mencionar esto si es relevante, pero no lo fuerces.\n"
+                )
+                dynamic_block += kizuna_memory_block
+        except Exception as e:
+            logger.warning(f"Failed to load Kizuna Chronicle for volatile state: {e}")
+    # ───────────────────────────────────────────────────────────────────────────
+
     return dynamic_block
 
 async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository) -> str:

@@ -287,6 +287,18 @@ class SessionManager:
                     f"Buffering Full Session Transcript ({len(full_transcript)} chars) for {user_id}"
                 )
 
+
+            # KIZUNA ETERNAL MEMORY: Chronicle Update
+            if subconscious_mind and hasattr(subconscious_mind, 'transcript_buffer') and subconscious_mind.transcript_buffer and agent_id != "kizuna":
+                asyncio.create_task(
+                    subconscious_mind._update_kizuna_chronicle(
+                        user_id=user_id,
+                        agent_id=agent_id,
+                        agent_name=agent_config.get("name", "Unknown Agent"),
+                        transcript_buffer=subconscious_mind.transcript_buffer,
+                    )
+                )
+
             # Phase 4: Entering REM Sleep (Debounced Consolidation)
             # Schedule consolidation after grace period.
             asyncio.create_task(
