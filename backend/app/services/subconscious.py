@@ -620,6 +620,7 @@ class SubconsciousMind:
         if not self.repository:
             return
 
+        import os
         if os.getenv("MOCK_GEMINI") == "true":
             logger.warning("MOCK_GEMINI is active. Skipping Kizuna Chronicle update.")
             return
