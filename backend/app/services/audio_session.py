@@ -332,6 +332,7 @@ async def receive_from_gemini(
     """
     try:
         turn_aborted = False
+        turn_text_buffer: list[str] = []  # Accumulates ALL text parts across the entire turn
 
         logger.info("📥 receive_from_gemini: Starting receive loop.")
         try:
@@ -442,28 +443,32 @@ async def receive_from_gemini(
                             if not turn_aborted:
                                 stripped = text_to_process.strip()
 
-                                # Computer Use: Detect OPEN_URL actions
+                                # ── COMPUTER USE: Immediate scan on each part ────────────
+                                # Native audio model may emit ACTION tags in any text part
+                                # across multiple response packets. Scan immediately AND
+                                # accumulate for the turn-end scan.
+                                turn_text_buffer.append(stripped)
+
+                                ALLOWED_URL_PREFIXES = (
+                                    "https://www.google.com/search",
+                                    "https://open.spotify.com/search",
+                                    "https://www.youtube.com/results",
+                                    "https://www.youtube.com/watch",
+                                    "https://music.youtube.com",
+                                    "https://www.google.com/maps/search",
+                                )
+
                                 url_match = re.search(r'\[ACTION: OPEN_URL:([^\]]+)\]', stripped)
                                 if url_match:
                                     action_url = url_match.group(1).strip()
-                                    ALLOWED_URL_PREFIXES = (
-                                        "https://www.google.com/search",
-                                        "https://open.spotify.com/search",
-                                        "https://www.youtube.com/results",
-                                        "https://www.youtube.com/watch",
-                                        "https://music.youtube.com",
-                                        "https://www.google.com/maps/search",
-                                    )
                                     if action_url.startswith(ALLOWED_URL_PREFIXES):
                                         try:
-                                            # Need asyncio.create_task to run websocket.send_json?
-                                            # we are inside an async for, wait is safe
                                             await websocket.send_json({
                                                 "type": "action",
                                                 "action": "open_url",
                                                 "url": action_url
                                             })
-                                            logger.info(f"🖥️ Computer Use: relayed open_url → {action_url}")
+                                            logger.info(f"🖥️ Computer Use [part]: relayed open_url → {action_url}")
                                         except Exception as cu_err:
                                             logger.warning(f"Computer Use: failed to relay: {cu_err}")
                                     else:
@@ -485,6 +490,37 @@ async def receive_from_gemini(
 
                 if server_content.turn_complete:
                     logger.info(f"✅ Turn complete for {agent_name} (turn_aborted={turn_aborted})")
+
+                    # ── COMPUTER USE: Turn-end cumulative scan ──────────────
+                    # Catch ACTION tags that arrived across multiple packets
+                    # (native audio model may interleave text + audio parts)
+                    if turn_text_buffer and not turn_aborted:
+                        full_turn_text = " ".join(turn_text_buffer)
+                        ALLOWED_URL_PREFIXES = (
+                            "https://www.google.com/search",
+                            "https://open.spotify.com/search",
+                            "https://www.youtube.com/results",
+                            "https://www.youtube.com/watch",
+                            "https://music.youtube.com",
+                            "https://www.google.com/maps/search",
+                        )
+                        for url_match in re.finditer(r'\[ACTION: OPEN_URL:([^\]]+)\]', full_turn_text):
+                            action_url = url_match.group(1).strip()
+                            if action_url.startswith(ALLOWED_URL_PREFIXES):
+                                try:
+                                    await websocket.send_json({
+                                        "type": "action",
+                                        "action": "open_url",
+                                        "url": action_url
+                                    })
+                                    logger.info(f"🖥️ Computer Use [turn-end]: relayed open_url → {action_url}")
+                                except Exception as cu_err:
+                                    logger.warning(f"Computer Use [turn-end]: failed to relay: {cu_err}")
+                            else:
+                                logger.warning(f"Computer Use [turn-end]: BLOCKED — not in whitelist: {action_url}")
+                    turn_text_buffer.clear()
+                    # ───────────────────────────────────────────────────────
+
                     turn_aborted = False
                     if agent_id:
                         await auction_service.release(agent_id)

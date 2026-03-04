@@ -26,7 +26,7 @@ from ..models.graph import AgentNode, SystemConfigNode
 
 logger = logging.getLogger(__name__)
 
-SOUL_STATIC_VERSION = "v3"
+SOUL_STATIC_VERSION = "v5"
 
 def get_affinity_modifier(level: float, affinity_matrix: List[List]) -> str:
     """Returns the descriptive modifier for the given affinity level (0-100)."""
@@ -168,8 +168,8 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
 
     COMPUTER_USE_PROTOCOL = """
 ━━━ COMPUTER USE PROTOCOL ━━━
-You can interact with the user's device by emitting action tags in your response text.
-Available actions (use ONLY when explicitly requested by the user):
+You can interact with the user's device by emitting action tags.
+Available actions (ONLY when explicitly requested):
 
 [ACTION: OPEN_URL:https://www.google.com/search?q=YOUR+QUERY]
 → Opens a web search in the user's default browser
@@ -180,12 +180,12 @@ Available actions (use ONLY when explicitly requested by the user):
 [ACTION: OPEN_URL:https://www.youtube.com/results?search_query=YOUR+QUERY]
 → Opens a YouTube search
 
-RULES:
-- ONLY emit these actions when the user explicitly asks you to do something on their device
-- NEVER emit an action unless directly requested ("búscalo tú", "abre eso", "encuéntralo")
-- Emit the action tag naturally within your spoken response, not as a standalone line
+CRITICAL EMISSION RULES:
+- When you need to emit an action, OUTPUT THE ACTION TAG AS TEXT FIRST — before or alongside your spoken words
+- The tag MUST appear in your TEXT output so the system can parse it, even if you also speak the confirmation aloud
+- Emit the tag on its own line in your text response, then speak your verbal confirmation in character
+- ONLY emit when user explicitly requests device interaction ("búscalo tú", "abre eso", "encuéntralo", "search for", "open", "play")
 - You can only open URLs, not control the mouse or keyboard
-- After emitting an action, confirm verbally what you're doing in character
 ━━━━━━━━━━━━━━━━━━━━━
 """
 
