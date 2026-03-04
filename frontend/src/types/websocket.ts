@@ -18,4 +18,8 @@ export type ControlMessage = {
   reason?: string;
 };
 
-export type ServerMessage = AudioMessage | TextMessage | TurnCompleteMessage | ControlMessage;
+export type SessionReadyMessage = {
+  type: 'session_ready';
+};
+
+export type ServerMessage = AudioMessage | TextMessage | TurnCompleteMessage | ControlMessage | SessionReadyMessage;

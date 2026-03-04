@@ -52,8 +52,8 @@ export const useLiveAPI = (): UseLiveAPI => {
     shouldReconnect.current = false; // Prevent auto-reconnect
 
     if (connectionTimeoutRef.current) {
-        clearTimeout(connectionTimeoutRef.current);
-        connectionTimeoutRef.current = null;
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
     }
 
     if (wsRef.current) {
@@ -68,9 +68,9 @@ export const useLiveAPI = (): UseLiveAPI => {
 
     // Stop Speech Recognition
     if (recognitionRef.current) {
-        recognitionRef.current.onend = null;
-        recognitionRef.current.stop();
-        recognitionRef.current = null;
+      recognitionRef.current.onend = null;
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
     }
 
     setStatus('disconnected');
@@ -81,85 +81,85 @@ export const useLiveAPI = (): UseLiveAPI => {
   // TRUE ECHO PROTOCOL: Native Browser Speech Recognition
   useEffect(() => {
     if (connected && wsRef.current) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        recognition.onresult = (event: any) => {
+          const lastResult = event.results[event.results.length - 1];
+          if (lastResult.isFinal) {
+            const transcript = lastResult[0].transcript;
+            console.log("True Echo Transcript:", transcript);
 
-        if (SpeechRecognition) {
-            const recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = false;
-            recognition.lang = 'en-US';
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            recognition.onresult = (event: any) => {
-                const lastResult = event.results[event.results.length - 1];
-                if (lastResult.isFinal) {
-                    const transcript = lastResult[0].transcript;
-                    console.log("True Echo Transcript:", transcript);
-
-                    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                        wsRef.current.send(JSON.stringify({
-                            type: "native_transcript",
-                            text: transcript
-                        }));
-                    }
-                } else if (!lastResult.isFinal) {
-                    // Interim result - User is likely speaking
-                    // Sovereign Voice: Check volume or assume speaking
-                    if (volumeRef.current > 0.05) {
-                        // Debounce if needed, but for barge-in, speed is key.
-                        // audioManagerRef.current?.flush(); // We do this on audio input event mainly
-                    }
-                }
-            };
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            recognition.onerror = (event: any) => {
-                // benign errors like 'no-speech' are common
-                if (event.error !== 'no-speech') {
-                    console.error("Speech recognition error:", event.error);
-                }
-            };
-
-            recognition.onend = () => {
-                 // Auto-restart if still connected
-                 // Check connected state via ref or relying on closure, but connected is in dependency array
-                 // so this effect runs on change.
-                 // We can check wsRef.current state.
-                 if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                     try {
-                         recognition.start();
-                     } catch {
-                         // Ignore if already started
-                     }
-                 }
-            };
-
-            try {
-                recognition.start();
-                recognitionRef.current = recognition;
-                console.log("True Echo Protocol: Listening...");
-            } catch (e) {
-                console.error("Failed to start SpeechRecognition:", e);
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({
+                type: "native_transcript",
+                text: transcript
+              }));
             }
-        } else {
-            console.warn("True Echo Protocol: Browser does not support SpeechRecognition.");
+          } else if (!lastResult.isFinal) {
+            // Interim result - User is likely speaking
+            // Sovereign Voice: Check volume or assume speaking
+            if (volumeRef.current > 0.05) {
+              // Debounce if needed, but for barge-in, speed is key.
+              // audioManagerRef.current?.flush(); // We do this on audio input event mainly
+            }
+          }
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recognition.onerror = (event: any) => {
+          // benign errors like 'no-speech' are common
+          if (event.error !== 'no-speech') {
+            console.error("Speech recognition error:", event.error);
+          }
+        };
+
+        recognition.onend = () => {
+          // Auto-restart if still connected
+          // Check connected state via ref or relying on closure, but connected is in dependency array
+          // so this effect runs on change.
+          // We can check wsRef.current state.
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            try {
+              recognition.start();
+            } catch {
+              // Ignore if already started
+            }
+          }
+        };
+
+        try {
+          recognition.start();
+          recognitionRef.current = recognition;
+          console.log("True Echo Protocol: Listening...");
+        } catch (e) {
+          console.error("Failed to start SpeechRecognition:", e);
         }
+      } else {
+        console.warn("True Echo Protocol: Browser does not support SpeechRecognition.");
+      }
     } else {
-        // Cleanup if connected becomes false (handled by disconnect too, but safe here)
-        if (recognitionRef.current) {
-            recognitionRef.current.onend = null;
-            recognitionRef.current.stop();
-            recognitionRef.current = null;
-        }
+      // Cleanup if connected becomes false (handled by disconnect too, but safe here)
+      if (recognitionRef.current) {
+        recognitionRef.current.onend = null;
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
     }
 
     return () => {
-         if (recognitionRef.current) {
-            recognitionRef.current.onend = null;
-            recognitionRef.current.stop();
-            recognitionRef.current = null;
-        }
+      if (recognitionRef.current) {
+        recognitionRef.current.onend = null;
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
     };
   }, [connected]);
 
@@ -182,11 +182,11 @@ export const useLiveAPI = (): UseLiveAPI => {
 
     // 15s Connection Timeout
     connectionTimeoutRef.current = setTimeout(() => {
-        console.error("Connection timed out (15s). Backend may be slow or unresponsive.");
-        if (wsRef.current && wsRef.current.readyState !== WebSocket.OPEN) {
-            wsRef.current.close();
-        }
-        setStatus('error');
+      console.error("Connection timed out (15s). Backend may be slow or unresponsive.");
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.OPEN) {
+        wsRef.current.close();
+      }
+      setStatus('error');
     }, 15000);
 
     try {
@@ -200,57 +200,57 @@ export const useLiveAPI = (): UseLiveAPI => {
       ws.onopen = async () => {
         console.log('WebSocket Connected');
         if (connectionTimeoutRef.current) {
-            clearTimeout(connectionTimeoutRef.current);
-            connectionTimeoutRef.current = null;
+          clearTimeout(connectionTimeoutRef.current);
+          connectionTimeoutRef.current = null;
         }
 
         // Reset reconnect attempts on successful connection
         reconnectAttempts.current = 0;
 
         try {
-            // Initialize Audio Manager
-            audioManagerRef.current = new AudioStreamManager(
-                volumeRef,
-                (data: ArrayBuffer) => {
-                    // This callback runs when the AudioWorklet produces data (User Speaking)
+          // Initialize Audio Manager
+          audioManagerRef.current = new AudioStreamManager(
+            volumeRef,
+            (data: ArrayBuffer) => {
+              // This callback runs when the AudioWorklet produces data (User Speaking)
 
-                    // 1. Send Audio to Backend
-                    if (ws.readyState === WebSocket.OPEN) {
-                        ws.send(data);
-                    }
+              // 1. Send Audio to Backend
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(data);
+              }
 
-                    // 2. SOVEREIGN VOICE: Barge-in Logic
-                    // If volume > threshold, interrupt playback locally
-                    if (volumeRef.current > 0.05 && isAiSpeaking) {
-                        console.log("🛑 Sovereign Voice: User Interruption Detected!");
-                        // A. Stop Local Playback
-                        audioManagerRef.current?.flush();
-                        setIsAiSpeaking(false);
+              // 2. SOVEREIGN VOICE: Barge-in Logic
+              // If volume > threshold, interrupt playback locally
+              if (volumeRef.current > 0.05 && isAiSpeaking) {
+                console.log("🛑 Sovereign Voice: User Interruption Detected!");
+                // A. Stop Local Playback
+                audioManagerRef.current?.flush();
+                setIsAiSpeaking(false);
 
-                        // B. Send Explicit Interrupt Signal (Optional but robust)
-                        // Backend will also trigger on 'data' flow, but this is cleaner.
-                        if (ws.readyState === WebSocket.OPEN) {
-                             ws.send(JSON.stringify({
-                                 type: "control",
-                                 action: "interrupt"
-                             }));
-                        }
-                    }
-                },
-                (payload: any) => {
-                    // Handle non-audio messages (like end_of_turn)
-                    if (payload && payload.type === 'end_of_turn') {
-                        if (ws.readyState === WebSocket.OPEN) {
-                            ws.send(JSON.stringify({ type: 'end_of_turn' }));
-                        }
-                    }
+                // B. Send Explicit Interrupt Signal (Optional but robust)
+                // Backend will also trigger on 'data' flow, but this is cleaner.
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({
+                    type: "control",
+                    action: "interrupt"
+                  }));
                 }
-            );
+              }
+            },
+            (payload: any) => {
+              // Handle non-audio messages (like end_of_turn)
+              if (payload && payload.type === 'end_of_turn') {
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: 'end_of_turn' }));
+                }
+              }
+            }
+          );
 
-            await audioManagerRef.current.start();
+          await audioManagerRef.current.start();
 
-            setStatus('connected');
-            setConnected(true);
+          setStatus('connected');
+          setConnected(true);
 
         } catch (err) {
           console.error('Error initializing audio:', err);
@@ -266,7 +266,7 @@ export const useLiveAPI = (): UseLiveAPI => {
             setIsAiSpeaking(true);
 
             if (audioManagerRef.current) {
-                audioManagerRef.current.playAudioChunk(event.data);
+              audioManagerRef.current.playAudioChunk(event.data);
             }
             return;
           }
@@ -279,9 +279,6 @@ export const useLiveAPI = (): UseLiveAPI => {
               setStatus('ready');
               statusRef.current = 'ready'; // Update ref immediately
               console.log('✅ Session ready - mic activated');
-              if (audioManagerRef.current) {
-                  audioManagerRef.current.enableMic();
-              }
             } else if (message.type === 'text') {
               setLastAiMessage(message.data);
             } else if (message.type === 'turn_complete') {
@@ -290,11 +287,11 @@ export const useLiveAPI = (): UseLiveAPI => {
             } else if (message.type === 'control') {
               // Phase 4: Handle Server-Side Control Messages (e.g. Hangup)
               if (message.action === 'hangup') {
-                  console.warn(`Server initiated hangup: ${message.reason}`);
-                  setSeveranceReason(message.reason || "Connection Terminated by Host");
-                  setIsSevered(true);
-                  shouldReconnect.current = false;
-                  // Let onclose handle the cleanup, but prevent auto-reconnect
+                console.warn(`Server initiated hangup: ${message.reason}`);
+                setSeveranceReason(message.reason || "Connection Terminated by Host");
+                setIsSevered(true);
+                shouldReconnect.current = false;
+                // Let onclose handle the cleanup, but prevent auto-reconnect
               }
             }
           }
@@ -306,8 +303,8 @@ export const useLiveAPI = (): UseLiveAPI => {
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
         if (connectionTimeoutRef.current) {
-            clearTimeout(connectionTimeoutRef.current);
-            connectionTimeoutRef.current = null;
+          clearTimeout(connectionTimeoutRef.current);
+          connectionTimeoutRef.current = null;
         }
         // Don't set status here, let onclose handle it
       };
@@ -315,49 +312,49 @@ export const useLiveAPI = (): UseLiveAPI => {
       ws.onclose = (event) => {
         console.log(`WebSocket closed: ${event.code} (Reason: ${event.reason})`);
         if (connectionTimeoutRef.current) {
-            clearTimeout(connectionTimeoutRef.current);
-            connectionTimeoutRef.current = null;
+          clearTimeout(connectionTimeoutRef.current);
+          connectionTimeoutRef.current = null;
         }
 
         // Silent Grace: Auto-Reconnect logic
         if (shouldReconnect.current) {
-             console.warn(`Abnormal closure. Attempting silent reconnection... (Attempt ${reconnectAttempts.current + 1})`);
+          console.warn(`Abnormal closure. Attempting silent reconnection... (Attempt ${reconnectAttempts.current + 1})`);
 
-             // Clean up resources locally without triggering full disconnect logic that wipes state
-             if (wsRef.current) { wsRef.current = null; }
-             if (audioManagerRef.current) { audioManagerRef.current.cleanup(); audioManagerRef.current = null; }
+          // Clean up resources locally without triggering full disconnect logic that wipes state
+          if (wsRef.current) { wsRef.current = null; }
+          if (audioManagerRef.current) { audioManagerRef.current.cleanup(); audioManagerRef.current = null; }
 
-             setConnected(false);
-             setIsAiSpeaking(false);
-             setStatus('connecting'); // Keep UI in "connecting" state
+          setConnected(false);
+          setIsAiSpeaking(false);
+          setStatus('connecting'); // Keep UI in "connecting" state
 
-             // Backoff: 1s, 2s, 4s, 8s, 10s
-             const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000);
+          // Backoff: 1s, 2s, 4s, 8s, 10s
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000);
 
-             if (reconnectAttempts.current < 5) {
-                 reconnectAttempts.current += 1;
-                 setTimeout(() => {
-                     if (currentAgentId.current && shouldReconnect.current && connectRef.current) {
-                         // Recursive call safely via closure using ref
-                         connectRef.current(currentAgentId.current);
-                     }
-                 }, delay);
-             } else {
-                 console.error("Max reconnection attempts reached.");
-                 setStatus('error');
-                 shouldReconnect.current = false;
-             }
+          if (reconnectAttempts.current < 5) {
+            reconnectAttempts.current += 1;
+            setTimeout(() => {
+              if (currentAgentId.current && shouldReconnect.current && connectRef.current) {
+                // Recursive call safely via closure using ref
+                connectRef.current(currentAgentId.current);
+              }
+            }, delay);
+          } else {
+            console.error("Max reconnection attempts reached.");
+            setStatus('error');
+            shouldReconnect.current = false;
+          }
         } else {
-            // Normal disconnect
-            disconnect();
+          // Normal disconnect
+          disconnect();
         }
       };
 
     } catch (err) {
       console.error('Connection failed:', err);
       if (connectionTimeoutRef.current) {
-          clearTimeout(connectionTimeoutRef.current);
-          connectionTimeoutRef.current = null;
+        clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
       }
       setStatus('error');
     }
@@ -368,7 +365,7 @@ export const useLiveAPI = (): UseLiveAPI => {
       // Forgemaster: Visual Heartbeat (2s throttle)
       const now = Date.now();
       if (now - lastFrameTime.current < 2000) {
-          return;
+        return;
       }
       lastFrameTime.current = now;
 
@@ -382,15 +379,15 @@ export const useLiveAPI = (): UseLiveAPI => {
 
   const addSystemAudio = useCallback((track: MediaStreamTrack) => {
     if (audioManagerRef.current) {
-        audioManagerRef.current.addSystemAudioTrack(track);
+      audioManagerRef.current.addSystemAudioTrack(track);
     } else {
-        console.warn("Audio Manager not initialized. Cannot add system audio.");
+      console.warn("Audio Manager not initialized. Cannot add system audio.");
     }
   }, []);
 
   const removeSystemAudio = useCallback(() => {
     if (audioManagerRef.current) {
-        audioManagerRef.current.removeSystemAudioTrack();
+      audioManagerRef.current.removeSystemAudioTrack();
     }
   }, []);
 

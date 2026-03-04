@@ -202,7 +202,7 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
 
             // Normalización matemática directa
             for (let i = 0; i < int16Data.length; i++) {
-                float32Data[i] = int16Data[i] / 32768.0;
+              float32Data[i] = int16Data[i] / 32768.0;
             }
 
             // Inyección al AudioContext
@@ -225,32 +225,32 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
             const message = JSON.parse(event.data) as any;
 
             if (message.type === 'session_ready') {
-                setStatus('ready');
-                statusRef.current = 'ready'; // Update ref immediately
-                console.log('✅ Session ready - mic activated');
+              setStatus('ready');
+              statusRef.current = 'ready'; // Update ref immediately
+              console.log('✅ Session ready - mic activated');
             } else if (message.type === 'text') {
-                setLastAiMessage(message.data);
+              setLastAiMessage(message.data);
             } else if (message.type === 'turn_complete') {
               console.log("Turn complete signal received.");
               setIsAiSpeaking(false);
             } else if (message.type === 'action' && message.action === 'open_url') {
               const url = message.url as string;
               if (url) {
-                  console.log(`[LiveAPI] Computer Use: opening URL → ${url}`);
-                  import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
-                      openUrl(url).catch(e => console.warn('[LiveAPI] openUrl failed:', e));
-                  });
+                console.log(`[LiveAPI] Computer Use: opening URL → ${url}`);
+                import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
+                  openUrl(url).catch((e: unknown) => console.warn('[LiveAPI] openUrl failed:', e));
+                });
               }
             } else if (message.type === 'backchannel') {
               // Module 6: Audio Concurrency Backchannel
               console.log("Playing backchannel:", message.file);
               try {
-                  // Play from public/sfx/ or root
-                  const audio = new Audio(`/sfx/${message.file}`);
-                  audio.volume = 0.4;
-                  audio.play().catch(e => console.warn("Backchannel audio missing or blocked:", e));
+                // Play from public/sfx/ or root
+                const audio = new Audio(`/sfx/${message.file}`);
+                audio.volume = 0.4;
+                audio.play().catch(e => console.warn("Backchannel audio missing or blocked:", e));
               } catch (e) {
-                  console.error("Failed to play backchannel:", e);
+                console.error("Failed to play backchannel:", e);
               }
             }
           }

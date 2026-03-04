@@ -1,5 +1,5 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use image::ImageOutputFormat;
+use image::codecs::jpeg::JpegEncoder;
 use std::io::Cursor;
 use xcap::Monitor;
 
@@ -10,8 +10,8 @@ fn capture_screen() -> Result<String, String> {
     let image = monitor.capture_image().map_err(|e| e.to_string())?;
     let rgb = image::DynamicImage::ImageRgba8(image).to_rgb8();
     let mut buf = Cursor::new(Vec::new());
-    rgb.write_to(&mut buf, ImageOutputFormat::Jpeg(80))
-        .map_err(|e| e.to_string())?;
+    let mut encoder = JpegEncoder::new_with_quality(&mut buf, 80);
+    encoder.encode_image(&rgb).map_err(|e| e.to_string())?;
     Ok(STANDARD.encode(buf.into_inner()))
 }
 
