@@ -1,4 +1,5 @@
 import asyncio
+import re
 import base64
 import logging
 import json
@@ -440,6 +441,34 @@ async def receive_from_gemini(
                             text_to_process = part.text
                             if not turn_aborted:
                                 stripped = text_to_process.strip()
+
+                                # Computer Use: Detect OPEN_URL actions
+                                url_match = re.search(r'\[ACTION: OPEN_URL:([^\]]+)\]', stripped)
+                                if url_match:
+                                    action_url = url_match.group(1).strip()
+                                    ALLOWED_URL_PREFIXES = (
+                                        "https://www.google.com/search",
+                                        "https://open.spotify.com/search",
+                                        "https://www.youtube.com/results",
+                                        "https://www.youtube.com/watch",
+                                        "https://music.youtube.com",
+                                        "https://www.google.com/maps/search",
+                                    )
+                                    if action_url.startswith(ALLOWED_URL_PREFIXES):
+                                        try:
+                                            # Need asyncio.create_task to run websocket.send_json?
+                                            # we are inside an async for, wait is safe
+                                            await websocket.send_json({
+                                                "type": "action",
+                                                "action": "open_url",
+                                                "url": action_url
+                                            })
+                                            logger.info(f"🖥️ Computer Use: relayed open_url → {action_url}")
+                                        except Exception as cu_err:
+                                            logger.warning(f"Computer Use: failed to relay: {cu_err}")
+                                    else:
+                                        logger.warning(f"Computer Use: BLOCKED — not in whitelist: {action_url}")
+
                                 if "[THOUGHT]" in stripped:
                                     continue
 
