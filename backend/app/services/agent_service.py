@@ -8,7 +8,7 @@ from json_repair import repair_json
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 from uuid import uuid4
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 from ..models.graph import AgentNode, MemoryEpisodeNode
 from ..models.sql import EdgeModel # Needed for Gossip Protocol edge creation
@@ -32,42 +32,69 @@ AGENTS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "agents"
 # --- Structured Output Schema for Gemini ---
 
 class GeneratedMemory(BaseModel):
-    memory_text: str = Field(..., description="A specific event from the agent's past.")
-    importance: float = Field(..., description="Importance of the memory (0.0 to 1.0).")
+    model_config = ConfigDict(extra='ignore')
+    memory_text: str = Field(default="Unknown memory.", description="A specific event from the agent's past.")
+    importance: float = Field(default=0.5, description="Importance of the memory (0.0 to 1.0).")
+
+    @model_validator(mode='before')
+    @classmethod
+    def accept_text_alias(cls, data):
+        """Accept 'text' as an alias for 'memory_text' in case Gemini uses the shorter form."""
+        if isinstance(data, dict) and 'memory_text' not in data and 'text' in data:
+            data['memory_text'] = data['text']
+        return data
 
 class CognitiveWeightsSchema(BaseModel):
-    volatility: float = Field(..., description="0.0 to 1.0")
-    hostility: float = Field(..., description="0.0 to 1.0")
-    curiosity: float = Field(..., description="0.0 to 1.0")
-    empathy: float = Field(..., description="0.0 to 1.0")
+    model_config = ConfigDict(extra='ignore')
+    volatility: float = Field(default=0.5, description="0.0 to 1.0")
+    hostility: float = Field(default=0.2, description="0.0 to 1.0")
+    curiosity: float = Field(default=0.5, description="0.0 to 1.0")
+    empathy: float = Field(default=0.5, description="0.0 to 1.0")
 
 class NeuralSignatureSchema(BaseModel):
-    weights: CognitiveWeightsSchema = Field(..., description="Cognitive priorities.")
-    narrative: str = Field(..., description="A 1-sentence Core Internal Conflict.")
-    core_conflict: str = Field(..., description="The tension driving all their behavior.")
+    model_config = ConfigDict(extra='ignore')
+    weights: CognitiveWeightsSchema = Field(default_factory=CognitiveWeightsSchema, description="Cognitive priorities.")
+    narrative: str = Field(default="A soul seeking balance.", description="A 1-sentence Core Internal Conflict.")
+    core_conflict: str = Field(default="Unknown.", description="The tension driving all their behavior.")
 
 class HollowAgentProfile(BaseModel):
+    model_config = ConfigDict(extra='ignore')
     name: str = Field(..., description="The name of the agent.")
     base_instruction: str = Field(..., description="A rich backstory explaining their presence in District Zero.")
-    interiority: dict = Field(..., description="Behavioral core and cognitive architecture.")
-    daily_life_in_district_zero: str = Field(..., description="What do they actually do here when no one is watching.")
-    emotional_resonance_matrix: dict = Field(..., description="Map of specific emotional triggers to responses.")
-    traits: dict = Field(..., description="Personality traits (key-value pairs).")
-    voice_name: str = Field(..., description="Selected voice from: Aoede, Kore, Puck, Charon, Fenrir.")
-    false_memories: List[GeneratedMemory] = Field(..., description="2-3 distinct memories from their past.")
+    interiority: Optional[dict] = Field(default_factory=dict, description="Behavioral core and cognitive architecture.")
+    daily_life_in_district_zero: Optional[str] = Field(default="Wanders District Zero silently.", description="What do they actually do here when no one is watching.")
+    emotional_resonance_matrix: Optional[dict] = Field(default_factory=dict, description="Map of specific emotional triggers to responses.")
+    traits: Optional[dict] = Field(default_factory=dict, description="Personality traits (key-value pairs).")
+    voice_name: Optional[str] = Field(default="Kore", description="Selected voice from: Aoede, Kore, Puck, Charon, Fenrir.")
+    false_memories: Optional[List[GeneratedMemory]] = Field(default_factory=list, description="2-3 distinct memories from their past.")
 
     # Module 2: Neural Signature
-    neural_signature: NeuralSignatureSchema = Field(..., description="The cognitive DNA of the agent.")
+    neural_signature: Optional[NeuralSignatureSchema] = Field(default_factory=NeuralSignatureSchema, description="The cognitive DNA of the agent.")
 
     # Module 2: Friction
-    base_tolerance: int = Field(..., description="Social tolerance level (1-5). 1=Volatile, 5=Stoic.")
+    base_tolerance: Optional[int] = Field(default=3, description="Social tolerance level (1-5). 1=Volatile, 5=Stoic.")
 
     # Module 4: Anchors & Secrets
-    identity_anchors: List[str] = Field(..., description="3 core metaphors/traits that define their identity.")
-    forbidden_secret: str = Field(..., description="A deep, dark secret or trauma. Something they hide.")
+    identity_anchors: Optional[List[str]] = Field(default_factory=list, description="3 core metaphors/traits that define their identity.")
+    forbidden_secret: Optional[str] = Field(default="Unknown.", description="A deep, dark secret or trauma. Something they hide.")
 
-    native_language: str = Field(..., description="Their language of origin.")
-    known_languages: List[str] = Field(..., description="Languages acquired.")
+    native_language: Optional[str] = Field(default="Unknown", description="Their language of origin.")
+    known_languages: Optional[List[str]] = Field(default_factory=list, description="Languages acquired.")
+
+    @field_validator('false_memories', mode='before')
+    @classmethod
+    def coerce_memories(cls, v):
+        """Gemini sometimes returns memories as plain strings instead of {memory_text, importance} dicts."""
+        if not isinstance(v, list):
+            return v
+        result = []
+        for item in v:
+            if isinstance(item, str):
+                result.append({"memory_text": item, "importance": 0.5})
+            elif isinstance(item, dict):
+                result.append(item)
+            # else: let Pydantic handle/reject it
+        return result
 
 class AgentService:
     def __init__(self, data_dir: Path = AGENTS_DIR):
@@ -332,7 +359,8 @@ Generate a complete psychological profile. Output ONLY valid JSON with these fie
 
 14. "known_languages": Languages acquired. Include Spanish and English if they've
     spent time in District Zero.
-"""
+""".replace("{aesthetic_description}", aesthetic_description)
+
 
         try:
             # Solution B: Native Dictionary Schema (Namespace Shadowing Resilience)
@@ -414,27 +442,57 @@ Generate a complete psychological profile. Output ONLY valid JSON with these fie
                 ]
             }
 
-            response = await self.client.aio.models.generate_content(
-                model=settings.MODEL_FORGE,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    max_output_tokens=3000,
-                    temperature=1.2,
-                    response_schema=hollow_schema
+            try:
+                response = await self.client.aio.models.generate_content(
+                    model=settings.MODEL_FORGE,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        max_output_tokens=8192,
+                        temperature=1.2
+                    )
                 )
-            )
+            except Exception as gemini_err:
+                logger.error(f"❌ Gemini API call failed: {type(gemini_err).__name__}: {gemini_err}")
+                with open("gemini_error.txt", "w", encoding="utf-8") as f:
+                    f.write(f"Gemini API error: {type(gemini_err).__name__}\n{gemini_err}")
+                raise
 
-            raw = response.candidates[0].content.parts[0].text.strip()
+            # --- Extract the response data ---
+            # When response_schema is used, the Google GenAI SDK may return:
+            #   a) response.parsed  -> already-deserialized dict (structured output mode)
+            #   b) response.text    -> JSON string (top-level shortcut)
+            #   c) parts[0].text   -> JSON string (legacy path)
+            parsed_data = None
 
-            # Strip markdown fences
-            if "```" in raw:
-                match = re.search(r'```(?:json)?\s*([\s\S]*?)```', raw)
-                if match:
-                    raw = match.group(1).strip()
+            if getattr(response, 'parsed', None) is not None:
+                # Fast path: SDK already deserialized the structured output
+                parsed_data = response.parsed
+                if isinstance(parsed_data, dict):
+                    logger.info("Soul Forge: using response.parsed (structured output mode)")
+                else:
+                    parsed_data = None  # Unexpected type, fall back to text
 
-            # Repair y parsear
-            data = repair_json(raw, return_objects=True)
-            profile = HollowAgentProfile.model_validate(data)
+            if parsed_data is None:
+                # Text fallback: try all known text paths
+                part = response.candidates[0].content.parts[0]
+                raw = (getattr(part, 'text', None) or
+                       getattr(response, 'text', None) or
+                       "")
+                raw = raw.strip()
+                if not raw:
+                    raise ValueError(f"Empty response from Gemini. Finish reason: {response.candidates[0].finish_reason}")
+
+                # Strip markdown fences
+                if "```" in raw:
+                    match = re.search(r'```(?:json)?\s*([\s\S]*?)```', raw)
+                    if match:
+                        raw = match.group(1).strip()
+
+                # Repair y parsear
+                parsed_data = repair_json(raw, return_objects=True)
+
+            logger.info(f"Soul Forge: validating parsed_data keys={list(parsed_data.keys()) if isinstance(parsed_data, dict) else type(parsed_data).__name__}")
+            profile = HollowAgentProfile.model_validate(parsed_data)
             # Create AgentNode
             # We treat 'backstory' as 'base_instruction'
             new_agent = AgentNode(
@@ -474,7 +532,14 @@ Generate a complete psychological profile. Output ONLY valid JSON with these fie
             # DUMP TEMPORAL - borrar después
             try:
                 with open("forge_debug.txt", "w", encoding="utf-8") as f:
-                    f.write(repr(response.candidates[0].content.parts[0].text))
+                    try:
+                        finish = response.candidates[0].finish_reason
+                        part = response.candidates[0].content.parts[0]
+                        raw_debug = getattr(part, 'text', None) or getattr(response, 'text', None) or ""
+                        parsed_debug = getattr(response, 'parsed', 'NOT_PRESENT')
+                        f.write(f"EXCEPTION: {type(e).__name__}: {e}\nfinish_reason: {finish}\nraw: {repr(raw_debug[:500])}\nparsed: {repr(parsed_debug)}")
+                    except Exception as inner:
+                        f.write(f"EXCEPTION: {type(e).__name__}: {e}\nerror capturing response: {inner}")
             except:
                 pass
             logger.error(f"Soul Forge failed: {e}")
