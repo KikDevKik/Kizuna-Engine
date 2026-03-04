@@ -281,6 +281,20 @@ async def assemble_volatile_state(agent: AgentNode, user_id: str, repository: So
         f"CRITICAL DIRECTIVE: You MUST wrap ANY internal reasoning in [THOUGHT] tags."
     )
 
+    # 7. Zeitgeist Injection (Cultural Pulse)
+    from app.services.zeitgeist_service import get_zeitgeist_block
+
+    agent_interests = []
+    if hasattr(agent, 'interiority') and agent.interiority:
+        agent_interests = agent.interiority.get("genuine_interests", [])
+
+    zeitgeist = await get_zeitgeist_block(
+        agent_interests=agent_interests,
+        agent_id=agent_id,
+    )
+
+    dynamic_block += f"\n\n{zeitgeist}"
+
     return dynamic_block
 
 async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository) -> str:
