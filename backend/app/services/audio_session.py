@@ -58,15 +58,20 @@ async def _detect_and_execute_action(transcript: str, websocket: WebSocket):
     import os
     from google import genai as _genai
 
-    prompt = f"""The user said: \"{transcript}\"
+    prompt = f"""The user said: "{transcript}"
 
-If they are asking to search or open something, respond with ONLY a URL in one of these exact formats:
-OPEN_URL:https://www.youtube.com/results?search_query=query_here
-OPEN_URL:https://www.google.com/search?q=query_here
-OPEN_URL:https://open.spotify.com/search/query_here
-OPEN_URL:https://www.google.com/maps/search/place_here
+Extract ONLY the search term they want to find, removing any command words like "busca", "search", "find", "abre", "pon", "Kizuna", "reproduce", "open", "play", etc.
 
-If they are NOT asking to open/search anything, respond with: NO_ACTION
+Then respond with ONLY one of these formats:
+OPEN_URL:https://www.youtube.com/results?search_query=SEARCH_TERM_HERE
+OPEN_URL:https://www.google.com/search?q=SEARCH_TERM_HERE
+OPEN_URL:https://open.spotify.com/search/SEARCH_TERM_HERE
+OPEN_URL:https://www.google.com/maps/search/PLACE_HERE
+
+Choose YouTube if they mention YouTube or videos, Spotify if they mention Spotify, music or songs, Google otherwise.
+URL-encode the search term (spaces as +, special chars encoded).
+
+If they are NOT asking to search anything, respond with: NO_ACTION
 
 Respond with ONLY the URL line or NO_ACTION. Nothing else."""
 
