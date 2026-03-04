@@ -233,14 +233,6 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
             } else if (message.type === 'turn_complete') {
               console.log("Turn complete signal received.");
               setIsAiSpeaking(false);
-            } else if (message.type === 'action' && message.action === 'open_url') {
-              const url = message.url as string;
-              if (url) {
-                console.log(`[LiveAPI] Computer Use: opening URL → ${url}`);
-                import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
-                  openUrl(url).catch((e: unknown) => console.warn('[LiveAPI] openUrl failed:', e));
-                });
-              }
             } else if (message.type === 'backchannel') {
               // Module 6: Audio Concurrency Backchannel
               console.log("Playing backchannel:", message.file);

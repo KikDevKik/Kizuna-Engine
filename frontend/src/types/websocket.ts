@@ -22,4 +22,10 @@ export type SessionReadyMessage = {
   type: 'session_ready';
 };
 
-export type ServerMessage = AudioMessage | TextMessage | TurnCompleteMessage | ControlMessage | SessionReadyMessage;
+export type ActionMessage = {
+  type: 'action';
+  action: 'open_url';
+  url: string;
+};
+
+export type ServerMessage = AudioMessage | TextMessage | TurnCompleteMessage | ControlMessage | SessionReadyMessage | ActionMessage;

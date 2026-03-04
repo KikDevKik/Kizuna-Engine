@@ -32,6 +32,67 @@ logger = logging.getLogger(__name__)
 AUDIO_BUFFER_THRESHOLD = 2048
 VAD_SILENCE_MS = 900  # ms
 
+ACTION_KEYWORDS = [
+    "búscalo", "búscala", "busca", "abre", "pon",
+    "search", "open", "find", "play", "buscar", "reproduce",
+]
+
+ALLOWED_ACTION_URLS = (
+    "https://www.google.com/search",
+    "https://open.spotify.com/search",
+    "https://www.youtube.com/results",
+    "https://www.youtube.com/watch",
+    "https://music.youtube.com",
+    "https://www.google.com/maps/search",
+)
+
+
+async def _detect_and_execute_action(transcript: str, websocket: WebSocket):
+    """
+    Computer Use — Intent Detection Channel.
+    Fires when a user transcript contains action keywords.
+    Uses a lightweight Gemini Flash text call to resolve the
+    intent into a concrete URL, then relays it to the frontend.
+    Never blocks the audio pipeline (called via asyncio.create_task).
+    """
+    import os
+    from google import genai as _genai
+
+    prompt = f"""The user said: \"{transcript}\"
+
+If they are asking to search or open something, respond with ONLY a URL in one of these exact formats:
+OPEN_URL:https://www.youtube.com/results?search_query=query_here
+OPEN_URL:https://www.google.com/search?q=query_here
+OPEN_URL:https://open.spotify.com/search/query_here
+OPEN_URL:https://www.google.com/maps/search/place_here
+
+If they are NOT asking to open/search anything, respond with: NO_ACTION
+
+Respond with ONLY the URL line or NO_ACTION. Nothing else."""
+
+    try:
+        client = _genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+        result = response.text.strip() if response.text else "NO_ACTION"
+        logger.debug(f"🔍 Intent detection result: {result!r}")
+
+        if result.startswith("OPEN_URL:"):
+            url = result[9:].strip()
+            if url.startswith(ALLOWED_ACTION_URLS):
+                await websocket.send_json({
+                    "type": "action",
+                    "action": "open_url",
+                    "url": url
+                })
+                logger.info(f"🖥️ Computer Use [intent]: {url}")
+            else:
+                logger.warning(f"Computer Use [intent]: BLOCKED — not in whitelist: {url}")
+    except Exception as e:
+        logger.warning(f"Computer Use intent detection failed: {e}")
+
 
 async def send_injections_to_gemini(session, injection_queue, session_closed_event, eot_reset_event=None):
     logger.info("InjectionLoop: Started.")
@@ -272,7 +333,15 @@ async def send_to_gemini(
                                 transcript_buffer.append(f"User: {transcript_text}")
                             if transcript_queue:
                                 transcript_queue.put_nowait(transcript_text)
-                            continue
+
+                            # Computer Use — Intent Detection
+                            # Fire-and-forget: never blocks the audio pipeline.
+                            if any(kw in transcript_text.lower() for kw in ACTION_KEYWORDS):
+                                logger.info(f"🎯 Action keyword detected in transcript — launching intent detection")
+                                asyncio.create_task(
+                                    _detect_and_execute_action(transcript_text, websocket)
+                                )
+                        continue
 
                     if control.get("type") == "image":
                         try:

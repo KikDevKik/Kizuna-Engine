@@ -293,6 +293,15 @@ export const useLiveAPI = (): UseLiveAPI => {
                 shouldReconnect.current = false;
                 // Let onclose handle the cleanup, but prevent auto-reconnect
               }
+            } else if (message.type === 'action' && message.action === 'open_url') {
+              const url = message.url as string;
+              console.log(`[LiveAPI] Computer Use: opening → ${url}`);
+              if (url) {
+                import('@tauri-apps/plugin-opener')
+                  .then(({ openUrl }) => openUrl(url))
+                  .then(() => console.log('[LiveAPI] openUrl success'))
+                  .catch((e: unknown) => console.error('[LiveAPI] openUrl FAILED:', e));
+              }
             }
           }
         } catch (e) {
