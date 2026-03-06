@@ -91,6 +91,15 @@ class SessionManager:
                     voice_name = agent_from_file.voice_name
                     agent_name = agent_from_file.name
 
+                    try:
+                        # ARCH-01: Ensure agent exists in SQLite graph
+                        existing = await self.soul_repo._get_node(agent_from_file.id, "AgentNode")
+                        if not existing:
+                            await self.soul_repo._save_node(agent_from_file.id, "AgentNode", agent_from_file.model_dump(mode='json'))
+                            logger.info(f"🔧 ARCH-01: Registered agent '{agent_from_file.name}' in SQLite at session start")
+                    except Exception as e:
+                        logger.warning(f"ARCH-01: Failed to register agent in SQLite: {e}")
+
             # Phase 5: Neural Sync (Modular Caching)
             # assemble_soul internally fetches the static DNA from cache (Zero Latency)
             # and appends the fresh volatile state (Battery, Memories, Friction).

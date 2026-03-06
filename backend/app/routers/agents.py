@@ -97,16 +97,15 @@ async def list_agents(
             if agent.id in interacted_agent_ids
         ]
 
-        # ARQUITECTURA-01 FALLBACK: Si no hay edges pero hay agentes en disco,
-        # re-registrar automáticamente los agentes existentes
-        if not my_agents and all_agents:
-            logger.info(f"🔧 ARQUITECTURA-01: No interactedWith edges found for {user_id}. Re-registering {len(all_agents)} agents.")
-            for agent in all_agents:
-                try:
-                    await repository.record_interaction(user_id, agent.id)
-                except Exception as e:
-                    logger.warning(f"Failed to re-register agent {agent.name}: {e}")
-            my_agents = all_agents
+        # ARCH-01: Ensure all JSON agents are registered in SQLite
+        for agent in all_agents:
+            try:
+                existing = await repository._get_node(agent.id, "AgentNode")
+                if not existing:
+                    await repository._save_node(agent.id, "AgentNode", agent.model_dump(mode='json'))
+                    logger.info(f"🔧 ARCH-01: Synced missing agent '{agent.name}' to SQLite")
+            except Exception as e:
+                logger.warning(f"ARCH-01: Sync failed for {agent.name}: {e}")
 
         # 4. Roster Eviction: Remove Nemesis (Module 1.5)
         nemesis_agents = await repository.get_nemesis_agents(user_id)

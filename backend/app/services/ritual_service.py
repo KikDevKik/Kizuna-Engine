@@ -43,6 +43,23 @@ class RitualService:
         if isinstance(models, str):
             models = [models]
 
+        # Inject BLOCK_NONE safety settings
+        if types:
+            safety_settings = [
+                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_CIVIC_INTEGRITY", threshold="BLOCK_NONE"),
+            ]
+            if config is None:
+                config = types.GenerateContentConfig(safety_settings=safety_settings)
+            elif isinstance(config, dict):
+                config["safety_settings"] = safety_settings
+                config = types.GenerateContentConfig(**config)
+            elif hasattr(config, "safety_settings"):
+                config.safety_settings = safety_settings
+
         for model in models:
             async def _call_gemini():
                 return await self.client.aio.models.generate_content(

@@ -79,6 +79,33 @@ class LocalSoulRepository(SoulRepository):
             return AgentNode(**node_model.data)
         return None
 
+    async def get_or_sync_agent(self, agent_id: str) -> Optional[AgentNode]:
+        """
+        ARQUITECTURA-01: Unified agent resolution.
+        1. Check SQLite NodeModel
+        2. If not found, check AgentService JSON filesystem
+        3. If found in JSON, register in SQLite automatically
+        4. Return AgentNode or None
+        """
+        # 1. Check SQLite first
+        node = await self._get_node(agent_id, "AgentNode")
+        if node:
+            return AgentNode(**node.data)
+
+        # 2. Fallback to JSON filesystem
+        try:
+            from app.services.agent_service import agent_service
+            agent = await agent_service.get_agent(agent_id)
+            if agent:
+                # 3. Auto-register in SQLite
+                await self._save_node(agent.id, "AgentNode", agent.model_dump(mode='json'))
+                logger.info(f"🔧 ARCH-01: Auto-synced agent '{agent.name}' ({agent_id}) from JSON → SQLite")
+                return agent
+        except Exception as e:
+            logger.warning(f"ARCH-01: JSON fallback failed for {agent_id}: {e}")
+
+        return None
+
     async def create_agent(self, agent: AgentNode):
         await self._save_node(agent.id, "AgentNode", agent.model_dump(mode='json'))
 
