@@ -292,6 +292,12 @@ export const useLiveAPI = (): UseLiveAPI => {
                 setIsSevered(true);
                 shouldReconnect.current = false;
                 // Let onclose handle the cleanup, but prevent auto-reconnect
+              } else if (message.action === 'flush_audio') {
+                // Parar reproducción inmediatamente y limpiar cualquier audio en cola
+                audioManagerRef.current?.flush();
+                setIsAiSpeaking(false);
+                console.log('🤚 Barge-in: audio flushed');
+                return;
               }
             } else if (message.type === 'action' && message.action === 'open_url') {
               const url = message.url as string;

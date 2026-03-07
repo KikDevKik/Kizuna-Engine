@@ -14,7 +14,7 @@ export type TurnCompleteMessage = {
 
 export type ControlMessage = {
   type: 'control';
-  action: 'hangup';
+  action: 'hangup' | 'flush_audio';
   reason?: string;
 };
 

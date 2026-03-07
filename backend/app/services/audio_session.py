@@ -432,6 +432,16 @@ async def receive_from_gemini(
                     logger.info("📥 Session closed mid-receive. Stopping.")
                     break
 
+                # BARGE-IN: Detectar interrupción inmediatamente
+                if hasattr(response, 'server_content') and response.server_content:
+                    if getattr(response.server_content, 'interrupted', False):
+                        logger.info("🤚 Barge-in detected — user interrupted agent. Flushing audio.")
+                        await websocket.send_json({
+                            "type": "control",
+                            "action": "flush_audio"
+                        })
+                        continue  # NO esperar transcripción — saltar inmediatamente
+
                 # 🛡️ BASTION: Robust Audio Extraction (SDK 0.3.0 path + legacy)
                 audio_data = None
                 if hasattr(response, 'data') and response.data:
