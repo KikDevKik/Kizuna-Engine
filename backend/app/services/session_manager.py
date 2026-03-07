@@ -41,12 +41,21 @@ class SessionManager:
         """
         Main entry point for WebSocket connection handling.
         """
+        logger.info(f"👉 Received WebSocket connection request for {agent_id}")
+        
         # Security: Verify Origin
         origin = websocket.headers.get("origin")
-        if "*" not in settings.CORS_ORIGINS and origin not in settings.CORS_ORIGINS:
-            logger.warning(f"Rejected connection from unauthorized origin: {origin}")
-            await websocket.close(code=1008)  # Policy Violation
-            return
+        
+        # In Development (or when using non-browser clients), Origin might be None or localhost.
+        # We allow None for native clients, and bypass strict origin checks if "*" is present.
+        if origin is not None and "*" not in settings.CORS_ORIGINS:
+            # Allow basic dev localhost origins automatically if CORS_ORIGINS isn't explicitly dropping them.
+            is_localhost = "localhost" in origin or "127.0.0.1" in origin
+            
+            if not is_localhost and origin not in settings.CORS_ORIGINS:
+                logger.warning(f"Rejected connection from unauthorized origin: {origin}")
+                await websocket.close(code=1008)  # Policy Violation
+                return
 
         # Validations
         if not agent_id:
@@ -119,9 +128,15 @@ class SessionManager:
             await websocket.close(code=1011, reason="Internal Soul Error")
             return
 
-        await websocket.accept()
+        logger.info(f"Attempting to accept websocket connection for {agent_id}...")
+        try:
+            await websocket.accept()
+        except Exception as ws_err:
+            logger.error(f"Failed to accept websocket: {ws_err}")
+            return
+            
         logger.info(
-            f"WebSocket connection established from origin: {origin} for Agent: {agent_id}"
+            f"WebSocket connection accepted and established from origin: {origin} for Agent: {agent_id}"
         )
 
         # Phase 3.3: First Contact Protocol (Roster Update)

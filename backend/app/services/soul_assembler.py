@@ -352,6 +352,8 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
     The Master Assembler (Phase 7: Neural Sync).
     Combines Cached Static DNA + Real-Time Volatile State.
     """
+    logger.info("⚡ Assembling Soul (Neural Sync)...")
+    
     # 1. Fetch Agent & Config (Parallel)
     # We need agent for both parts.
     agent = await repository.get_agent(agent_id)
@@ -362,6 +364,7 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
 
     # 2. Try Cache for Static DNA
     cache_key = f"soul_static:{SOUL_STATIC_VERSION}:{agent_id}"
+    logger.info("checking cache...")
     static_dna = await cache.get(cache_key)
 
     if not static_dna:
@@ -374,8 +377,10 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         logger.info(f"⚡ Cache Hit: Static DNA for {agent.name}")
 
     # 3. Generate Volatile State (Always Fresh)
+    logger.info("assembling volatile state...")
     volatile_state = await assemble_volatile_state(agent, user_id, repository, system_config)
 
     # 4. Fuse
     full_soul = f"{static_dna}\n\n{volatile_state}"
+    logger.info("fuse complete.")
     return full_soul

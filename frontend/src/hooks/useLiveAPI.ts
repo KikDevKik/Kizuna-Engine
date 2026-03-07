@@ -273,7 +273,13 @@ export const useLiveAPI = (): UseLiveAPI => {
 
           // 2. Text / Control Messages
           if (typeof event.data === 'string') {
-            const message = JSON.parse(event.data) as ServerMessage;
+            let message: ServerMessage;
+            try {
+              message = JSON.parse(event.data) as ServerMessage;
+            } catch (parseErr) {
+              console.error("❌ Failed to parse server message:", event.data, parseErr);
+              return;
+            }
 
             if (message.type === 'session_ready') {
               setStatus('ready');
@@ -316,7 +322,7 @@ export const useLiveAPI = (): UseLiveAPI => {
       };
 
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error('WebSocket error event fired:', error);
         if (connectionTimeoutRef.current) {
           clearTimeout(connectionTimeoutRef.current);
           connectionTimeoutRef.current = null;
@@ -325,7 +331,7 @@ export const useLiveAPI = (): UseLiveAPI => {
       };
 
       ws.onclose = (event) => {
-        console.log(`WebSocket closed: ${event.code} (Reason: ${event.reason})`);
+        console.log(`WebSocket closed: Code=${event.code}, Reason='${event.reason}', WasClean=${event.wasClean}`);
         if (connectionTimeoutRef.current) {
           clearTimeout(connectionTimeoutRef.current);
           connectionTimeoutRef.current = null;
@@ -366,7 +372,7 @@ export const useLiveAPI = (): UseLiveAPI => {
       };
 
     } catch (err) {
-      console.error('Connection failed:', err);
+      console.error('Connection failed (catch clause):', err);
       if (connectionTimeoutRef.current) {
         clearTimeout(connectionTimeoutRef.current);
         connectionTimeoutRef.current = null;
