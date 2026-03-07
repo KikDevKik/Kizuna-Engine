@@ -435,6 +435,9 @@ async def conduct_ritual(
                 except Exception as e:
                     logger.error(f"Failed to set initial affinity: {e}")
 
+            if new_agent:
+                await repository.record_interaction(user_id, new_agent.id)
+
             response.status_code = status.HTTP_201_CREATED
             return RitualFlowResponse(
                 is_complete=True,

@@ -832,7 +832,29 @@ class LocalSoulRepository(SoulRepository):
                     # KizunaChronicleModel is intentionally NOT deleted here.
                     # Kizuna remembers. Always.
 
+            # Borrar JSONs de agentes excepto Kizuna
+            try:
+                from app.services.agent_service import agent_service
+                agents_dir = agent_service.data_dir
+                for json_file in agents_dir.glob("*.json"):
+                    if json_file.stem != "kizuna":
+                        json_file.unlink()
+                        logger.info(f"🗑️ Deleted agent JSON: {json_file.name}")
+                # Limpiar cache de agentes también
+                from app.services.cache import cache
+                await cache.delete_pattern("agent:*")
+                logger.info("🧹 Agent cache cleared post-wipe.")
+            except Exception as e:
+                logger.warning(f"Failed to delete agent JSONs: {e}")
+
             logger.info("🔥 THE GREAT REBIRTH COMPLETE: Total Existence Incinerated. Kizuna remembers.")
+
+            # Re-registrar Kizuna en el roster
+            try:
+                await self.record_interaction("guest_user", "kizuna")
+                logger.info("🌱 Kizuna re-anchored to roster post-wipe.")
+            except Exception as e:
+                logger.warning(f"Failed to re-anchor Kizuna: {e}")
 
             # 3. Increment survived_wipes counter for all existing chronicles
             async with AsyncSessionLocal() as session:
