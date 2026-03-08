@@ -437,8 +437,8 @@ async def receive_from_gemini(
                     if getattr(response.server_content, 'interrupted', False):
                         logger.info("🤚 Barge-in detected — user interrupted agent. Flushing audio.")
                         await websocket.send_json({
-                            "type": "control",
-                            "action": "flush_audio"
+                            "type": "CONTROL",
+                            "action": "FLUSH_AUDIO"
                         })
                         continue  # NO esperar transcripción — saltar inmediatamente
 
