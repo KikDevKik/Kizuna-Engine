@@ -4,7 +4,7 @@ use tauri::{Emitter,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, RunEvent, WindowEvent,
 };
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use image::codecs::jpeg::JpegEncoder;
 use std::io::Cursor;
@@ -45,6 +45,8 @@ pub fn run() {
             let show = MenuItem::with_id(app, "show", "Abrir Kizuna", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Cerrar", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
+
+            let _ = app.remove_tray_by_id("kizuna-tray");
 
             TrayIconBuilder::with_id("kizuna-tray")
                 .icon(app.default_window_icon().unwrap().clone())
