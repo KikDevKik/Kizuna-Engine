@@ -70,6 +70,14 @@ class SessionManager:
             await websocket.close(code=1008, reason=str(e))
             return
 
+        logger.info(f"Attempting to accept websocket connection for {agent_id}...")
+        try:
+            await websocket.accept()
+            logger.info(f"WebSocket connection accepted from origin: {origin} for Agent: {agent_id}")
+        except Exception as ws_err:
+            logger.error(f"Failed to accept websocket: {ws_err}")
+            return
+
         # Ensure user exists in Graph
         user = await self.soul_repo.get_or_create_user(user_id)
 
@@ -128,16 +136,8 @@ class SessionManager:
             await websocket.close(code=1011, reason="Internal Soul Error")
             return
 
-        logger.info(f"Attempting to accept websocket connection for {agent_id}...")
-        try:
-            await websocket.accept()
-        except Exception as ws_err:
-            logger.error(f"Failed to accept websocket: {ws_err}")
-            return
-            
-        logger.info(
-            f"WebSocket connection accepted and established from origin: {origin} for Agent: {agent_id}"
-        )
+        # WebSocket was accepted earlier to prevent frontend timeouts.
+        
 
         # Phase 3.3: First Contact Protocol (Roster Update)
         try:
