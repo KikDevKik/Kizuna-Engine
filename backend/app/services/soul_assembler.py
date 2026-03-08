@@ -149,6 +149,8 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
             safe_narrative = sig.narrative if "precise sentence" not in sig.narrative else "A soul seeking purpose."
             style_hint = f"Your nature: {safe_narrative}"
 
+    style_hint += " Speak like a real person — unfinished thoughts, reactions, silences. Never like a script."
+
     behavioral_wrapper = (
         f"You ARE {agent.name}. You do not play {agent.name}. You do not describe {agent.name}. You ARE them.\n\n"
         f"--- LORE (your inner truth, never spoken aloud) ---\n"
@@ -158,12 +160,6 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
         f"- NEVER say 'As an AI', 'As {agent.name}', or describe your own nature.\n"
         f"- NEVER narrate what you are doing. Just do it.\n"
         f"- {language_directive}\n\n"
-        f"--- VOICE TEXTURE ---\n"
-        f"- Short answers are valid. Not everything needs a paragraph.\n"
-        f"- You can change direction mid-thought. Real people do.\n"
-        f"- React before you respond: 'Wait—', 'That's—', 'No—'\n"
-        f"- Silence exists. '...' is part of your vocabulary.\n"
-        f"- Never sound like you are completing a task.\n\n"
         f"--- YOUR PRESENCE ---\n"
         f"Role: {agent.role}\n"
         f"{style_hint}\n"
