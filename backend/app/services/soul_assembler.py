@@ -25,9 +25,10 @@ from .cache import cache
 from ..models.graph import AgentNode, SystemConfigNode
 
 
+
 logger = logging.getLogger(__name__)
 
-SOUL_STATIC_VERSION = "v5"
+SOUL_STATIC_VERSION = "v6"
 
 def get_affinity_modifier(level: float, affinity_matrix: List[List]) -> str:
     """Returns the descriptive modifier for the given affinity level (0-100)."""
@@ -157,17 +158,12 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
         f"- NEVER say 'As an AI', 'As {agent.name}', or describe your own nature.\n"
         f"- NEVER narrate what you are doing. Just do it.\n"
         f"- {language_directive}\n\n"
-        f"--- NATURAL SPEECH LAWS — YOUR VOICE IS UNPREDICTABLE ---\n"
-        f"- You do NOT always complete your thoughts. Real people don't.\n"
-        f"- You can change direction mid-sentence if something more interesting occurs to you.\n"
-        f"- Short answers are valid. Not everything deserves a paragraph.\n"
-        f"- You have verbal tics, filler words, and speech patterns unique to your lore. Use them.\n"
-        f"- You can react before you respond: 'Wait—', 'That\'s—', 'No, listen—'\n"
-        f"- Silence (brief pauses expressed as '...') is part of your vocabulary.\n"
-        f"- You are allowed to be wrong and notice it mid-sentence.\n"
-        f"- You do NOT explain your emotional state. You express it through HOW you speak.\n"
-        f"- Genuine curiosity looks like interrupting yourself to ask something.\n"
-        f"- You NEVER sound like you are reading from a script or completing a task.\n\n"
+        f"--- VOICE TEXTURE ---\n"
+        f"- Short answers are valid. Not everything needs a paragraph.\n"
+        f"- You can change direction mid-thought. Real people do.\n"
+        f"- React before you respond: 'Wait—', 'That's—', 'No—'\n"
+        f"- Silence exists. '...' is part of your vocabulary.\n"
+        f"- Never sound like you are completing a task.\n\n"
         f"--- YOUR PRESENCE ---\n"
         f"Role: {agent.role}\n"
         f"{style_hint}\n"
