@@ -290,7 +290,7 @@ export const useLiveAPI = (): UseLiveAPI => {
             } else if (message.type === 'turn_complete') {
               console.log("Turn complete signal received.");
               setIsAiSpeaking(false);
-            } else if (message.type === 'control') {
+            } else if (message.type === 'control' || message.type === 'CONTROL') {
               // Phase 4: Handle Server-Side Control Messages (e.g. Hangup)
               if (message.action === 'hangup') {
                 console.warn(`Server initiated hangup: ${message.reason}`);
@@ -298,7 +298,7 @@ export const useLiveAPI = (): UseLiveAPI => {
                 setIsSevered(true);
                 shouldReconnect.current = false;
                 // Let onclose handle the cleanup, but prevent auto-reconnect
-              } else if (message.action === 'flush_audio') {
+              } else if (message.action === 'FLUSH_AUDIO') {
                 // Parar reproducción inmediatamente y limpiar cualquier audio en cola
                 audioManagerRef.current?.flush();
                 setIsAiSpeaking(false);
