@@ -46,7 +46,7 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "Cerrar", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
 
-            TrayIconBuilder::new()
+            TrayIconBuilder::with_id("kizuna-tray")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .tooltip("Kizuna Engine")
