@@ -428,7 +428,7 @@ async def receive_from_gemini(
             # re-call it in an outer while loop to stay alive across turns.
             while not session_closed_event.is_set():
               async for response in session.receive():
-                logger.info(f"📥 Gemini raw response FULL: {response}")
+                logger.debug(f"📥 Gemini raw response FULL: {response}")
                 logger.info(
                     f"📥 has data attr: {hasattr(response, 'data')} | "
                     f"data value: {getattr(response, 'data', None) is not None} | "
