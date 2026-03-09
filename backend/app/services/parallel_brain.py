@@ -25,6 +25,7 @@ class ParallelBrain:
 
     def __init__(self):
         self.client = None
+        self.latest_context: str | None = None  # NUEVO
         if genai and settings.GEMINI_API_KEY:
             self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
@@ -77,6 +78,9 @@ class ParallelBrain:
 
                     if result and not reconnect_queue.full():
                         logger.info(f"🔍 ParallelBrain: Search result ready. Signaling reconnect.")
+                        # Guardar el contexto más reciente para que SessionManager lo lea
+                        self.latest_context = result
+
                         try:
                             reconnect_queue.put_nowait(result)
                         except asyncio.QueueFull:
