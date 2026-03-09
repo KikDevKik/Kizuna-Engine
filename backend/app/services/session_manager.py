@@ -11,6 +11,7 @@ from app.services.audio_session import (
 )
 from app.services.soul_assembler import assemble_soul
 from app.services.subconscious import subconscious_mind
+from app.services.parallel_brain import parallel_brain
 from app.services.reflection import reflection_mind
 from app.services.sleep_manager import SleepManager
 from app.services.time_skip import TimeSkipService
@@ -183,6 +184,9 @@ class SessionManager:
                 reflection_queue = asyncio.Queue(maxsize=20)
                 injection_queue = asyncio.Queue(maxsize=20)
 
+                # Canal Paralelo: queue para señalizar micro-reconexión desde Canal 2
+                reconnect_queue = asyncio.Queue(maxsize=1)
+
                 # Manage bidirectional streams and subconscious concurrently
                 # If either task fails (e.g. disconnect), the TaskGroup will cancel the others.
                 session_closed_event = asyncio.Event()
@@ -211,6 +215,7 @@ class SessionManager:
                         CognitiveSupervisor.supervise("InjectionLoop", lambda: send_injections_to_gemini(session, injection_queue, session_closed_event, eot_reset_event), session_closed_event)
                     ))
 
+
                     # 5. Reflection Mind (AI Output -> Self-Critique -> Injection Queue)
                     if agent:
                         cognitive_tasks.append(asyncio.create_task(
@@ -218,6 +223,23 @@ class SessionManager:
                                 reflection_queue, injection_queue, agent
                             ), session_closed_event)
                         ))
+
+                    # Canal 2 — Parallel Brain (Reactive Search)
+                    # Usa su propia copia de transcript_queue para no interferir con SubconsciousMind
+                    parallel_transcript_queue = asyncio.Queue(maxsize=50)
+                    cognitive_tasks.append(asyncio.create_task(
+                        CognitiveSupervisor.supervise(
+                            "ParallelBrain",
+                            lambda: parallel_brain.start(
+                                parallel_transcript_queue,
+                                reconnect_queue,
+                                user_id,
+                                agent_id,
+                                session_closed_event,
+                            ),
+                            session_closed_event,
+                        )
+                    ))
 
                     # B. Critical Motor Loop (The TaskGroup that MUST NOT DIE from cognitive errors)
                     async with asyncio.TaskGroup() as tg:
@@ -228,6 +250,7 @@ class SessionManager:
                                 session_closed_event, session_transcript_buffer,
                                 transcript_queue,
                                 eot_reset_event=eot_reset_event,
+                                parallel_transcript_queue=parallel_transcript_queue,
                             )
                         )
 
@@ -245,6 +268,15 @@ class SessionManager:
                                 agent_id=agent_id,
                                 soul_repo=self.soul_repo,
                                 eot_reset_event=eot_reset_event,
+                            )
+                        )
+
+                        # 3. Monitor de Micro-Reconexión (Canal Paralelo)
+                        tg.create_task(
+                            _monitor_reconnect(
+                                reconnect_queue,
+                                websocket,
+                                session_closed_event,
                             )
                         )
 
@@ -332,3 +364,50 @@ class SessionManager:
                     raw_transcript=full_transcript,
                 )
             )
+
+
+async def _monitor_reconnect(
+    reconnect_queue: asyncio.Queue,
+    websocket,
+    session_closed_event: asyncio.Event,
+):
+    """
+    Monitorea la cola del Canal 2.
+    Cuando llega un resultado de búsqueda, notifica al frontend
+    para que sepa que hay contexto nuevo disponible.
+    La reconexión real ocurre en la próxima sesión via system_instruction.
+    Por ahora: almacena el contexto en cache para que sea inyectado
+    en la próxima reconexión de sesión.
+    """
+    logger = logging.getLogger(__name__)
+
+    try:
+        while not session_closed_event.is_set():
+            try:
+                # Esperar resultado del Canal 2
+                result = await asyncio.wait_for(
+                    reconnect_queue.get(), timeout=2.0
+                )
+            except asyncio.TimeoutError:
+                continue
+
+            if not result:
+                continue
+
+            logger.info(f"🔄 Micro-Reconexión: Canal 2 result received. Notifying frontend.")
+
+            # Notificar al frontend que el agente está "procesando"
+            try:
+                import json
+                await websocket.send_json({
+                    "type": "CONTROL",
+                    "action": "AGENT_THINKING",
+                    "message": "Un momento..."
+                })
+            except Exception:
+                pass  # Si el websocket cerró, ignorar
+
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.error(f"_monitor_reconnect error: {e}")

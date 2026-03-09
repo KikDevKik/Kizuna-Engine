@@ -147,6 +147,7 @@ async def send_to_gemini(
     transcript_buffer: list[str] | None = None,
     transcript_queue: asyncio.Queue | None = None,
     eot_reset_event: asyncio.Event | None = None,
+    parallel_transcript_queue: asyncio.Queue | None = None,
 ):
     """
     Task A: Client -> Gemini
@@ -343,6 +344,13 @@ async def send_to_gemini(
                                 transcript_buffer.append(f"User: {transcript_text}")
                             if transcript_queue:
                                 transcript_queue.put_nowait(transcript_text)
+
+                            # Reenviar al Canal 2 si está activo
+                            if parallel_transcript_queue is not None:
+                                try:
+                                    parallel_transcript_queue.put_nowait(transcript_text)
+                                except asyncio.QueueFull:
+                                    pass
 
                             # Computer Use — Intent Detection
                             # Requires explicit platform mention to avoid triggering on normal conversation.
