@@ -164,148 +164,152 @@ class SessionManager:
         cognitive_tasks = []
 
         try:
-            async with gemini_service.connect(
-                system_instruction=system_instruction, voice_name=voice_name
-            ) as session:
-                logger.info(f"Gemini session started for {agent_id}.")
+            # Contexto dinámico — se actualiza con cada búsqueda del Canal 2
+            dynamic_context: str = ""
+            should_reconnect = asyncio.Event()
+            reconnect_context: list[str] = [""]  # lista mutable para pasar por referencia
 
-                # AGREGAR: Señal de sesión lista al frontend
-                try:
-                    import json
-                    ready_signal = json.dumps({"type": "session_ready", "agent_id": agent_id})
-                    await websocket.send_text(ready_signal)
-                    logger.info(f"✅ Ready signal sent to client for {agent_name}")
-                except Exception as e:
-                    logger.warning(f"Failed to send ready signal: {e}")
+            async def trigger_reconnect(new_context: str):
+                """Callback llamado por _monitor_reconnect cuando hay contexto nuevo."""
+                reconnect_context[0] = new_context
+                should_reconnect.set()
 
-                # Phase 2: Initialize Subconscious Channels
-                # 🏰 BASTION: Set maxsize to prevent memory leaks if consumers stall
-                transcript_queue = asyncio.Queue(maxsize=50)
-                reflection_queue = asyncio.Queue(maxsize=20)
-                injection_queue = asyncio.Queue(maxsize=20)
-
-                # Canal Paralelo: queue para señalizar micro-reconexión desde Canal 2
-                reconnect_queue = asyncio.Queue(maxsize=1)
-
-                # Manage bidirectional streams and subconscious concurrently
-                # If either task fails (e.g. disconnect), the TaskGroup will cancel the others.
-                session_closed_event = asyncio.Event()
-                # Shared event: receive_from_gemini sets this on turn_complete;
-                # send_to_gemini reads it to unlock audio for the next turn.
-                eot_reset_event = asyncio.Event()
-
-                # Phase 3: Inject Repository into Subconscious
-                subconscious_mind.set_repository(self.soul_repo)
-                reflection_mind.set_repository(self.soul_repo)
+            # Loop de reconexión — se repite si el Canal 2 pide un nuevo contexto
+            while True:
+                # Construir system_instruction con contexto acumulado
+                full_instruction = system_instruction
+                if dynamic_context:
+                    full_instruction = f"{system_instruction}\n\n[CONTEXTO ACTUALIZADO POR BÚSQUEDA RECIENTE]:\n{dynamic_context}"
 
                 try:
-                    # A. Launch Cognitive Tasks (Background - Fire & Forget-ish)
-                    # We store them to cancel them gracefully later.
-                    # Module 4: The Cognitive Supervisor (Resilience)
+                    async with gemini_service.connect(
+                        system_instruction=full_instruction,
+                        voice_name=voice_name
+                    ) as session:
+                        logger.info(f"Gemini session started for {agent_id}. Context length: {len(full_instruction)}")
 
-                    # 3. Subconscious Mind (Transcripts -> Analysis -> Injection Queue -> Persistence)
-                    cognitive_tasks.append(asyncio.create_task(
-                        CognitiveSupervisor.supervise("Subconscious", lambda: subconscious_mind.start(
-                            transcript_queue, injection_queue, user_id, agent_id
-                        ), session_closed_event)
-                    ))
+                        # Ready signal
+                        try:
+                            import json
+                            ready_signal = json.dumps({"type": "session_ready", "agent_id": agent_id})
+                            await websocket.send_text(ready_signal)
+                            logger.info(f"✅ Ready signal sent to client for {agent_name}")
+                        except Exception as e:
+                            logger.warning(f"Failed to send ready signal: {e}")
 
-                    # 4. Injection Upstream (Injection Queue -> Gemini)
-                    cognitive_tasks.append(asyncio.create_task(
-                        CognitiveSupervisor.supervise("InjectionLoop", lambda: send_injections_to_gemini(session, injection_queue, session_closed_event, eot_reset_event), session_closed_event)
-                    ))
+                        # Queues
+                        transcript_queue = asyncio.Queue(maxsize=50)
+                        reflection_queue = asyncio.Queue(maxsize=20)
+                        injection_queue = asyncio.Queue(maxsize=20)
+                        session_closed_event = asyncio.Event()
+                        eot_reset_event = asyncio.Event()
+                        should_reconnect.clear()
 
+                        subconscious_mind.set_repository(self.soul_repo)
+                        reflection_mind.set_repository(self.soul_repo)
 
-                    # 5. Reflection Mind (AI Output -> Self-Critique -> Injection Queue)
-                    if agent:
-                        cognitive_tasks.append(asyncio.create_task(
-                            CognitiveSupervisor.supervise("ReflectionMind", lambda: reflection_mind.start(
-                                reflection_queue, injection_queue, agent
-                            ), session_closed_event)
-                        ))
+                        try:
+                            cognitive_tasks = []
 
-                    # Canal 2 — Parallel Brain (Reactive Search)
-                    # Usa su propia copia de transcript_queue para no interferir con SubconsciousMind
-                    parallel_transcript_queue = asyncio.Queue(maxsize=50)
-                    cognitive_tasks.append(asyncio.create_task(
-                        CognitiveSupervisor.supervise(
-                            "ParallelBrain",
-                            lambda: parallel_brain.start(
-                                parallel_transcript_queue,
-                                reconnect_queue,
-                                user_id,
-                                agent_id,
-                                session_closed_event,
-                            ),
-                            session_closed_event,
-                        )
-                    ))
+                            cognitive_tasks.append(asyncio.create_task(
+                                CognitiveSupervisor.supervise("Subconscious", lambda: subconscious_mind.start(
+                                    transcript_queue, injection_queue, user_id, agent_id
+                                ), session_closed_event)
+                            ))
+                            cognitive_tasks.append(asyncio.create_task(
+                                CognitiveSupervisor.supervise("InjectionLoop", lambda: send_injections_to_gemini(
+                                    session, injection_queue, session_closed_event, eot_reset_event
+                                ), session_closed_event)
+                            ))
+                            if agent:
+                                cognitive_tasks.append(asyncio.create_task(
+                                    CognitiveSupervisor.supervise("ReflectionMind", lambda: reflection_mind.start(
+                                        reflection_queue, injection_queue, agent
+                                    ), session_closed_event)
+                                ))
 
-                    # B. Critical Motor Loop (The TaskGroup that MUST NOT DIE from cognitive errors)
-                    async with asyncio.TaskGroup() as tg:
-                        # 1. Audio Upstream (Client -> Gemini)
-                        tg.create_task(
-                            send_to_gemini(
-                                websocket, session, auction_service,
-                                session_closed_event, session_transcript_buffer,
-                                transcript_queue,
-                                eot_reset_event=eot_reset_event,
-                                parallel_transcript_queue=parallel_transcript_queue,
-                            )
-                        )
+                            parallel_transcript_queue = asyncio.Queue(maxsize=50)
+                            reconnect_queue = asyncio.Queue(maxsize=1)
 
-                        # 2. Audio/Text Downstream (Gemini -> Client) + Transcript Feed
-                        tg.create_task(
-                            receive_from_gemini(
-                                websocket,
-                                session,
-                                auction_service,
-                                session_closed_event,
-                                transcript_queue,
-                                reflection_queue,
-                                session_transcript_buffer,
-                                agent_name=agent_name,
-                                agent_id=agent_id,
-                                soul_repo=self.soul_repo,
-                                eot_reset_event=eot_reset_event,
-                            )
-                        )
+                            cognitive_tasks.append(asyncio.create_task(
+                                CognitiveSupervisor.supervise(
+                                    "ParallelBrain",
+                                    lambda: parallel_brain.start(
+                                        parallel_transcript_queue,
+                                        reconnect_queue,
+                                        user_id,
+                                        agent_id,
+                                        session_closed_event,
+                                    ),
+                                    session_closed_event,
+                                )
+                            ))
 
-                        # 3. Monitor de Micro-Reconexión (Canal Paralelo)
-                        tg.create_task(
-                            _monitor_reconnect(
-                                reconnect_queue,
-                                websocket,
-                                session_closed_event,
-                            )
-                        )
+                            async with asyncio.TaskGroup() as tg:
+                                tg.create_task(
+                                    send_to_gemini(
+                                        websocket, session, auction_service,
+                                        session_closed_event, session_transcript_buffer,
+                                        transcript_queue,
+                                        eot_reset_event=eot_reset_event,
+                                        parallel_transcript_queue=parallel_transcript_queue,
+                                    )
+                                )
+                                tg.create_task(
+                                    receive_from_gemini(
+                                        websocket, session, auction_service,
+                                        session_closed_event, transcript_queue,
+                                        reflection_queue, session_transcript_buffer,
+                                        agent_name=agent_name, agent_id=agent_id,
+                                        soul_repo=self.soul_repo,
+                                        eot_reset_event=eot_reset_event,
+                                    )
+                                )
+                                tg.create_task(
+                                    _monitor_reconnect(
+                                        reconnect_queue,
+                                        websocket,
+                                        session_closed_event,
+                                        trigger_reconnect,
+                                    )
+                                )
 
-                except WebSocketDisconnect:
-                    logger.info("WebSocket disconnected by client.")
-                except Exception as e:
-                    import traceback
-                    logger.error(f"❌ CRITICAL ERROR in WebSocket session: {e}")
-                    # If it's an ExceptionGroup (Python 3.11+), log all sub-exceptions
-                    if isinstance(e, BaseExceptionGroup):
-                        for i, ex in enumerate(e.exceptions):
-                            logger.error(f"  Sub-exception {i}: {ex}")
+                        except WebSocketDisconnect:
+                            logger.info("WebSocket disconnected by client.")
+                            break  # Salir del loop de reconexión
+                        except Exception as e:
+                            import traceback
+                            logger.error(f"❌ CRITICAL ERROR in WebSocket session: {e}")
+                            if isinstance(e, BaseExceptionGroup):
+                                for i, ex in enumerate(e.exceptions):
+                                    logger.error(f"  Sub-exception {i}: {ex}")
                             logger.error(traceback.format_exc())
-                    else:
-                        logger.error(traceback.format_exc())
-                    
-                    try:
-                        await websocket.close()
-                    except Exception:
-                        pass
-                finally:
-                    # CRITICAL: Async Shutdown
-                    # Close the websocket IMMEDIATELY to free the frontend proxy,
-                    # while the Gemini session cleans up in the background (context exit).
-                    try:
-                        await websocket.close()
-                    except Exception:
-                        # Ignore if already closed
-                        pass
+                            try:
+                                await websocket.close()
+                            except Exception:
+                                pass
+                            break
+                        finally:
+                            if cognitive_tasks:
+                                logger.info(f"Terminating {len(cognitive_tasks)} background cognitive tasks...")
+                                for task in cognitive_tasks:
+                                    task.cancel()
+                                await asyncio.gather(*cognitive_tasks, return_exceptions=True)
+
+                except Exception as e:
+                    logger.error(f"Unexpected error managing Gemini Session: {e}")
+                    break
+
+                # ¿Reconectar con nuevo contexto?
+                if should_reconnect.is_set() and reconnect_context[0]:
+                    dynamic_context = reconnect_context[0]
+                    logger.info(f"🔄 Micro-Reconexión ejecutada. Nuevo contexto: {dynamic_context[:80]}...")
+                    reconnect_context[0] = ""
+                    # Pequeña pausa antes de reconectar
+                    await asyncio.sleep(0.5)
+                    continue  # Volver al inicio del while True con nuevo contexto
+                else:
+                    break  # Sesión terminó normalmente — no reconectar
         except Exception as e:
             logger.error(f"Unexpected error managing Gemini Session: {e}")
         finally:
@@ -370,21 +374,19 @@ async def _monitor_reconnect(
     reconnect_queue: asyncio.Queue,
     websocket,
     session_closed_event: asyncio.Event,
+    reconnect_callback,
 ):
     """
     Monitorea la cola del Canal 2.
-    Cuando llega un resultado de búsqueda, notifica al frontend
-    para que sepa que hay contexto nuevo disponible.
-    La reconexión real ocurre en la próxima sesión via system_instruction.
-    Por ahora: almacena el contexto en cache para que sea inyectado
-    en la próxima reconexión de sesión.
+    Cuando llega un resultado de búsqueda, ejecuta la Micro-Reconexión
+    Sincronizada: notifica al frontend, espera silencio de audio,
+    y llama al callback de reconexión con el nuevo contexto.
     """
     logger = logging.getLogger(__name__)
 
     try:
         while not session_closed_event.is_set():
             try:
-                # Esperar resultado del Canal 2
                 result = await asyncio.wait_for(
                     reconnect_queue.get(), timeout=2.0
                 )
@@ -394,18 +396,23 @@ async def _monitor_reconnect(
             if not result:
                 continue
 
-            logger.info(f"🔄 Micro-Reconexión: Canal 2 result received. Notifying frontend.")
+            logger.info(f"🔄 Micro-Reconexión: Resultado recibido del Canal 2.")
 
-            # Notificar al frontend que el agente está "procesando"
+            # 1. Notificar al frontend — reproducir filler
             try:
-                import json
                 await websocket.send_json({
                     "type": "CONTROL",
                     "action": "AGENT_THINKING",
                     "message": "Un momento..."
                 })
             except Exception:
-                pass  # Si el websocket cerró, ignorar
+                pass
+
+            # 2. Pequeña pausa para dejar que el audio actual termine
+            await asyncio.sleep(0.3)
+
+            # 3. Señalizar reconexión al SessionManager
+            await reconnect_callback(result)
 
     except asyncio.CancelledError:
         raise
