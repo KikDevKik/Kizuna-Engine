@@ -232,14 +232,13 @@ Implementación técnica:
   5. Pipeline de audio se reanuda transparentemente
 - 📋 Context Caching para mitigar sobrecosto de tokenización en reconexiones
 
-**Estado actual (10 de Marzo 2026):**
+**Estado final (10 de Marzo 2026):** ✅
 - ✅ `parallel_brain.py` — Canal 2 activo, búsqueda con limpieza de query garbled
 - ✅ `session_manager.py` — reconnect_queue, trigger_reconnect, cache por sesión
 - ✅ `audio_session.py` — parallel_transcript_queue alimentado desde native_transcript
 - ✅ Limpieza de query en 2 pasos: interpretación de intención → búsqueda real
 - ✅ Contexto guardado en cache local entre sesiones
-- 🔄 Fix activo: frame narrativo "SEÑAL EXTERNA" en contexto de búsqueda — evita que
-  Kizuna interprete noticias del mundo real como eventos del Engine
+- ✅ Frame narrativo [SEÑAL EXTERNA] — Kizuna no interpreta noticias como eventos del Engine
 - ⚠️ Limitación: el contexto se aplica en la PRÓXIMA sesión, no en la actual.
   La reconexión mid-session en el mismo WebSocket no es posible — es una limitación del
   protocolo ASGI/Starlette (un WebSocket no se puede cerrar y reabrir en la misma conexión).
@@ -372,11 +371,20 @@ Este es el cambio arquitectónico más profundo del roadmap — implica rediseñ
 | Audio TTS fallback | Ninguno | Piper TTS (local, 22MB) |
 | Modelo audio | gemini-2.5-flash-native-audio-preview | gemini-2.5-flash-native-audio (GA) |
 
+### Estado de Bloques
+
+| Bloque | Estado | Contenido |
+|--------|--------|-----------|
+| Bloque 1 | ✅ | Barge-in, Habla Natural, The Void, Multilingüe |
+| Bloque 2 | ✅ | System Tray, Canal Paralelo AUDIO-01 |
+| Bloque 3 | ✅ | Frame narrativo SEÑAL EXTERNA, VAD 1500ms, Engine como origen no tema |
+| Bloque 4 | 📋 | Fase 8 — Infraestructura de producción |
+
 ### Próximos pasos inmediatos (en orden)
 
-1. **8.9 fix pendiente** — frontend detecta `search_context_ready` y reconecta voluntariamente
-2. **Fase 8.1-8.7** — infraestructura cloud (post pruebas de usuario externas)
-3. **8.8 — Audio Rust** — migración pipeline audio nativo
+1. **Fase 8.1-8.7** — infraestructura cloud: Spanner, Firestore, Cloud Run, Firebase Auth
+2. **8.8 — Audio Rust** — migración pipeline audio nativo (cpal, AEC3, jitter buffer)
+3. **8.9 fix opcional** — frontend detecta `search_context_ready` y reconecta voluntariamente (mid-session context injection)
 4. **Fase 9** — multi-agente
 
 ---
