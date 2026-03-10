@@ -295,7 +295,7 @@ async def send_to_gemini(
 
                 if len(audio_buffer) >= AUDIO_BUFFER_THRESHOLD:
                     try:
-                        logger.info(f"📤 Sending audio packet: {len(audio_buffer)} bytes")
+                        logger.debug(f"📤 Sending audio packet: {len(audio_buffer)} bytes")
                         await session.send_realtime_input(
                             audio=types.Blob(
                                 data=bytes(audio_buffer),
@@ -429,7 +429,7 @@ async def receive_from_gemini(
             while not session_closed_event.is_set():
               async for response in session.receive():
                 logger.debug(f"📥 Gemini raw response FULL: {response}")
-                logger.info(
+                logger.debug(
                     f"📥 has data attr: {hasattr(response, 'data')} | "
                     f"data value: {getattr(response, 'data', None) is not None} | "
                     f"server_content: {response.server_content is not None} | "
@@ -463,7 +463,7 @@ async def receive_from_gemini(
                             break
 
                 if audio_data:
-                    logger.info(
+                    logger.debug(
                         f"🔊 Audio received from Gemini ({len(audio_data)} bytes). "
                         f"Auction state: winner={auction_service._current_winner!r}, "
                         f"turn_aborted={turn_aborted}, agent_id={agent_id!r}"
@@ -496,7 +496,7 @@ async def receive_from_gemini(
 
                     try:
                         await websocket.send_bytes(audio_data)
-                        logger.info(f"🔊 Audio sent to client: {len(audio_data)} bytes")
+                        logger.debug(f"🔊 Audio sent to client: {len(audio_data)} bytes")
                     except Exception:
                         raise WebSocketDisconnect()
 
