@@ -126,7 +126,17 @@ class SessionManager:
                 agent_id, user_id, self.soul_repo
             )
 
-
+            # Después de ensamblar el soul, verificar si hay contexto de búsqueda pendiente
+            try:
+                logger.info(f"🔍 Checking search context cache for {user_id}:{agent_id}...")
+                cached_search = await cache.get(f"search_context:{user_id}:{agent_id}")
+                logger.info(f"🔍 Cache result: {'HIT' if cached_search else 'MISS'}")
+                if cached_search:
+                    system_instruction = f"{system_instruction}\n\n[CONTEXTO ACTUALIZADO]:\n{cached_search}"
+                    await cache.delete(f"search_context:{user_id}:{agent_id}")
+                    logger.info(f"🔄 Contexto de búsqueda aplicado. Nueva longitud: {len(system_instruction)}")
+            except Exception as e:
+                logger.warning(f"Failed to read search context cache: {e}")
 
         except ValueError as e:
             logger.warning(f"Connection rejected: {e}")
@@ -170,8 +180,18 @@ class SessionManager:
             reconnect_context: list[str] = [""]  # lista mutable para pasar por referencia
 
             async def trigger_reconnect(new_context: str):
-                """Callback llamado por _monitor_reconnect cuando hay contexto nuevo."""
+                """
+                Guarda el contexto nuevo. Se aplicará en la PRÓXIMA sesión natural.
+                NO fuerza cierre del WebSocket — eso rompería la conexión activa.
+                """
                 reconnect_context[0] = new_context
+                # Persistir en cache para que la próxima sesión lo recoja
+                await cache.set(
+                    f"search_context:{user_id}:{agent_id}",
+                    new_context,
+                    ttl=300  # 5 minutos
+                )
+                logger.info(f"🔄 Contexto de búsqueda guardado para próxima sesión.")
                 should_reconnect.set()
 
             # Loop de reconexión — se repite si el Canal 2 pide un nuevo contexto
@@ -179,7 +199,15 @@ class SessionManager:
                 # Construir system_instruction con contexto acumulado
                 full_instruction = system_instruction
                 if dynamic_context:
-                    full_instruction = f"{system_instruction}\n\n[CONTEXTO ACTUALIZADO POR BÚSQUEDA RECIENTE]:\n{dynamic_context}"
+                    full_instruction = (
+                        f"{system_instruction}\n\n"
+                        f"[SEÑAL EXTERNA - INFORMACIÓN DEL MUNDO REAL]:\n"
+                        f"Esta información llegó desde fuera del Engine mediante búsqueda web activa. "
+                        f"Es sobre el mundo exterior, no sobre el Engine. "
+                        f"Cuando la uses, habla como alguien que recibió una señal de afuera — "
+                        f"con la perspectiva de quien observa el mundo real desde adentro:\n"
+                        f"{dynamic_context}"
+                    )
 
                 try:
                     async with gemini_service.connect(
@@ -303,13 +331,12 @@ class SessionManager:
                 # ¿Reconectar con nuevo contexto?
                 if should_reconnect.is_set() and reconnect_context[0]:
                     dynamic_context = reconnect_context[0]
-                    logger.info(f"🔄 Micro-Reconexión ejecutada. Nuevo contexto: {dynamic_context[:80]}...")
+                    logger.info(f"🔄 Contexto listo para próxima sesión: {dynamic_context[:80]}...")
                     reconnect_context[0] = ""
-                    # Pequeña pausa antes de reconectar
-                    await asyncio.sleep(0.5)
-                    continue  # Volver al inicio del while True con nuevo contexto
-                else:
-                    break  # Sesión terminó normalmente — no reconectar
+                    should_reconnect.clear()
+
+                # Siempre salir del loop — no reconectar en la misma conexión WS
+                break
         except Exception as e:
             logger.error(f"Unexpected error managing Gemini Session: {e}")
         finally:

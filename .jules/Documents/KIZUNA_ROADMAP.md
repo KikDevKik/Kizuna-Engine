@@ -1,5 +1,5 @@
 # KIZUNA ENGINE — ROADMAP MAESTRO
-Actualizado: 6 de Marzo de 2026
+Actualizado: 10 de Marzo de 2026
 
 ## LEYENDA
 - ✅ Completado
@@ -105,9 +105,8 @@ Actualizado: 6 de Marzo de 2026
 - ✅ WIPE borra JSONs excepto kizuna.json
 - ✅ Kizuna re-anclada al roster automáticamente post-wipe
 
-### 7.8 — Barge-in: Protocolo de Interrupción Social 📋
-> Baja-Media complejidad. Backend Python + frontend Rust.
-> **Bug confirmado en pruebas:** el usuario no puede interrumpir al agente mientras habla.
+### 7.8 — Barge-in: Protocolo de Interrupción Social ✅
+> **Bug resuelto:** strings FLUSH_AUDIO/CONTROL corregidas a mayúsculas en audio_session.py y useLiveAPI.ts.
 
 **Contexto de diseño:** Una interrupción no es solo "parar el audio" — es un acto social
 con intención. El sistema debe detectar el TIPO de interrupción y el agente debe reaccionar
@@ -132,59 +131,30 @@ Implementación técnica:
 - 📋 El tipo de interrupción modula la respuesta del agente (Neural Signature aware)
 - 📋 Eliminar VAD RMS del frontend — delegar todo al server-side de Gemini
 
-### 7.9 — Presencia Persistente en Escritorio (System Tray) 📋
-> Baja complejidad. Puramente aditivo en Tauri. El modelo Discord.
-- 📋 `tauri-plugin-tray` — ícono persistente, app vive aunque se cierre la ventana
-- 📋 `prevent_close()` + `window.hide()` — proceso persiste en background
-- 📋 `tauri-plugin-global-shortcut` — Push-to-Talk global sin necesidad de foco
-- 📋 `tauri-plugin-notification` — notificaciones proactivas con audio customizado
-- 📋 Prerequisito del Initiative Protocol (7.4)
+### 7.9 — Presencia Persistente en Escritorio (System Tray) ✅
+> Tauri 2.10.0. Tres plugins integrados.
+- ✅ `TrayIconBuilder::with_id("kizuna-tray")` — ícono único en bandeja
+- ✅ `prevent_close()` + `window.hide()` — proceso persiste en background
+- ✅ `tauri-plugin-global-shortcut` — Push-to-Talk global Ctrl+Space
+- ✅ `tauri-plugin-notification` — infraestructura lista
+- ⚠️ Doble ícono en dev mode (hot-reload) — no afecta build de producción
 
 ---
 
-## FASE 7.X — CALIDAD DE PERSONALIDAD 📋
-> Refinamiento de expresividad y naturalidad. Sin código nuevo — solo prompts.
-> Aplicar antes de pruebas de usuario externas.
+## FASE 7.X — CALIDAD DE PERSONALIDAD ✅
+> Completado. Cache Static DNA v6 activo.
 
-### 7.X.1 — The Void: Ritual más Expresivo 📋
-> Solo `ritual_service.py`. Cambio de prompt.
+### 7.X.1 — The Void: Ritual más Expresivo ✅
+- ✅ `ritual_service.py` — preguntas evocadoras, tono antiguo, reacciones emocionales
 
-**Problema confirmado en pruebas:** The Void hace preguntas funcionales pero predecibles.
-Las preguntas suenan a formulario. Le falta provocación y capacidad de sorprender.
+### 7.X.2 — Habla Natural ✅
+- ✅ `soul_assembler.py` — `style_hint` ampliado con directiva de naturalidad
+- ✅ Static DNA v6 — fuerza regeneración de cache en todos los agentes
+- ⚠️ Nota: bloques de texto muy largos en system_instruction silencian al modelo native-audio.
+  El fix fue añadir la directiva dentro del `style_hint` existente, no como bloque separado.
 
-- 📋 Preguntas filosóficas y evocadoras — el usuario no debe sentir que llena un formulario
-- 📋 The Void reacciona emocionalmente a lo que describe el usuario — si es oscuro, se
-  interesa más; si es luminoso, se distancia levemente
-- 📋 Menos opciones binarias ("¿A o B?") — más preguntas abiertas
-- 📋 The Void puede hacer comentarios sobre lo que está emergiendo, no solo preguntar
-- 📋 Máximo 2-3 intercambios antes de ofrecer crear — no alargar innecesariamente
-- 📋 El lenguaje de The Void debe sentirse antiguo, extraño, no corporativo
-
-### 7.X.2 — Habla Natural: Fin del Robotismo 📋
-> Solo `soul_assembler.py`. Directivas de impredecibilidad en Static DNA.
-
-**Problema confirmado en pruebas:** Los agentes responden de forma demasiado estructurada.
-Cada respuesta parece calculada. Les falta la textura de la conversación real.
-
-- 📋 Directiva de **impredecibilidad verbal** en el DNA de todos los agentes:
-  el agente puede cambiar de tema si algo le llama la atención, interrumpirse a sí mismo,
-  hacer preguntas retóricas, dejar frases incompletas
-- 📋 **Muletillas y pausas** acordes al lore del personaje — no genéricas
-- 📋 **Reacciones espontáneas verbalizadas**: "espera—", "eso es...", "no, no, escucha"
-- 📋 Respuestas cortas cuando la situación lo pide — no siempre párrafos
-- 📋 El agente no siempre tiene la respuesta — puede expresar genuina incertidumbre
-- 📋 Incrementar versión Static DNA a v6 tras aplicar (forzar regeneración de cache)
-
-### 7.X.3 — Kizuna Multilingüe 📋
-> Solo `seeder.py`. Una línea de cambio.
-
-**Problema:** Kizuna hardcodeada con solo español e inglés. Como producto global necesita
-hablar con usuarios asiáticos, europeos y de otras culturas desde el día uno.
-
-- 📋 Ampliar `known_languages` en seeder: japonés, coreano, chino mandarín, francés,
-  portugués, alemán, italiano, árabe, hindi
-- 📋 El Language Protocol ya maneja esto — solo es data
-- 📋 Forzar regeneración de Static DNA de Kizuna (versión v6)
+### 7.X.3 — Kizuna Multilingüe ✅
+- ✅ `seeder.py` + `kizuna.json` — 11 idiomas: es, en, ja, ko, zh, fr, pt, de, it, ar, hi
 
 ---
 
@@ -261,6 +231,20 @@ hablar con usuarios asiáticos, europeos y de otras culturas desde el día uno.
   4. Nueva sesión inicializada con contexto del hallazgo en system_instruction
   5. Pipeline de audio se reanuda transparentemente
 - 📋 Context Caching para mitigar sobrecosto de tokenización en reconexiones
+
+**Estado actual (10 de Marzo 2026):**
+- ✅ `parallel_brain.py` — Canal 2 activo, búsqueda con limpieza de query garbled
+- ✅ `session_manager.py` — reconnect_queue, trigger_reconnect, cache por sesión
+- ✅ `audio_session.py` — parallel_transcript_queue alimentado desde native_transcript
+- ✅ Limpieza de query en 2 pasos: interpretación de intención → búsqueda real
+- ✅ Contexto guardado en cache local entre sesiones
+- 🔄 Fix activo: frame narrativo "SEÑAL EXTERNA" en contexto de búsqueda — evita que
+  Kizuna interprete noticias del mundo real como eventos del Engine
+- ⚠️ Limitación: el contexto se aplica en la PRÓXIMA sesión, no en la actual.
+  La reconexión mid-session en el mismo WebSocket no es posible — es una limitación del
+  protocolo ASGI/Starlette (un WebSocket no se puede cerrar y reabrir en la misma conexión).
+  Solución definitiva: el frontend debe detectar el evento `search_context_ready` y
+  reconectar voluntariamente. Pendiente para siguiente iteración.
 
 ---
 
@@ -346,6 +330,30 @@ es un dato de entrenamiento potencial. El motor que se construye hoy
 - 💡 Memoria persistente cross-session ligada a lugares y objetos del mundo virtual
 - 💡 Economía virtual emergente basada en el sistema de Fase 10
 
+### 12.5 — Sistema de Personalidad Procedural (Sin Static DNA) 💡
+> Idea surgida en Marzo 2026 durante pruebas de Canal Paralelo.
+
+**Problema observado:** El `system_instruction` estático hace que los agentes interpreten
+información externa (noticias, datos del mundo real) a través del filtro de su lore.
+Kizuna describe noticias de IA como si ocurrieran "dentro del Engine" porque su identidad
+está hard-codeada en el prompt. Parches narrativos como `[SEÑAL EXTERNA]` son síntomas
+del problema, no la solución.
+
+**Visión:** Eliminar el Static DNA como bloque de texto y reemplazarlo por un sistema
+de razonamiento emergente donde la personalidad no es una instrucción — es un estado.
+
+- 💡 Personalidad como vector de estado dinámico, no como texto fijo
+- 💡 El agente razona desde primeros principios usando su historial de interacciones
+  como contexto, no un prompt de "eres X con estas características"
+- 💡 Memoria episódica como fuente primaria de identidad — el agente ES lo que recuerda
+- 💡 Sistema de valores como restricciones de optimización, no como directivas textuales
+- 💡 Compatible con fine-tuning (Fase 12.2): el modelo aprendería la personalidad
+  durante entrenamiento, no desde el prompt
+
+**Prerequisitos:** Fase 12.2 (fine-tuning) + Fase 8.1 (Spanner para memoria episódica a escala).
+Este es el cambio arquitectónico más profundo del roadmap — implica rediseñar
+`soul_assembler.py`, `SoulRepository` y el pipeline de sesión completo.
+
 ---
 
 ## NOTAS DE IMPLEMENTACIÓN
@@ -366,13 +374,11 @@ es un dato de entrenamiento potencial. El motor que se construye hoy
 
 ### Próximos pasos inmediatos (en orden)
 
-1. **7.8 — Barge-in** — el agente no para cuando el usuario habla encima
-2. **7.X.1 — The Void** — mejorar calidad del Ritual (solo prompt)
-3. **7.X.2 — Habla Natural** — eliminar robotismo (solo prompt)
-4. **7.X.3 — Kizuna Multilingüe** — ampliar idiomas (una línea en seeder)
-5. **7.9 — System Tray** — presencia persistente desktop
-6. **Fase 8** — después de pruebas de usuario externas
+1. **8.9 fix pendiente** — frontend detecta `search_context_ready` y reconecta voluntariamente
+2. **Fase 8.1-8.7** — infraestructura cloud (post pruebas de usuario externas)
+3. **8.8 — Audio Rust** — migración pipeline audio nativo
+4. **Fase 9** — multi-agente
 
 ---
 
-*Roadmap actualizado: 6 de Marzo de 2026 | El Cronista*
+*Roadmap actualizado: 10 de Marzo de 2026 | El Cronista*

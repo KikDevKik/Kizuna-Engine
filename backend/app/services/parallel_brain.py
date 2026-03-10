@@ -26,6 +26,7 @@ class ParallelBrain:
     def __init__(self):
         self.client = None
         self.latest_context: str | None = None  # NUEVO
+        self.last_search_time: datetime = datetime.min  # NUEVO
         if genai and settings.GEMINI_API_KEY:
             self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
@@ -66,6 +67,7 @@ class ParallelBrain:
 
                     full_text = " ".join(buffer)
                     buffer = []  # Limpiar buffer
+                    logger.info(f"🔍 ParallelBrain: Evaluating segment: '{full_text[:60]}'")
 
                     # Verificar si la consulta merece búsqueda web
                     if not self._needs_search(full_text):
@@ -98,38 +100,64 @@ class ParallelBrain:
             logger.info("🧠 ParallelBrain: Canal 2 deactivated.")
 
     def _needs_search(self, text: str) -> bool:
-        """
-        Heurística simple: ¿La consulta del usuario implica
-        información factual, actual o externa?
-        """
-        triggers = [
-            # Preguntas sobre el mundo real
-            "qué es", "quién es", "cuándo", "dónde está", "cómo funciona",
-            "what is", "who is", "when did", "where is", "how does",
-            # Referencias a noticias o eventos actuales
-            "últimas noticias", "qué pasó", "recientemente", "hoy",
-            "latest news", "what happened", "recently", "today",
-            # Búsquedas explícitas
-            "busca", "buscar", "investiga", "dime sobre",
-            "search", "look up", "find out", "tell me about",
+        # Cooldown de 45 segundos entre búsquedas
+        if (datetime.now() - self.last_search_time).seconds < 45:
+            return False
+            
+        if len(text.split()) < 4:  # Mínimo 4 palabras
+            return False
+
+        # Solo triggers muy explícitos — preguntas directas sobre el mundo
+        hard_triggers = [
+            "noticias", "noticia", "news",
+            "precio", "price", "bitcoin", "dólar",
+            "qué pasó", "what happened", "qué ocurrió",
+            "busca", "buscar", "search", "investiga",
+            "quién ganó", "who won",
+            "cuánto vale", "how much",
         ]
+        
+        # Palabras que indican nombre propio o saludo — EXCLUIR
+        exclude = ["kisuna", "kizuna", "hola", "hello", "ola", "hi"]
         text_lower = text.lower()
-        return any(t in text_lower for t in triggers)
+        
+        if any(e in text_lower for e in exclude) and len(text.split()) < 6:
+            return False
+            
+        return any(t in text_lower for t in hard_triggers)
 
     async def _search(self, query: str, agent_id: str) -> str | None:
-        """
-        Ejecuta búsqueda web usando Gemini con Google Search Grounding.
-        Retorna un string de contexto listo para inyectar en system_instruction.
-        """
         if not self.client:
-            logger.warning("ParallelBrain: No Gemini client available for search.")
             return None
 
+        self.last_search_time = datetime.now()
+
         try:
+            # PASO 1: Limpiar e interpretar la query garbled
+            clean_response = await asyncio.wait_for(
+                self.client.aio.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=f"El siguiente texto es una transcripción de voz con errores de reconocimiento: '{query}'. ¿Qué información real está buscando el usuario? Responde SOLO con una query de búsqueda limpia en español, máximo 8 palabras. Si no puedes determinar la intención, responde exactamente: UNCLEAR",
+                ),
+                timeout=8.0,
+            )
+
+            if not clean_response or not clean_response.text:
+                return None
+
+            clean_query = clean_response.text.strip()
+            
+            if "UNCLEAR" in clean_query or len(clean_query) < 3:
+                logger.info(f"🔍 ParallelBrain: Query unclear after cleaning — skipping search.")
+                return None
+
+            logger.info(f"🔍 ParallelBrain: Cleaned query: '{clean_query}'")
+
+            # PASO 2: Buscar con la query limpia
             response = await asyncio.wait_for(
                 self.client.aio.models.generate_content(
                     model="gemini-2.5-flash",
-                    contents=f"Busca información sobre: {query}. Resume los hallazgos más relevantes en máximo 3 oraciones concisas.",
+                    contents=f"Busca información actual sobre: {clean_query}. Resume en máximo 3 oraciones con datos concretos y fechas si las hay. Si no hay información reciente confiable, responde: SIN_DATOS",
                     config=types.GenerateContentConfig(
                         tools=[types.Tool(google_search=types.GoogleSearch())],
                     ),
@@ -139,8 +167,10 @@ class ParallelBrain:
 
             if response and response.text:
                 result = response.text.strip()
-                # Formatear como contexto inyectable
-                return f"[BÚSQUEDA WEB RECIENTE]: {result}"
+                if "SIN_DATOS" in result:
+                    logger.info(f"🔍 ParallelBrain: No reliable data found for '{clean_query}'.")
+                    return None
+                return f"[BÚSQUEDA WEB - {clean_query}]: {result}"
 
         except asyncio.TimeoutError:
             logger.warning("ParallelBrain: Search timed out.")
