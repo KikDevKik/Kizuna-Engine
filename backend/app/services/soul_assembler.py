@@ -28,7 +28,7 @@ from ..models.graph import AgentNode, SystemConfigNode
 
 logger = logging.getLogger(__name__)
 
-SOUL_STATIC_VERSION = "v6"
+SOUL_STATIC_VERSION = "v7"
 
 def get_affinity_modifier(level: float, affinity_matrix: List[List]) -> str:
     """Returns the descriptive modifier for the given affinity level (0-100)."""

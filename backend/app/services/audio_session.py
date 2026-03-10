@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # SDK v1.65.0: use send_realtime_input(audio=Blob) / audio_stream_end=True
 # 16000 Hz * 2 bytes/sample = 32000 bytes/sec; 2048 bytes ~= 64ms
 AUDIO_BUFFER_THRESHOLD = 2048
-VAD_SILENCE_MS = 900  # ms
+VAD_SILENCE_MS = 1500  # ms
 
 # Requires explicit platform name alongside action verb — prevents false triggers in normal conversation
 ACTION_PATTERNS = [
