@@ -158,7 +158,7 @@ Implementación técnica:
 
 ---
 
-## FASE 8 — INFRAESTRUCTURA DE PRODUCCIÓN + AUDIO NATIVO 📋
+## FASE 8 — INFRAESTRUCTURA DE PRODUCCIÓN + AUDIO NATIVO 🔄
 **Objetivo:** El motor escala. El audio suena como Discord.
 
 > ⚠️ DOS TRACKS PARALELOS:
@@ -166,36 +166,60 @@ Implementación técnica:
 > **Track B (8.8-8.9):** Audio nativo Rust — prerequisito para calidad de producto.
 > Ambos tracks deben completarse antes del lanzamiento.
 
-### 8.1 — Migrar SQLite → Google Cloud Spanner 📋
-- 📋 Reemplazar LocalSoulRepository con Spanner Graph
-- 📋 Migrar edges, nodes, KizunaChronicle
-- 📋 GQL queries para grafo de relaciones
+> 📐 DECISIONES DE ARQUITECTURA (Investigación Gemini CLI, Marzo 2026):
+> - **Spanner descartado** — overkill financiero (~$65/mes mínimo, sin free tier). Reemplazado por Neo4j AuraDB (free tier: 50k nodos, 175k relaciones) o FalkorDB.
+> - **Firestore elegido** sobre PostgreSQL para datos de agentes — estructura documental, integración nativa con Firebase Auth, sin problemas de connection pools en Cloud Run.
+> - **Cloud Run viable** para sesiones de audio — timeout configurable hasta 60min, session affinity disponible. Límite hard a 60min por sesión.
+> - **Orden óptimo:** Auth+Multi-tenant → Estado Externo (Firestore+Grafo) → Cloud Run → Rate Limiting.
 
-### 8.2 — Migrar JSON → Firestore / PostgreSQL 📋
-- 📋 Reemplazar AgentService JSON filesystem
-- 📋 get_or_sync_agent() se vuelve obsoleto — eliminar
+### 8.1 — Migrar SQLite → Neo4j AuraDB 📋
+> Decisión: Spanner descartado por costo. Neo4j AuraDB free tier cubre el caso de uso.
+- 📋 Crear cuenta Neo4j AuraDB (free tier perpetuo)
+- 📋 Reemplazar `LocalSoulRepository` con driver neo4j Python (`neo4j`)
+- 📋 Migrar edges (InteractedWith, OwesDebtTo, Gossip_Source, Nemesis) a relaciones Neo4j
+- 📋 Migrar nodes de agentes y KizunaChronicle
+- 📋 Reemplazar queries SQLite por Cypher queries
+- 📋 `user_id` de Firebase como scope de todos los nodos
+
+### 8.2 — Migrar JSON → Firestore 📋
+> Decisión: Firestore elegido. Estructura: `users/{userId}/agents/{agentId}`
+- 📋 Reemplazar `AgentService` JSON filesystem con Firestore SDK (`google-cloud-firestore`)
+- 📋 Estructura: `users/{userId}/agents/{agentId}` — aislamiento multi-tenant nativo
+- 📋 `get_or_sync_agent()` se vuelve obsoleto — eliminar
+- 📋 Migrar datos de `kizuna.json` y agentes creados al schema Firestore
 
 ### 8.3 — Cloud Run Deployment 📋
+> Prerequisito: 8.1 y 8.2 completos — backend debe ser 100% stateless antes de desplegar.
 - 📋 Dockerfile para backend FastAPI
-- 📋 Session affinity para WebSockets persistentes
+- 📋 `--timeout=3600` (60min máximo para sesiones de audio)
+- 📋 Session affinity (best-effort) para WebSockets persistentes
+- 📋 Variables de entorno: FIREBASE_CREDENTIALS_PATH, NEO4J_URI, NEO4J_PASSWORD
 - 📋 ~80 conexiones simultáneas por instancia
 
-### 8.4 — Firebase Auth 📋
-- 📋 Autenticación real (reemplazar guest_user)
-- 📋 Ephemeral Tokens para auth segura cliente→Gemini
-- 📋 Aislamiento multi-tenant por usuario
+### 8.4 — Firebase Auth ✅
+- ✅ `app/services/auth_service.py` — verificación de Firebase ID Token via Admin SDK
+- ✅ Fallback a `guest_user` si `FIREBASE_CREDENTIALS_PATH` no está definida (modo dev)
+- ✅ WebSocket acepta token en query param: `/ws/live?agent_id=kizuna&lang=es-419&token=...`
+- ✅ Frontend: `src/lib/firebase.ts` + `src/hooks/useAuth.ts` con `signInAnonymously()`
+- ✅ `.env.example` con `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_AUTH_DOMAIN`
+- ✅ `firebase-admin` añadido a `requirements.txt`
+- ✅ `user_id` dinámico reemplaza `guest_user` en session_manager, cache y parallel_brain
 
 ### 8.5 — Monitoring y Observabilidad 📋
 - 📋 OpenTelemetry: trazas distribuidas
 - 📋 Métricas: TTFB, errores de sesión, tokens consumidos
 
 ### 8.6 — Rate Limiting 📋
-- 📋 Por usuario en REST y WebSocket
+> Implementar después de tener tráfico real observable en Cloud Run.
+- 📋 Por usuario (user_id de Firebase) en WebSocket
 - 📋 Quota management para Gemini API
+- 📋 Redis o reglas en balanceador de Cloud Run
 
 ### 8.7 — Multi-tenant 📋
-- 📋 KizunaChronicle por usuario real (no guest_user)
+> Se completa junto con 8.1 y 8.2 — el aislamiento es consecuencia del user_id en Firestore y Neo4j.
+- 📋 KizunaChronicle por usuario real en Neo4j (scope por user_id)
 - 📋 Grafos de relaciones aislados por usuario
+- 📋 Cache de sesión aislado por user_id (ya parcialmente implementado)
 
 ### 8.8 — Migración Pipeline Audio a Rust Nativo 📋
 > Alta complejidad. Encapsulada en Tauri/Rust.
@@ -382,11 +406,16 @@ Este es el cambio arquitectónico más profundo del roadmap — implica rediseñ
 
 ### Próximos pasos inmediatos (en orden)
 
-1. **Fase 8.1-8.7** — infraestructura cloud: Spanner, Firestore, Cloud Run, Firebase Auth
-2. **8.8 — Audio Rust** — migración pipeline audio nativo (cpal, AEC3, jitter buffer)
-3. **8.9 fix opcional** — frontend detecta `search_context_ready` y reconecta voluntariamente (mid-session context injection)
-4. **Fase 9** — multi-agente
+1. **8.7 — Multi-tenant** — completar junto con 8.1 y 8.2 (ya tiene base con Firebase Auth)
+2. **8.2 — Firestore** — migrar JSON filesystem de agentes
+3. **8.1 — Neo4j AuraDB** — migrar SQLite + grafo de relaciones
+4. **8.3 — Cloud Run** — desplegar solo cuando backend sea 100% stateless
+5. **8.5 — Monitoring** — observabilidad en producción
+6. **8.6 — Rate Limiting** — después de tráfico real observable
+7. **8.8 — Audio Rust** — Track B paralelo, puede avanzar independientemente
+8. **8.X — UI Rediseño** — círculos Discord-style (diseño con Stitch, implementación post-Fase 8)
+9. **Fase 9** — multi-agente
 
 ---
 
-*Roadmap actualizado: 10 de Marzo de 2026 | El Cronista*
+*Roadmap actualizado: 11 de Marzo de 2026 | El Cronista*
