@@ -1,0 +1,4 @@
+EXCEPTION: TypeError: the JSON object must be str, bytes or bytearray, not MagicMock
+finish_reason: <MagicMock name='mock.candidates.__getitem__().finish_reason' id='140381741276752'>
+raw: <MagicMock name='mock.candidates.__getitem__().content.parts.__getitem__().text.__getitem__()' id='140381738799216'>
+parsed: <MagicMock name='mock.parsed' id='140381740734256'>

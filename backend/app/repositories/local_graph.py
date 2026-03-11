@@ -8,7 +8,8 @@ from sqlalchemy.orm import selectinload
 
 from .base import SoulRepository
 from ..core.database import AsyncSessionLocal, init_db
-from ..models.sql import NodeModel, EdgeModel, KizunaChronicleModel
+from ..models.sql import NodeModel, EdgeModel
+from app.services.firestore_service import firestore_service
 from ..services.embedding import embedding_service
 from ..models.graph import (
     UserNode, AgentNode, ResonanceEdge, MemoryEpisodeNode, FactNode,
@@ -79,12 +80,12 @@ class LocalSoulRepository(SoulRepository):
             return AgentNode(**node_model.data)
         return None
 
-    async def get_or_sync_agent(self, agent_id: str) -> Optional[AgentNode]:
+    async def get_or_sync_agent(self, user_id: str, agent_id: str) -> Optional[AgentNode]:
         """
         ARQUITECTURA-01: Unified agent resolution.
         1. Check SQLite NodeModel
-        2. If not found, check AgentService JSON filesystem
-        3. If found in JSON, register in SQLite automatically
+        2. If not found, check AgentService (Firestore or JSON)
+        3. If found, register in SQLite automatically
         4. Return AgentNode or None
         """
         # 1. Check SQLite first
@@ -92,17 +93,16 @@ class LocalSoulRepository(SoulRepository):
         if node:
             return AgentNode(**node.data)
 
-        # 2. Fallback to JSON filesystem
+        # 2. Check AgentService
         try:
             from app.services.agent_service import agent_service
-            agent = await agent_service.get_agent(agent_id)
+            agent = await agent_service.get_agent(user_id, agent_id)
             if agent:
-                # 3. Auto-register in SQLite
-                await self._save_node(agent.id, "AgentNode", agent.model_dump(mode='json'))
-                logger.info(f"🔧 ARCH-01: Auto-synced agent '{agent.name}' ({agent_id}) from JSON → SQLite")
+                # 3. Register in SQLite
+                await self.add_node(agent)
                 return agent
         except Exception as e:
-            logger.warning(f"ARCH-01: JSON fallback failed for {agent_id}: {e}")
+            logger.error(f"Error fetching agent {agent_id} from AgentService: {e}")
 
         return None
 
@@ -703,7 +703,7 @@ class LocalSoulRepository(SoulRepository):
 
         results = []
         for aid in active_ids:
-            agent = await self.get_agent(aid)
+            agent = await self.get_or_sync_agent(user_id, aid)
             if agent:
                 results.append(agent)
         return results
@@ -820,50 +820,18 @@ class LocalSoulRepository(SoulRepository):
     async def purge_all_memories(self) -> bool:
         """
         THE GREAT REBIRTH: Factory Reset.
-        Eradicates all nodes and edges EXCEPT KizunaChronicle — Kizuna's eternal memory is immune.
+        Eradicates all nodes and edges EXCEPT KizunaChronicle (which is in Firestore now).
         """
         try:
             async with AsyncSessionLocal() as session:
                 async with session.begin():
-                    # 1. Delete ALL Edges
+                    # 1. Delete all edges
                     await session.execute(delete(EdgeModel))
-                    # 2. Delete ALL Nodes
+
+                    # 2. Delete all nodes
                     await session.execute(delete(NodeModel))
-                    # KizunaChronicleModel is intentionally NOT deleted here.
-                    # Kizuna remembers. Always.
 
-            # Borrar JSONs de agentes excepto Kizuna
-            try:
-                from app.services.agent_service import agent_service
-                agents_dir = agent_service.data_dir
-                for json_file in agents_dir.glob("*.json"):
-                    if json_file.stem != "kizuna":
-                        json_file.unlink()
-                        logger.info(f"🗑️ Deleted agent JSON: {json_file.name}")
-                # Limpiar cache de agentes también
-                from app.services.cache import cache
-                await cache.delete_pattern("agent:*")
-                logger.info("🧹 Agent cache cleared post-wipe.")
-            except Exception as e:
-                logger.warning(f"Failed to delete agent JSONs: {e}")
-
-            logger.info("🔥 THE GREAT REBIRTH COMPLETE: Total Existence Incinerated. Kizuna remembers.")
-
-            # Re-registrar Kizuna en el roster
-            try:
-                await self.record_interaction("guest_user", "kizuna")
-                logger.info("🌱 Kizuna re-anchored to roster post-wipe.")
-            except Exception as e:
-                logger.warning(f"Failed to re-anchor Kizuna: {e}")
-
-            # 3. Increment survived_wipes counter for all existing chronicles
-            async with AsyncSessionLocal() as session:
-                async with session.begin():
-                    await session.execute(
-                        update(KizunaChronicleModel).values(
-                            survived_wipes=KizunaChronicleModel.survived_wipes + 1
-                        )
-                    )
+            logger.warning("🌪️ THE GREAT REBIRTH EXECUTED. All memories and agent connections purged from SQLite.")
             return True
         except Exception as e:
             logger.error(f"Failed to execute The Great Rebirth: {e}")
@@ -881,66 +849,59 @@ class LocalSoulRepository(SoulRepository):
         emotional_tone: str,
         interaction_count: int = 1,
     ) -> None:
-        """
-        Creates or updates a KizunaChronicle entry.
-        Called after sessions to accumulate relational knowledge.
-        """
-        from uuid import uuid4
-        async with AsyncSessionLocal() as session:
-            async with session.begin():
-                stmt = select(KizunaChronicleModel).where(
-                    and_(
-                        KizunaChronicleModel.user_id == user_id,
-                        KizunaChronicleModel.agent_id == agent_id
-                    )
-                )
-                result = await session.execute(stmt)
-                existing = result.scalar_one_or_none()
+        """Creates or updates a KizunaChronicle entry in Firestore."""
+        try:
+            from app.services.firestore_service import firestore_service
+            import datetime
+            existing = await firestore_service.get_chronicle(user_id, agent_id)
+            wipes = existing.get("survived_wipes", 0) if existing else 0
 
-                if existing:
-                    existing.relationship_summary = relationship_summary
-                    existing.dominant_topics = dominant_topics
-                    existing.emotional_tone = emotional_tone
-                    existing.interaction_count = existing.interaction_count + interaction_count
-                    existing.last_updated = datetime.utcnow()
-                else:
-                    new_entry = KizunaChronicleModel(
-                        id=str(uuid4()),
-                        user_id=user_id,
-                        agent_id=agent_id,
-                        agent_name=agent_name,
-                        relationship_summary=relationship_summary,
-                        dominant_topics=dominant_topics,
-                        emotional_tone=emotional_tone,
-                        interaction_count=interaction_count,
-                        survived_wipes=0,
-                    )
-                    session.add(new_entry)
-
-        logger.info(f"📖 Kizuna Chronicle updated: {user_id} ↔ {agent_name}")
+            data = {
+                "user_id": user_id,
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+                "relationship_summary": relationship_summary,
+                "dominant_topics": dominant_topics,
+                "emotional_tone": emotional_tone,
+                "interaction_count": interaction_count,
+                "survived_wipes": wipes,
+                "last_updated": datetime.datetime.utcnow().isoformat()
+            }
+            await firestore_service.save_chronicle(user_id, agent_id, data)
+        except Exception as e:
+            logger.error(f"Failed to upsert chronicle to Firestore: {e}")
 
 
     async def get_chronicles_for_user(self, user_id: str) -> list:
-        """
-        Returns all Chronicle entries for a given user.
-        Used by soul_assembler to inject Kizuna's eternal memory.
-        """
-        async with AsyncSessionLocal() as session:
-            stmt = select(KizunaChronicleModel).where(
-                KizunaChronicleModel.user_id == user_id
-            ).order_by(KizunaChronicleModel.last_updated.desc())
-            result = await session.execute(stmt)
-            return result.scalars().all()
+        """Returns all Chronicle entries for a given user from Firestore."""
+        try:
+            from app.services.firestore_service import firestore_service
+            # Assuming 'kizuna' is the only agent with a chronicle for now:
+            chronicle = await firestore_service.get_chronicle(user_id, "kizuna")
+            if chronicle:
+                class MockChronicle:
+                    def __init__(self, **kwargs):
+                        self.__dict__.update(kwargs)
+                return [MockChronicle(**chronicle)]
+            return []
+        except Exception as e:
+            logger.error(f"Failed to get chronicles from Firestore: {e}")
+            return []
 
 
-    async def get_chronicle(self, user_id: str, agent_id: str) -> Optional[KizunaChronicleModel]:
-        """Returns a specific Chronicle entry."""
-        async with AsyncSessionLocal() as session:
-            stmt = select(KizunaChronicleModel).where(
-                and_(
-                    KizunaChronicleModel.user_id == user_id,
-                    KizunaChronicleModel.agent_id == agent_id
-                )
-            )
-            result = await session.execute(stmt)
-            return result.scalar_one_or_none()
+    async def get_chronicle(self, user_id: str, agent_id: str) -> Optional[Any]:
+        """Returns a specific Chronicle entry from Firestore."""
+        try:
+            from app.services.firestore_service import firestore_service
+            chronicle = await firestore_service.get_chronicle(user_id, agent_id)
+            if chronicle:
+                chronicle["user_id"] = user_id
+                chronicle["agent_id"] = agent_id
+                class MockChronicle:
+                    def __init__(self, **kwargs):
+                        self.__dict__.update(kwargs)
+                return MockChronicle(**chronicle)
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get chronicle from Firestore: {e}")
+            return None.scalar_one_or_none()

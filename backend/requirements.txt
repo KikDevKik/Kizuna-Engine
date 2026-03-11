@@ -17,3 +17,4 @@ numpy==2.2.0
 sqlalchemy==2.0.47
 aiosqlite==0.22.1
 json-repair==0.30.3
+google-cloud-firestore==2.16.0

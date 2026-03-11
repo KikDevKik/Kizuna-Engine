@@ -232,7 +232,7 @@ class SubconsciousMind:
 
                                 # 1. Fetch Logic
                                 system_config = await self.repository.get_system_config()
-                                agent = await self.repository.get_agent(agent_id)
+                                agent = await self.repository.get_or_sync_agent(user_id, agent_id)
 
                                 # 2. Determine Matrix (Agent Override > System Default)
                                 matrix = system_config.sentiment_resonance_matrix
@@ -281,7 +281,7 @@ class SubconsciousMind:
             return
 
         try:
-            agent = await self.repository.get_agent(agent_id)
+            agent = await self.repository.get_or_sync_agent(user_id, agent_id)
             if not agent:
                 return
 
@@ -394,7 +394,7 @@ class SubconsciousMind:
                 prompt_template = "Analyze the user's emotional state from this transcript: '{text}'. Return a concise System Hint (max 15 words) starting with 'SYSTEM_HINT:'. If neutral, return exactly '[NEUTRAL]'."
 
                 if agent_id and self.repository:
-                    agent = await self.repository.get_agent(agent_id)
+                    agent = await self.repository.get_or_sync_agent(user_id, agent_id)
                     if agent and agent.memory_extraction_prompt:
                         prompt_template = agent.memory_extraction_prompt
 
@@ -473,7 +473,7 @@ class SubconsciousMind:
                     triggers = archetype.triggers
                 else:
                     # Priority 2: Agent Traits (The Individual)
-                    agent = await self.repository.get_agent(agent_id)
+                    agent = await self.repository.get_or_sync_agent(user_id, agent_id)
                     if agent and agent.traits and "emotional_triggers" in agent.traits:
                         triggers = agent.traits["emotional_triggers"]
                     else:
@@ -532,7 +532,7 @@ class SubconsciousMind:
                 )
 
                 if agent_id and self.repository:
-                    agent = await self.repository.get_agent(agent_id)
+                    agent = await self.repository.get_or_sync_agent(user_id, agent_id)
                     if agent and agent.dream_prompt:
                         prompt_template = agent.dream_prompt
 
