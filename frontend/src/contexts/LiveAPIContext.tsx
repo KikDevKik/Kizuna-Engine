@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
 import { createAudioBuffer } from '../utils/audioUtils';
+import { useAuth } from '../hooks/useAuth';
 // import type { ServerMessage } from '../types/websocket';
 
 export const isSessionActive = (status: string) => status === 'connected' || status === 'ready';
@@ -18,6 +19,7 @@ export interface UseLiveAPI {
 const LiveAPIContext = createContext<UseLiveAPI | undefined>(undefined);
 
 export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { getToken } = useAuth();
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'ready' | 'error'>('disconnected');
   const statusRef = useRef(status);
 
@@ -91,7 +93,11 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
     try {
       // Initialize WebSocket
       // Assuming localhost:8000 based on standard dev setup if proxy isn't configured
-      const wsUrl = `ws://localhost:8000/ws/live?agent_id=${agentId}`;
+      let wsUrl = `ws://localhost:8000/ws/live?agent_id=${agentId}`;
+      const token = await getToken();
+      if (token) {
+        wsUrl += `&token=${token}`;
+      }
       const ws = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
@@ -265,7 +271,7 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
       console.error('Connection failed:', err);
       setStatus('error');
     }
-  }, [disconnect]);
+  }, [disconnect, getToken]);
 
   const sendImage = useCallback((base64: string) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -282,7 +288,7 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
     return () => {
       disconnect();
     };
-  }, [disconnect]);
+  }, [disconnect, getToken]);
 
   const value = {
     connected,

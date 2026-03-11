@@ -66,9 +66,9 @@ class SessionManager:
 
         # Phase 3.2: Secure Identity (Lazy)
         try:
-            user_id = verify_user_logic(token)
+            user_id = await verify_user_logic(token)
         except Exception as e:
-            await websocket.close(code=1008, reason=str(e))
+            await websocket.close(code=4001, reason="Unauthorized")
             return
 
         logger.info(f"Attempting to accept websocket connection for {agent_id}...")
