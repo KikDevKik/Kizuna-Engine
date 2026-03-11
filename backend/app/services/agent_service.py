@@ -1,5 +1,6 @@
 import json
 import logging
+from .firestore_service import firestore_service
 import aiofiles
 import aiofiles.os
 import re
@@ -131,40 +132,45 @@ class AgentService:
             logger.error(f"Error resolving path for agent_id {agent_id}: {e}")
             return None
 
-    async def list_agents(self) -> List[AgentNode]:
+    async def list_agents(self, user_id: str) -> List[AgentNode]:
         """
-        Scans the agents directory and returns a list of AgentNode objects.
+        Scans the agents directory (or Firestore) and returns a list of AgentNode objects.
         """
         agents = []
-        # glob is synchronous, but fast enough for directory listing usually.
-        files = list(self.data_dir.glob("*.json"))
+        if not firestore_service.fallback_mode:
+            firestore_agents = await firestore_service.list_agents(user_id)
+            for data in firestore_agents:
+                try:
+                    agents.append(AgentNode(**data))
+                except Exception as e:
+                    logger.error(f"Error parsing agent from Firestore: {e}")
+            if agents:
+                return agents # Only return Firestore agents if they exist. Wait, actually we might still need to seed if empty.
 
+        # Fallback to local files (or if Firestore is empty and we want to seed?)
+        # Let's just use local files for listing in fallback mode
+        files = list(self.data_dir.glob("*.json"))
         for file_path in files:
             try:
                 async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                     content = await f.read()
                     data = json.loads(content)
-                    # Validate and parse with Pydantic
                     agent = AgentNode(**data)
                     agents.append(agent)
             except Exception as e:
-                logger.error(f"Failed to load agent from {file_path}: {e}")
+                logger.error(f"Failed to load agent {file_path.name}: {e}")
         return agents
 
-    async def get_agent(self, agent_id: str) -> Optional[AgentNode]:
-        """
-        Retrieves a specific agent by ID with Redis Caching (Cache-Aside).
-        """
-        # 1. Cache Check (Neural Sync)
-        cached_json = await cache.get(f"agent:{agent_id}")
-        if cached_json:
-            try:
-                data = json.loads(cached_json)
-                return AgentNode(**data)
-            except Exception as e:
-                logger.warning(f"Cache corruption for agent {agent_id}: {e}")
+    async def get_agent(self, user_id: str, agent_id: str) -> Optional[AgentNode]:
+        if not firestore_service.fallback_mode:
+            agent_data = await firestore_service.get_agent(user_id, agent_id)
+            if agent_data:
+                try:
+                    return AgentNode(**agent_data)
+                except Exception as e:
+                    logger.error(f"Failed to parse agent {agent_id} from Firestore: {e}")
+                    return None
 
-        # 2. Disk Read
         file_path = self._get_safe_path(agent_id)
         if not file_path or not file_path.exists():
             return None
@@ -175,28 +181,21 @@ class AgentService:
                 data = json.loads(content)
                 agent = AgentNode(**data)
 
-                # 3. Populate Cache (TTL 1 hour)
-                await cache.set(f"agent:{agent_id}", content, ttl=3600)
+                if not firestore_service.fallback_mode:
+                    await firestore_service.save_agent(user_id, agent_id, data)
+                    logger.info(f"Seeded agent {agent_id} to Firestore for user {user_id}")
+
                 return agent
         except Exception as e:
-            logger.error(f"Failed to load agent {agent_id}: {e}")
+            logger.error(f"Failed to read agent {agent_id} locally: {e}")
             return None
-
-    async def create_agent(self, name: str, role: str, base_instruction: str, voice_name: Optional[str] = None, traits: dict = None, tags: list = None, native_language: str = "Unknown", known_languages: list = None, neural_signature: dict = None) -> AgentNode:
+    async def create_agent(self, user_id: str, name: str, role: str, base_instruction: str, voice_name: Optional[str] = None, traits: dict = None, tags: list = None, native_language: str = "Unknown", known_languages: list = None, neural_signature: dict = None) -> AgentNode:
         """
-        Creates a new agent file and updates cache.
+        Creates a new agent, saves it to Firestore (or local JSON fallback), and returns it.
         """
-        agent_id = str(uuid4())
-
-        # Default neural signature if not provided (e.g., legacy call)
-        if neural_signature is None:
-             neural_signature = {
-                 "weights": {"volatility": 0.5, "hostility": 0.2, "curiosity": 0.5},
-                 "narrative": "A soul seeking purpose."
-             }
+        agent_id = str(uuid.uuid4())
 
         agent = AgentNode(
-            id=agent_id,
             name=name,
             role=role,
             base_instruction=base_instruction,
@@ -204,32 +203,46 @@ class AgentService:
             traits=traits or {},
             tags=tags or [],
             native_language=native_language,
-            known_languages=known_languages or [],
-            neural_signature=neural_signature
+            known_languages=known_languages or [native_language],
+            neural_signature=neural_signature or {}
         )
 
-        file_path = self.data_dir / f"{agent_id}.json"
+        # Enforce overrides
+        agent.role = role
+        agent.base_instruction = base_instruction
+
+        if not firestore_service.fallback_mode:
+            await firestore_service.save_agent(user_id, agent_id, agent.model_dump())
+            logger.info(f"Saved new agent {agent_id} to Firestore for user {user_id}")
+        else:
+            file_path = self._get_safe_path(agent_id)
+            if not file_path:
+                raise ValueError("Invalid agent ID.")
+
+            async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+                await f.write(agent.model_dump_json(indent=2))
+            logger.info(f"Saved new agent {agent_id} to local filesystem.")
+
+        return agent
+
+    async def delete_agent(self, user_id: str, agent_id: str) -> bool:
+        """
+        Deletes an agent by ID. Returns True if successful, False otherwise.
+        """
+        if not firestore_service.fallback_mode:
+            await firestore_service.delete_agent(user_id, agent_id)
+            logger.info(f"Deleted agent {agent_id} from Firestore for user {user_id}")
+            return True
+
+        file_path = self._get_safe_path(agent_id)
+        if not file_path or not file_path.exists():
+            return False
 
         try:
-            content = json.dumps(agent.model_dump(mode='json'), indent=4, ensure_ascii=False)
-            async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
-                await f.write(content)
-
-            # Update Cache
-            await cache.set(f"agent:{agent_id}", content, ttl=3600)
-
-            logger.info(f"Created new agent: {name} ({agent_id})")
-            return agent
+            file_path.unlink()
+            return True
         except Exception as e:
-            logger.error(f"Failed to create agent {name}: {e}")
-            raise
-
-    async def delete_agent(self, agent_id: str) -> bool:
-        """
-        Deletes an agent file by ID and invalidates cache.
-        """
-        file_path = self._get_safe_path(agent_id)
-        if not file_path:
+            logger.error(f"Failed to delete agent {agent_id} locally: {e}")
             return False
 
         if not file_path.exists():
@@ -248,21 +261,8 @@ class AgentService:
             raise
 
     async def warm_up_agents(self):
-        """Neural Sync: Preload all agents into Redis."""
-        logger.info("🔥 Warming up Agent Cache (Neural Sync)...")
-        files = list(self.data_dir.glob("*.json"))
-        count = 0
-        for file_path in files:
-            try:
-                async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
-                    content = await f.read()
-                    data = json.loads(content)
-                    agent = AgentNode(**data)
-                    await cache.set(f"agent:{agent.id}", content, ttl=3600)
-                    count += 1
-            except Exception as e:
-                logger.error(f"Failed to warm up agent {file_path}: {e}")
-        logger.info(f"🔥 Neural Sync Complete: {count} agents cached.")
+        """Neural Sync: Currently a no-op since agents are per-user in Firestore."""
+        logger.info("🔥 Neural Sync skipped: agents are now tenant-specific in Firestore.")
 
     async def forge_hollow_agent(self, aesthetic_description: str) -> Tuple[AgentNode, List[MemoryEpisodeNode]]:
         """

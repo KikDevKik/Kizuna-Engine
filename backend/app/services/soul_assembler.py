@@ -360,7 +360,7 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
     
     # 1. Fetch Agent & Config (Parallel)
     # We need agent for both parts.
-    agent = await repository.get_agent(agent_id)
+    agent = await repository.get_or_sync_agent(user_id, agent_id)
     if not agent:
         raise ValueError(f"Agent {agent_id} not found.")
 

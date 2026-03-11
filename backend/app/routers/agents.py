@@ -66,7 +66,7 @@ class RitualFlowResponse(BaseModel):
 
 @router.get("/", response_model=List[AgentNode])
 async def list_agents(
-    user_id: str = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
     """
@@ -74,7 +74,7 @@ async def list_agents(
     """
     try:
         # 1. Fetch all agents from filesystem
-        all_agents = await agent_service.list_agents()
+        all_agents = await agent_service.list_agents(current_user.uid)
 
         # 2. Fetch interaction edges for the current user
         # We need to find agents where an 'InteractedWith' edge exists with the user.
@@ -121,7 +121,7 @@ async def list_agents(
 
 @router.get("/strangers", response_model=List[StrangerNode])
 async def list_strangers(
-    user_id: str = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
     """
@@ -161,7 +161,7 @@ async def list_strangers(
             ))
 
         # 3. Fetch hollow-forged agents from filesystem (not yet in user's roster)
-        all_agents = await agent_service.list_agents()
+        all_agents = await agent_service.list_agents(current_user.uid)
         roster_edges = await repository.get_edges(source_id=user_id, type="interactedWith") if hasattr(repository, 'get_edges') else []
         roster_ids = {edge.target_id for edge in roster_edges}
         existing_ids = {r.id for r in results}
@@ -189,12 +189,13 @@ async def list_strangers(
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @router.post("/", response_model=AgentNode, status_code=status.HTTP_201_CREATED)
-async def create_agent(request: CreateAgentRequest):
+async def create_agent(request: CreateAgentRequest, current_user: dict = Depends(get_current_user)):
     """
     Create a new agent.
     """
     try:
         new_agent = await agent_service.create_agent(
+        user_id=current_user.uid,
             name=request.name,
             role=request.role,
             base_instruction=request.base_instruction,
@@ -212,7 +213,7 @@ async def create_agent(request: CreateAgentRequest):
 @router.post("/forge_hollow", response_model=AgentNode, status_code=status.HTTP_201_CREATED)
 async def forge_hollow_agent(
     request: HollowForgeRequest,
-    user_id: str = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
     """
@@ -225,6 +226,7 @@ async def forge_hollow_agent(
 
         # 2. Bind the Soul to Matter (Save File)
         saved_agent = await agent_service.create_agent(
+        user_id=current_user.uid,
             name=agent_node.name,
             role=agent_node.role,
             base_instruction=agent_node.base_instruction,
@@ -254,7 +256,7 @@ async def forge_hollow_agent(
         try:
             # Query for existing agents (candidates)
             # list_agents returns ALL agents.
-            all_agents = await agent_service.list_agents()
+            all_agents = await agent_service.list_agents(current_user.uid)
             candidates = [a for a in all_agents if a.id != saved_agent.id]
 
             if candidates:
@@ -307,7 +309,7 @@ async def delete_agent(
     """
     try:
         # 1. Fetch Agent (Cache/File)
-        agent = await agent_service.get_agent(agent_id)
+        agent = await agent_service.get_agent(current_user.uid, agent_id)
         if not agent:
              raise HTTPException(status_code=404, detail="Agent not found")
 
@@ -335,7 +337,7 @@ async def delete_agent(
                  raise HTTPException(status_code=403, detail="Hollow Preservation: This agent is a source of active rumors.")
 
         # 4. Proceed with Deletion
-        success = await agent_service.delete_agent(agent_id)
+        success = await agent_service.delete_agent(current_user.uid, agent_id)
         if not success:
             raise HTTPException(status_code=404, detail="Agent not found during deletion")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -352,7 +354,7 @@ async def conduct_ritual(
     response: Response,
     archetype: Optional[str] = None,
     accept_language: str = Header(default="en"),
-    user_id: str = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
     """
@@ -381,6 +383,7 @@ async def conduct_ritual(
                 traits["lore"] = data["lore"]
 
             new_agent = await agent_service.create_agent(
+        user_id=current_user.uid,
                 name=data.get("name", "Unnamed"),
                 role=data.get("role", "Unknown"),
                 base_instruction=data.get("base_instruction", ""),
