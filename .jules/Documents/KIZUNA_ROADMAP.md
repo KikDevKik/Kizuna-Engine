@@ -172,29 +172,30 @@ Implementación técnica:
 > - **Cloud Run viable** para sesiones de audio — timeout configurable hasta 60min, session affinity disponible. Límite hard a 60min por sesión.
 > - **Orden óptimo:** Auth+Multi-tenant → Estado Externo (Firestore+Grafo) → Cloud Run → Rate Limiting.
 
-### 8.1 — Migrar SQLite → Neo4j AuraDB 📋
+### 8.1 — Migrar SQLite → Neo4j AuraDB ✅
 > Decisión: Spanner descartado por costo. Neo4j AuraDB free tier cubre el caso de uso.
-- 📋 Crear cuenta Neo4j AuraDB (free tier perpetuo)
-- 📋 Reemplazar `LocalSoulRepository` con driver neo4j Python (`neo4j`)
-- 📋 Migrar edges (InteractedWith, OwesDebtTo, Gossip_Source, Nemesis) a relaciones Neo4j
-- 📋 Migrar nodes de agentes y KizunaChronicle
-- 📋 Reemplazar queries SQLite por Cypher queries
-- 📋 `user_id` de Firebase como scope de todos los nodos
+- ✅ Crear cuenta Neo4j AuraDB (free tier perpetuo)
+- ✅ `app/repositories/neo4j_graph.py` — Neo4jSoulRepository con misma interfaz que LocalSoulRepository (`neo4j`)
+- ✅ Edges migrados: InteractedWith, OwesDebtTo, Gossip_Source, Nemesis como relaciones Cypher
+- ✅ LocalSoulRepository actúa como facade — delega a Neo4j si NEO4J_URI está definida, SQLite como fallback
+- ✅ Driver asíncrono neo4j.AsyncGraphDatabase — compatible con pipeline FastAPI async
+- ✅ Todos los nodos scoped por user_id — purge_all_memories usa DETACH DELETE por user_id
 
-### 8.2 — Migrar JSON → Firestore 📋
-> Decisión: Firestore elegido. Estructura: `users/{userId}/agents/{agentId}`
-- 📋 Reemplazar `AgentService` JSON filesystem con Firestore SDK (`google-cloud-firestore`)
-- 📋 Estructura: `users/{userId}/agents/{agentId}` — aislamiento multi-tenant nativo
-- 📋 `get_or_sync_agent()` se vuelve obsoleto — eliminar
-- 📋 Migrar datos de `kizuna.json` y agentes creados al schema Firestore
+### 8.2 — Migrar JSON → Firestore ✅
+- ✅ `google-cloud-firestore` añadido a requirements.txt
+- ✅ `app/services/firestore_service.py` — cliente Firestore con fallback a filesystem local
+- ✅ `agent_service.py` — todas las lecturas/escrituras migradas a Firestore
+- ✅ `local_graph.py` — `get_or_sync_agent()` consulta Firestore primero
+- ✅ Seed lazy: primer `get_agent(user_id, "kizuna")` migra kizuna.json a Firestore
+- ✅ Fallback local activo si `GOOGLE_APPLICATION_CREDENTIALS` no está definida
 
-### 8.3 — Cloud Run Deployment 📋
+### 8.3 — Cloud Run Deployment ✅
 > Prerequisito: 8.1 y 8.2 completos — backend debe ser 100% stateless antes de desplegar.
-- 📋 Dockerfile para backend FastAPI
-- 📋 `--timeout=3600` (60min máximo para sesiones de audio)
-- 📋 Session affinity (best-effort) para WebSockets persistentes
-- 📋 Variables de entorno: FIREBASE_CREDENTIALS_PATH, NEO4J_URI, NEO4J_PASSWORD
-- 📋 ~80 conexiones simultáneas por instancia
+- ✅ Dockerfile — python:3.11-slim, puerto 8080, --workers 1
+- ✅ cloudbuild.yaml — Artifact Registry + Cloud Run deploy con --timeout=3600, --session-affinity, --min-instances=1
+- ✅ .dockerignore — excluye .env, *.db, credenciales, __pycache__
+- ✅ config.py extendido — NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, GOOGLE_APPLICATION_CREDENTIALS
+- ✅ .env.example documentado con todas las variables
 
 ### 8.4 — Firebase Auth ✅
 - ✅ `app/services/auth_service.py` — verificación de Firebase ID Token via Admin SDK
@@ -205,37 +206,43 @@ Implementación técnica:
 - ✅ `firebase-admin` añadido a `requirements.txt`
 - ✅ `user_id` dinámico reemplaza `guest_user` en session_manager, cache y parallel_brain
 
-### 8.5 — Monitoring y Observabilidad 📋
-- 📋 OpenTelemetry: trazas distribuidas
-- 📋 Métricas: TTFB, errores de sesión, tokens consumidos
+### 8.5 — Monitoring y Observabilidad ✅
+- ✅ OpenTelemetry con CloudTraceSpanExporter — ConsoleSpanExporter como fallback local
+- ✅ JsonFormatter en logger — logs estructurados compatibles con Cloud Logging
+- ✅ session_manager.py — duración de sesión y errores como métricas JSON en finally/except
+- ✅ /health endpoint limpio — {"status": "ok", "version": "1.0"}, sin llamadas a Firestore/Neo4j
 
-### 8.6 — Rate Limiting 📋
-> Implementar después de tener tráfico real observable en Cloud Run.
-- 📋 Por usuario (user_id de Firebase) en WebSocket
-- 📋 Quota management para Gemini API
-- 📋 Redis o reglas en balanceador de Cloud Run
+### 8.6 — Rate Limiting ✅
 
-### 8.7 — Multi-tenant 📋
-> Se completa junto con 8.1 y 8.2 — el aislamiento es consecuencia del user_id en Firestore y Neo4j.
-- 📋 KizunaChronicle por usuario real en Neo4j (scope por user_id)
-- 📋 Grafos de relaciones aislados por usuario
-- 📋 Cache de sesión aislado por user_id (ya parcialmente implementado)
+- ✅ slowapi — 60 req/min por user_id en todos los endpoints REST
+- ✅ Contador en memoria en session_manager — máximo 5 conexiones simultáneas por user_id
+- ✅ key_func extrae user_id desde Firebase Auth token — fallback a IP
 
-### 8.8 — Migración Pipeline Audio a Rust Nativo 📋
+### 8.7 — Multi-tenant ✅
+
+- ✅ KizunaChronicle migrado a Firestore: users/{userId}/chronicle/{entryId} — Chronicle eliminado de SQLite
+- ✅ Estructura Firestore: users/{userId}/agents/{agentId} — aislamiento nativo por usuario
+- 📋 Grafos de relaciones aislados por usuario (pendiente Neo4j — 8.1)
+- ✅ user_id de Firebase fluye por todo el stack — agent_service, local_graph, routers
+
+### 8.8 — Migración Pipeline Audio a Rust Nativo ✅
+> Investigación completada Marzo 2026. Stack confirmado con ajustes.
 > Alta complejidad. Encapsulada en Tauri/Rust.
 > Frontend React se simplifica — deja de manejar hardware de audio.
 > Fuente: Investigación Gemini Deep Thinking, Marzo 2026.
 
-- 📋 Eliminar `getUserMedia()` del AudioWorklet
-- 📋 `cpal 0.17+`: captura micrófono nativa multiplataforma
-- 📋 WASAPI Loopback (Windows): captura audio del sistema — Kizuna escucha el PC
-- 📋 `aec3-rs`: Cancelación acústica de eco AEC3 (port WebRTC)
-- 📋 `ringbuf`: buffers circulares lock-free para sync de hilos
-- 📋 `dagc` / `sonora-agc2`: Auto-Gain Control — normalización de volumen
-- 📋 Jitter buffer adaptativo 60-100ms (rodio/cpal) — reproducción suave
-- 📋 Phase Vocoder (`rssignalsmithdsp`): mitigación VOICE-01
-- 📋 Piper TTS (ONNX, 22MB RAM): fallback local si Gemini latencia >2s
-- 📋 `tungstenite`: WebSocket nativo Rust → backend Python
+- ✅ getUserMedia() y AudioWorklet eliminados de React
+- ✅ cpal 0.17.3 — captura micrófono + reproducción de audio de respuesta
+- ✅ WASAPI Loopback Windows via wasapi crate — señal de referencia para AEC
+- ✅ aec3 0.1.5 — AEC activo en Windows, graceful degrade en macOS/Linux
+- ✅ ringbuf 0.4.9 — buffer SPSC entre hilo de captura y procesador
+- ✅ tokio-tungstenite 0.26 — WebSocket Rust bidireccional (subida PCM + bajada audio respuesta)
+- ✅ start_audio_pipeline(config) y stop_audio_pipeline() como comandos Tauri
+- ✅ useLiveAPI.ts migrado — llama comandos Tauri, escucha eventos audio_connected/disconnected/error
+- 📋 Piper TTS subprocess — pendiente para iteración futura
+
+
+
 - 📋 **Nota Linux:** loopback requiere config manual PipeWire/PulseAudio
 
 ### 8.9 — AUDIO-01: Canal Paralelo (Doble Cerebro) 📋
@@ -402,20 +409,16 @@ Este es el cambio arquitectónico más profundo del roadmap — implica rediseñ
 | Bloque 1 | ✅ | Barge-in, Habla Natural, The Void, Multilingüe |
 | Bloque 2 | ✅ | System Tray, Canal Paralelo AUDIO-01 |
 | Bloque 3 | ✅ | Frame narrativo SEÑAL EXTERNA, VAD 1500ms, Engine como origen no tema |
-| Bloque 4 | 📋 | Fase 8 — Infraestructura de producción |
+| Fase 8 Track A | ✅ | Firebase Auth, Firestore, Neo4j, Cloud Run, Monitoring, Rate Limiting, Multi-tenant |
+| Fase 8 Track B | ✅ | Audio Rust nativo — cpal, AEC3, ringbuf, tokio-tungstenite, WASAPI |
+| 8.X — UI Rediseño | 📋 | Círculos Discord-style (diseño con Stitch, implementación antes de Fase 9) |
+| Fase 9 | 📋 | Multi-agente — Distrito Cero |
 
 ### Próximos pasos inmediatos (en orden)
 
-1. **8.7 — Multi-tenant** — completar junto con 8.1 y 8.2 (ya tiene base con Firebase Auth)
-2. **8.2 — Firestore** — migrar JSON filesystem de agentes
-3. **8.1 — Neo4j AuraDB** — migrar SQLite + grafo de relaciones
-4. **8.3 — Cloud Run** — desplegar solo cuando backend sea 100% stateless
-5. **8.5 — Monitoring** — observabilidad en producción
-6. **8.6 — Rate Limiting** — después de tráfico real observable
-7. **8.8 — Audio Rust** — Track B paralelo, puede avanzar independientemente
-8. **8.X — UI Rediseño** — círculos Discord-style (diseño con Stitch, implementación post-Fase 8)
-9. **Fase 9** — multi-agente
+1. **8.X — UI Rediseño** — diseño con Stitch completado, implementar nueva UI antes de Fase 9
+2. **Fase 9** — multi-agente: Auction MARL, 6 agentes simultáneos, emotional contagion
 
 ---
 
-*Roadmap actualizado: 11 de Marzo de 2026 | El Cronista*
+*Roadmap actualizado: 12 de Marzo de 2026 | El Cronista*
