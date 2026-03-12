@@ -11,10 +11,15 @@ def setup_telemetry(app):
     # Initialize TracerProvider
     provider = TracerProvider()
 
-    # Configure exporter based on environment
-    if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-        from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-        exporter = CloudTraceSpanExporter()
+    # On Cloud Run, ADC is available automatically — no credential file needed.
+    # Locally (no GCP_PROJECT_ID), fall back to ConsoleSpanExporter.
+    if os.environ.get("GCP_PROJECT_ID"):
+        try:
+            from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+            exporter = CloudTraceSpanExporter()
+        except Exception:
+            # ADC not available or library missing — degrade gracefully
+            exporter = ConsoleSpanExporter()
     else:
         exporter = ConsoleSpanExporter()
 

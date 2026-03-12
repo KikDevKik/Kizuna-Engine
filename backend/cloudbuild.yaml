@@ -34,7 +34,7 @@ steps:
       - '1'
       # The environment variables are set as secrets in Cloud Run, do not hardcode them.
       - '--set-secrets'
-      - 'FIREBASE_CREDENTIALS=firebase-credentials:latest,GOOGLE_APPLICATION_CREDENTIALS=google-application-credentials:latest,NEO4J_URI=neo4j-uri:latest,NEO4J_USERNAME=neo4j-username:latest,NEO4J_PASSWORD=neo4j-password:latest,GEMINI_API_KEY=gemini-api-key:latest'
+      - 'FIREBASE_CREDENTIALS=FIREBASE_CREDENTIALS:latest,NEO4J_URI=NEO4J_URI:latest,NEO4J_USERNAME=NEO4J_USERNAME:latest,NEO4J_PASSWORD=NEO4J_PASSWORD:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest'
 
 images:
   - 'gcr.io/$PROJECT_ID/kizuna-engine'
