@@ -33,6 +33,9 @@ class SessionManager:
     Encapsulates authentication, agent retrieval, Gemini connection, and cleanup.
     """
 
+    # In-memory counter for rate limiting WebSocket connections
+    _active_connections: dict[str, int] = {}
+
     def __init__(self, soul_repo: SoulRepository, sleep_manager: SleepManager, time_skip_service: TimeSkipService):
         self.soul_repo = soul_repo
         self.sleep_manager = sleep_manager
@@ -73,6 +76,16 @@ class SessionManager:
         except Exception as e:
             await websocket.close(code=4001, reason="Unauthorized")
             return
+
+        # Rate Limiting: Max 5 concurrent connections per user
+        current_connections = self.__class__._active_connections.get(user_id, 0)
+        if current_connections >= 5:
+            logger.warning(f"Rate limit exceeded: User {user_id} has {current_connections} active connections.")
+            await websocket.close(code=4029, reason="rate_limit_exceeded")
+            return
+
+        # Increment connection counter
+        self.__class__._active_connections[user_id] = current_connections + 1
 
         logger.info(f"Attempting to accept websocket connection for {agent_id}...")
         try:
@@ -361,6 +374,11 @@ class SessionManager:
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             }))
         finally:
+            # Decrement connection counter
+            if 'user_id' in locals():
+                current_conns = self.__class__._active_connections.get(user_id, 1)
+                self.__class__._active_connections[user_id] = max(0, current_conns - 1)
+
             # MODULE 1: CLEANUP COGNITIVE TASKS
             # Ensure background tasks are killed when the session ends.
             # This MUST be in the outer finally block to catch CancelledError from parent.

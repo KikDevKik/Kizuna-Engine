@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Request
+from app.core.rate_limiter import limiter, HTTPException, Depends
 from app.repositories.base import SoulRepository
 from app.repositories.local_graph import LocalSoulRepository
 from app.dependencies import get_repository, get_current_user
@@ -9,8 +10,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/system", tags=["System Control"])
 
+@limiter.limit("60/minute")
 @router.get("/config", response_model=SystemConfigNode)
-async def get_system_config(
+async def get_system_config(request: Request,
     repo: SoulRepository = Depends(get_repository),
     current_user: str = Depends(get_current_user)
 ):
@@ -23,8 +25,9 @@ async def get_system_config(
         logger.error(f"Failed to fetch system config: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@limiter.limit("60/minute")
 @router.put("/config", response_model=SystemConfigNode)
-async def update_system_config(
+async def update_system_config(request: Request,
     config: SystemConfigNode,
     repo: SoulRepository = Depends(get_repository),
     current_user: str = Depends(get_current_user)
@@ -39,8 +42,9 @@ async def update_system_config(
         logger.error(f"Failed to update system config: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@limiter.limit("60/minute")
 @router.delete("/purge-memories")
-async def purge_memories(
+async def purge_memories(request: Request,
     repo: SoulRepository = Depends(get_repository),
     current_user: str = Depends(get_current_user)
 ):

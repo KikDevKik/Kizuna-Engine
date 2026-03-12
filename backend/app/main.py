@@ -20,6 +20,8 @@ from app.routers import warmup, agents, bio, system, graph
 from app.dependencies import soul_repo
 from core.config import settings
 from app.core.telemetry import configure_json_logging, setup_telemetry
+from slowapi.errors import RateLimitExceeded
+from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 
 # Creamos la maldita libreta de Jules
 configure_json_logging()
@@ -88,6 +90,10 @@ app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=li
 
 # Configure OpenTelemetry
 setup_telemetry(app)
+
+# Register Rate Limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # Register Routers (Phase 5)
 app.include_router(warmup.router)
