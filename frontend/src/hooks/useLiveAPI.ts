@@ -1,455 +1,236 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import type { ServerMessage } from '../types/websocket';
-import { getWebSocketUrl } from '../utils/connection';
-import { AudioStreamManager } from '../utils/AudioStreamManager';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
-export const isSessionActive = (status: string) => status === 'connected' || status === 'ready';
+export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'ready' | 'error';
+
+interface ServerMessage {
+    type: string;
+    data?: string;
+    action?: string;
+    reason?: string;
+    url?: string;
+}
 
 export interface UseLiveAPI {
-  connected: boolean;
-  status: 'disconnected' | 'connecting' | 'connected' | 'ready' | 'error';
-  isAiSpeaking: boolean;
-  isSevered: boolean;
-  severanceReason: string | null;
-  volumeRef: React.MutableRefObject<number>;
-  lastAiMessage: string | null;
-  connect: (agentId: string) => Promise<void>;
-  disconnect: () => void;
-  sendImage: (base64: string) => void;
-  addSystemAudio: (track: MediaStreamTrack) => void;
-  removeSystemAudio: () => void;
+    connected: boolean;
+    status: ConnectionState;
+    isAiSpeaking: boolean;
+    isSevered: boolean;
+    severanceReason: string | null;
+    volumeRef: React.MutableRefObject<number>;
+    lastAiMessage: string | null;
+    connect: (agentId: string) => Promise<void>;
+    disconnect: () => Promise<void>;
+    sendImage: (base64: string) => Promise<void>;
+    addSystemAudio: (track: MediaStreamTrack) => void;
+    removeSystemAudio: () => void;
 }
 
 export const useLiveAPI = (): UseLiveAPI => {
-  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'ready' | 'error'>('disconnected');
-  const statusRef = useRef(status);
+    const [connected, setConnected] = useState(false);
+    const [status, setStatus] = useState<ConnectionState>('idle');
+    const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+    const [lastAiMessage, setLastAiMessage] = useState<string | null>(null);
+    const [isSevered, setIsSevered] = useState(false);
+    const [severanceReason, setSeveranceReason] = useState<string | null>(null);
 
-  useEffect(() => {
-    statusRef.current = status;
-  }, [status]);
-  const [connected, setConnected] = useState(false);
-  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
-  const [lastAiMessage, setLastAiMessage] = useState<string | null>(null);
-  const [isSevered, setIsSevered] = useState(false);
-  const [severanceReason, setSeveranceReason] = useState<string | null>(null);
+    const volumeRef = useRef(0);
+    const currentAgentId = useRef<string | null>(null);
+    const shouldReconnect = useRef(false);
+    const statusRef = useRef<ConnectionState>('idle');
+    const unlistenFns = useRef<Array<() => void>>([]);
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const audioManagerRef = useRef<AudioStreamManager | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null); // TRUE ECHO: Native Speech Recognition
-  const volumeRef = useRef<number>(0);
-  const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Forgemaster Upgrades
-  const lastFrameTime = useRef<number>(0);
-  const currentAgentId = useRef<string | null>(null);
-  const shouldReconnect = useRef<boolean>(false);
-  const reconnectAttempts = useRef<number>(0);
-  const connectRef = useRef<((id: string) => Promise<void>) | null>(null);
-
-  const disconnect = useCallback(() => {
-    console.log('Disconnecting Live API...');
-    shouldReconnect.current = false; // Prevent auto-reconnect
-
-    if (connectionTimeoutRef.current) {
-      clearTimeout(connectionTimeoutRef.current);
-      connectionTimeoutRef.current = null;
-    }
-
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-
-    if (audioManagerRef.current) {
-      audioManagerRef.current.cleanup();
-      audioManagerRef.current = null;
-    }
-
-    // Stop Speech Recognition
-    if (recognitionRef.current) {
-      recognitionRef.current.onend = null;
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
-
-    setStatus('disconnected');
-    setConnected(false);
-    setIsAiSpeaking(false);
-  }, []);
-
-  // TRUE ECHO PROTOCOL: Native Browser Speech Recognition
-  useEffect(() => {
-    if (connected && wsRef.current) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = false;
-        recognition.lang = 'en-US';
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        recognition.onresult = (event: any) => {
-          const lastResult = event.results[event.results.length - 1];
-          if (lastResult.isFinal) {
-            const transcript = lastResult[0].transcript;
-            console.log("True Echo Transcript:", transcript);
-
-            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({
-                type: "native_transcript",
-                text: transcript
-              }));
-            }
-          } else if (!lastResult.isFinal) {
-            // Interim result - User is likely speaking
-            // Sovereign Voice: Check volume or assume speaking
-            if (volumeRef.current > 0.05) {
-              // Debounce if needed, but for barge-in, speed is key.
-              // audioManagerRef.current?.flush(); // We do this on audio input event mainly
-            }
-          }
-        };
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        recognition.onerror = (event: any) => {
-          // benign errors like 'no-speech' are common
-          if (event.error !== 'no-speech') {
-            console.error("Speech recognition error:", event.error);
-          }
-        };
-
-        recognition.onend = () => {
-          // Auto-restart if still connected
-          // Check connected state via ref or relying on closure, but connected is in dependency array
-          // so this effect runs on change.
-          // We can check wsRef.current state.
-          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            try {
-              recognition.start();
-            } catch {
-              // Ignore if already started
-            }
-          }
-        };
+    const disconnect = useCallback(async () => {
+        console.log("🛑 Disconnecting and cleaning up audio pipeline...");
+        shouldReconnect.current = false;
 
         try {
-          recognition.start();
-          recognitionRef.current = recognition;
-          console.log("True Echo Protocol: Listening...");
+            await invoke('stop_audio_pipeline');
         } catch (e) {
-          console.error("Failed to start SpeechRecognition:", e);
-        }
-      } else {
-        console.warn("True Echo Protocol: Browser does not support SpeechRecognition.");
-      }
-    } else {
-      // Cleanup if connected becomes false (handled by disconnect too, but safe here)
-      if (recognitionRef.current) {
-        recognitionRef.current.onend = null;
-        recognitionRef.current.stop();
-        recognitionRef.current = null;
-      }
-    }
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.onend = null;
-        recognitionRef.current.stop();
-        recognitionRef.current = null;
-      }
-    };
-  }, [connected]);
-
-  const connect = useCallback(async (agentId: string) => {
-    if (!agentId) return;
-
-    // Forgemaster: Setup Reconnection State
-    currentAgentId.current = agentId;
-    shouldReconnect.current = true;
-    reconnectAttempts.current = 0;
-
-    // Cleanup any existing connection
-    // Note: disconnect() sets shouldReconnect to false, so we must reset it after.
-    disconnect();
-    shouldReconnect.current = true;
-    setIsSevered(false);
-    setSeveranceReason(null);
-
-    setStatus('connecting');
-
-    // 15s Connection Timeout
-    connectionTimeoutRef.current = setTimeout(() => {
-      console.error("Connection timed out (15s). Backend may be slow or unresponsive.");
-      if (wsRef.current && wsRef.current.readyState !== WebSocket.OPEN) {
-        wsRef.current.close();
-      }
-      setStatus('error');
-    }, 15000);
-
-    try {
-      // Initialize WebSocket
-      const userLang = navigator.language || 'en';
-      const wsUrl = getWebSocketUrl(agentId, userLang);
-      const ws = new WebSocket(wsUrl);
-      ws.binaryType = 'arraybuffer';
-      wsRef.current = ws;
-
-      ws.onopen = async () => {
-        console.log('WebSocket Connected');
-        if (connectionTimeoutRef.current) {
-          clearTimeout(connectionTimeoutRef.current);
-          connectionTimeoutRef.current = null;
+            console.error("Failed to stop audio pipeline:", e);
         }
 
-        // Reset reconnect attempts on successful connection
-        reconnectAttempts.current = 0;
+        for (const unlisten of unlistenFns.current) {
+            unlisten();
+        }
+        unlistenFns.current = [];
+
+        setConnected(false);
+        setIsAiSpeaking(false);
+        setStatus('idle');
+        statusRef.current = 'idle';
+        currentAgentId.current = null;
+        setSeveranceReason(null);
+        setIsSevered(false);
+    }, []);
+
+    const setupListeners = useCallback(async () => {
+        // Clear previous listeners just in case
+        for (const unlisten of unlistenFns.current) {
+            unlisten();
+        }
+        unlistenFns.current = [];
+
+        const unlistenConnected = await listen('audio_connected', () => {
+            console.log('Rust Audio Pipeline Connected');
+            setStatus('connected');
+            setConnected(true);
+            statusRef.current = 'connected';
+            // We can assume it's ready once connected since Rust handles audio init immediately
+            setStatus('ready');
+            statusRef.current = 'ready';
+        });
+
+        const unlistenDisconnected = await listen('audio_disconnected', () => {
+            console.log('Rust Audio Pipeline Disconnected');
+            if (shouldReconnect.current) {
+                // Here we could implement reconnect logic by calling connect again
+                // For now, let's just mark as disconnected.
+                setConnected(false);
+                setStatus('idle');
+                statusRef.current = 'idle';
+            } else {
+                disconnect();
+            }
+        });
+
+        const unlistenError = await listen<string>('audio_error', (event) => {
+            console.error('Rust Audio Pipeline Error:', event.payload);
+            setStatus('error');
+            statusRef.current = 'error';
+            disconnect();
+        });
+
+        const unlistenMessage = await listen<string>('ws_message_received', (event) => {
+            try {
+                const message = JSON.parse(event.payload) as ServerMessage;
+
+                if (message.type === 'session_ready') {
+                    setStatus('ready');
+                    statusRef.current = 'ready';
+                } else if (message.type === 'text') {
+                    setLastAiMessage(message.data || null);
+                } else if (message.type === 'turn_complete') {
+                    setIsAiSpeaking(false);
+                } else if (message.type === 'control' || message.type === 'CONTROL') {
+                    if (message.action === 'hangup') {
+                        console.warn(`Server initiated hangup: ${message.reason}`);
+                        setSeveranceReason(message.reason || "Connection Terminated by Host");
+                        setIsSevered(true);
+                        shouldReconnect.current = false;
+                        disconnect();
+                    } else if (message.action === 'FLUSH_AUDIO') {
+                        setIsAiSpeaking(false);
+                    }
+                } else if (message.type === 'action' && message.action === 'open_url') {
+                    const url = message.url;
+                    if (url) {
+                        import('@tauri-apps/plugin-opener')
+                            .then(({ openUrl }) => openUrl(url))
+                            .catch((e: unknown) => console.error('openUrl FAILED:', e));
+                    }
+                }
+            } catch (e) {
+                console.error("Error processing text message from Rust:", e);
+            }
+        });
+
+        unlistenFns.current = [
+            unlistenConnected,
+            unlistenDisconnected,
+            unlistenError,
+            unlistenMessage
+        ];
+    }, [disconnect]);
+
+    const connect = useCallback(async (agentId: string) => {
+        if (!agentId) return;
+
+        currentAgentId.current = agentId;
+        shouldReconnect.current = true;
+
+        await disconnect();
+        shouldReconnect.current = true;
+        setIsSevered(false);
+        setSeveranceReason(null);
+        setStatus('connecting');
+        statusRef.current = 'connecting';
+
+        await setupListeners();
 
         try {
-          // Initialize Audio Manager
-          audioManagerRef.current = new AudioStreamManager(
-            volumeRef,
-            (data: ArrayBuffer) => {
-              // This callback runs when the AudioWorklet produces data (User Speaking)
+            const userLang = navigator.language || 'en';
+            // Hardcode token for now, or extract from where it usually comes from.
+            // In a real app, this should come from auth state.
+            const token = localStorage.getItem('token') || 'dev_token';
 
-              // 1. Send Audio to Backend
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(data);
-              }
-
-              // 2. SOVEREIGN VOICE: Barge-in Logic
-              // If volume > threshold, interrupt playback locally
-              if (volumeRef.current > 0.05 && isAiSpeaking) {
-                console.log("🛑 Sovereign Voice: User Interruption Detected!");
-                // A. Stop Local Playback
-                audioManagerRef.current?.flush();
-                setIsAiSpeaking(false);
-
-                // B. Send Explicit Interrupt Signal (Optional but robust)
-                // Backend will also trigger on 'data' flow, but this is cleaner.
-                if (ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({
-                    type: "control",
-                    action: "interrupt"
-                  }));
-                }
-              }
-            },
-            (payload: any) => {
-              // Handle non-audio messages (like end_of_turn)
-              if (payload && payload.type === 'end_of_turn') {
-                if (ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({ type: 'end_of_turn' }));
-                }
-              }
-            }
-          );
-
-          await audioManagerRef.current.start();
-
-          setStatus('connected');
-          setConnected(true);
+            await invoke('start_audio_pipeline', {
+                agentId,
+                lang: userLang,
+                token
+            });
 
         } catch (err) {
-          console.error('Error initializing audio:', err);
-          setStatus('error');
-          disconnect();
-        }
-      };
-
-      ws.onmessage = async (event) => {
-        try {
-          // 1. Binary Audio Data
-          if (event.data instanceof ArrayBuffer) {
-            setIsAiSpeaking(true);
-
-            if (audioManagerRef.current) {
-              audioManagerRef.current.playAudioChunk(event.data);
-            }
-            return;
-          }
-
-          // 2. Text / Control Messages
-          if (typeof event.data === 'string') {
-            let message: ServerMessage;
-            try {
-              message = JSON.parse(event.data) as ServerMessage;
-            } catch (parseErr) {
-              console.error("❌ Failed to parse server message:", event.data, parseErr);
-              return;
-            }
-
-            if (message.type === 'session_ready') {
-              setStatus('ready');
-              statusRef.current = 'ready'; // Update ref immediately
-              console.log('✅ Session ready - mic activated');
-            } else if (message.type === 'text') {
-              setLastAiMessage(message.data);
-            } else if (message.type === 'turn_complete') {
-              console.log("Turn complete signal received.");
-              setIsAiSpeaking(false);
-            } else if (message.type === 'control' || message.type === 'CONTROL') {
-              // Phase 4: Handle Server-Side Control Messages (e.g. Hangup)
-              if (message.action === 'hangup') {
-                console.warn(`Server initiated hangup: ${message.reason}`);
-                setSeveranceReason(message.reason || "Connection Terminated by Host");
-                setIsSevered(true);
-                shouldReconnect.current = false;
-                // Let onclose handle the cleanup, but prevent auto-reconnect
-              } else if (message.action === 'FLUSH_AUDIO') {
-                // Parar reproducción inmediatamente y limpiar cualquier audio en cola
-                audioManagerRef.current?.flush();
-                setIsAiSpeaking(false);
-                console.log('🤚 Barge-in: audio flushed');
-                return;
-              }
-            } else if (message.type === 'action' && message.action === 'open_url') {
-              const url = message.url as string;
-              console.log(`[LiveAPI] Computer Use: opening → ${url}`);
-              if (url) {
-                import('@tauri-apps/plugin-opener')
-                  .then(({ openUrl }) => openUrl(url))
-                  .then(() => console.log('[LiveAPI] openUrl success'))
-                  .catch((e: unknown) => console.error('[LiveAPI] openUrl FAILED:', e));
-              }
-            }
-          }
-        } catch (e) {
-          console.error("Error processing message", e);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket error event fired:', error);
-        if (connectionTimeoutRef.current) {
-          clearTimeout(connectionTimeoutRef.current);
-          connectionTimeoutRef.current = null;
-        }
-        // Don't set status here, let onclose handle it
-      };
-
-      ws.onclose = (event) => {
-        console.log(`WebSocket closed: Code=${event.code}, Reason='${event.reason}', WasClean=${event.wasClean}`);
-        if (connectionTimeoutRef.current) {
-          clearTimeout(connectionTimeoutRef.current);
-          connectionTimeoutRef.current = null;
-        }
-
-        // Silent Grace: Auto-Reconnect logic
-        if (shouldReconnect.current) {
-          console.warn(`Abnormal closure. Attempting silent reconnection... (Attempt ${reconnectAttempts.current + 1})`);
-
-          // Clean up resources locally without triggering full disconnect logic that wipes state
-          if (wsRef.current) { wsRef.current = null; }
-          if (audioManagerRef.current) { audioManagerRef.current.cleanup(); audioManagerRef.current = null; }
-
-          setConnected(false);
-          setIsAiSpeaking(false);
-          setStatus('connecting'); // Keep UI in "connecting" state
-
-          // Backoff: 1s, 2s, 4s, 8s, 10s
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000);
-
-          if (reconnectAttempts.current < 5) {
-            reconnectAttempts.current += 1;
-            setTimeout(() => {
-              if (currentAgentId.current && shouldReconnect.current && connectRef.current) {
-                // Recursive call safely via closure using ref
-                connectRef.current(currentAgentId.current);
-              }
-            }, delay);
-          } else {
-            console.error("Max reconnection attempts reached.");
+            console.error('Failed to start audio pipeline:', err);
             setStatus('error');
-            shouldReconnect.current = false;
-          }
-        } else {
-          // Normal disconnect
-          disconnect();
+            statusRef.current = 'error';
+            disconnect();
         }
-      };
+    }, [disconnect, setupListeners]);
 
-    } catch (err) {
-      console.error('Connection failed (catch clause):', err);
-      if (connectionTimeoutRef.current) {
-        clearTimeout(connectionTimeoutRef.current);
-        connectionTimeoutRef.current = null;
-      }
-      setStatus('error');
-    }
-  }, [disconnect]);
+    const sendImage = useCallback(async (base64: string) => {
+        if (connected && status === 'ready') {
+            const payload = JSON.stringify({
+                type: "image",
+                data: base64
+            });
+            try {
+                await invoke('send_ws_message', { payload });
+            } catch (e) {
+                console.error("Failed to send image via WS:", e);
+            }
+        }
+    }, [connected, status]);
 
-  const sendImage = useCallback((base64: string) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      // Forgemaster: Visual Heartbeat (2s throttle)
-      const now = Date.now();
-      if (now - lastFrameTime.current < 2000) {
-        return;
-      }
-      lastFrameTime.current = now;
+    const addSystemAudio = useCallback((_track: MediaStreamTrack) => {
+        console.warn("System audio mixing is now handled by Rust (WASAPI Loopback on Windows). This JS function is a no-op.");
+    }, []);
 
-      const payload = {
-        type: "image",
-        data: base64
-      };
-      wsRef.current.send(JSON.stringify(payload));
-    }
-  }, []);
+    const removeSystemAudio = useCallback(() => {
+        console.warn("System audio mixing is now handled by Rust. This JS function is a no-op.");
+    }, []);
 
-  const addSystemAudio = useCallback((track: MediaStreamTrack) => {
-    if (audioManagerRef.current) {
-      audioManagerRef.current.addSystemAudioTrack(track);
-    } else {
-      console.warn("Audio Manager not initialized. Cannot add system audio.");
-    }
-  }, []);
+    useEffect(() => {
+        return () => {
+            disconnect();
+        };
+    }, [disconnect]);
 
-  const removeSystemAudio = useCallback(() => {
-    if (audioManagerRef.current) {
-      audioManagerRef.current.removeSystemAudioTrack();
-    }
-  }, []);
-
-  // Keep connectRef up to date
-  useEffect(() => {
-    connectRef.current = connect;
-  }, [connect]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      disconnect();
-    };
-  }, [disconnect]);
-
-  // Optimization: Memoize return value to prevent re-renders of consuming components (App, etc.)
-  // when internal state (like refs) hasn't changed.
-  return useMemo(() => ({
-    connected,
-    status,
-    isAiSpeaking,
-    isSevered,
-    severanceReason,
-    volumeRef,
-    lastAiMessage,
-    connect,
-    disconnect,
-    sendImage,
-    addSystemAudio,
-    removeSystemAudio
-  }), [
-    connected,
-    status,
-    isAiSpeaking,
-    isSevered,
-    severanceReason,
-    lastAiMessage,
-    connect,
-    disconnect,
-    sendImage,
-    addSystemAudio,
-    removeSystemAudio
-  ]);
+    return useMemo(() => ({
+        connected,
+        status,
+        isAiSpeaking,
+        isSevered,
+        severanceReason,
+        volumeRef,
+        lastAiMessage,
+        connect,
+        disconnect,
+        sendImage,
+        addSystemAudio,
+        removeSystemAudio
+    }), [
+        connected,
+        status,
+        isAiSpeaking,
+        isSevered,
+        severanceReason,
+        lastAiMessage,
+        connect,
+        disconnect,
+        sendImage,
+        addSystemAudio,
+        removeSystemAudio
+    ]);
 };
