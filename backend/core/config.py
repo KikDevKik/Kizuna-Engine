@@ -59,6 +59,15 @@ class Settings:
     SPANNER_DATABASE_ID: str = os.getenv("SPANNER_DATABASE_ID", "")
     FIREBASE_CREDENTIALS: str = os.getenv("FIREBASE_CREDENTIALS", "") # Path to JSON or JSON content
 
+    # Neo4j Graph Database Configuration
+    NEO4J_URI: str | None = os.getenv("NEO4J_URI", None)
+    NEO4J_USERNAME: str | None = os.getenv("NEO4J_USERNAME", None)
+    NEO4J_PASSWORD: str | None = os.getenv("NEO4J_PASSWORD", None)
+
+    # Google Cloud Application Credentials (for Firestore)
+    GOOGLE_APPLICATION_CREDENTIALS: str | None = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", None)
+
+
     # Redis Configuration (Phase 5)
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
