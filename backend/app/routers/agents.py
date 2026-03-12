@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, status, Response, Header, Depends
+from fastapi import APIRouter, Request
+from app.core.rate_limiter import limiter, HTTPException, status, Response, Header, Depends
 from typing import List, Optional, Any
 from pydantic import BaseModel, Field, field_validator
 import logging
@@ -64,8 +65,9 @@ class RitualFlowResponse(BaseModel):
     message: Optional[str] = None
     agent: Optional[AgentNode] = None
 
+@limiter.limit("60/minute")
 @router.get("/", response_model=List[AgentNode])
-async def list_agents(
+async def list_agents(request: Request,
     current_user: dict = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
@@ -119,8 +121,9 @@ async def list_agents(
         logger.exception("Error listing agents")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+@limiter.limit("60/minute")
 @router.get("/strangers", response_model=List[StrangerNode])
-async def list_strangers(
+async def list_strangers(request: Request,
     current_user: dict = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
@@ -188,31 +191,33 @@ async def list_strangers(
         logger.exception("Error listing strangers")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+@limiter.limit("60/minute")
 @router.post("/", response_model=AgentNode, status_code=status.HTTP_201_CREATED)
-async def create_agent(request: CreateAgentRequest, current_user: dict = Depends(get_current_user)):
+async def create_agent(request: Request, body: CreateAgentRequest, current_user: dict = Depends(get_current_user)):
     """
     Create a new agent.
     """
     try:
         new_agent = await agent_service.create_agent(
         user_id=current_user.uid,
-            name=request.name,
-            role=request.role,
-            base_instruction=request.base_instruction,
-            voice_name=request.voice_name,
-            traits=request.traits,
-            tags=request.tags,
-            native_language=request.native_language,
-            known_languages=request.known_languages
+            name=body.name,
+            role=body.role,
+            base_instruction=body.base_instruction,
+            voice_name=body.voice_name,
+            traits=body.traits,
+            tags=body.tags,
+            native_language=body.native_language,
+            known_languages=body.known_languages
         )
         return new_agent
     except Exception as e:
-        logger.exception(f"Error creating agent '{request.name}'")
+        logger.exception(f"Error creating agent '{body.name}'")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+@limiter.limit("60/minute")
 @router.post("/forge_hollow", response_model=AgentNode, status_code=status.HTTP_201_CREATED)
-async def forge_hollow_agent(
-    request: HollowForgeRequest,
+async def forge_hollow_agent(request: Request,
+    body: HollowForgeRequest,
     current_user: dict = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
@@ -222,7 +227,7 @@ async def forge_hollow_agent(
     """
     try:
         # 1. Forge the Soul (Generate Content)
-        agent_node, memories = await agent_service.forge_hollow_agent(request.aesthetic_description)
+        agent_node, memories = await agent_service.forge_hollow_agent(body.aesthetic_description)
 
         # 2. Bind the Soul to Matter (Save File)
         saved_agent = await agent_service.create_agent(
@@ -298,8 +303,9 @@ async def forge_hollow_agent(
         logger.exception(f"Error forging hollow agent")
         raise HTTPException(status_code=500, detail="Soul Forge Malfunction")
 
+@limiter.limit("60/minute")
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_agent(
+async def delete_agent(request: Request,
     agent_id: str,
     repository: SoulRepository = Depends(get_repository)
 ):
@@ -348,8 +354,9 @@ async def delete_agent(
          logger.exception(f"Error deleting agent '{agent_id}'")
          raise HTTPException(status_code=500, detail="Internal Server Error")
 
+@limiter.limit("60/minute")
 @router.post("/ritual", response_model=RitualFlowResponse, status_code=status.HTTP_200_OK)
-async def conduct_ritual(
+async def conduct_ritual(request: Request,
     history: List[RitualMessage],
     response: Response,
     archetype: Optional[str] = None,
