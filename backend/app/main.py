@@ -19,9 +19,11 @@ from app.services.seeder import seed_data
 from app.routers import warmup, agents, bio, system, graph
 from app.dependencies import soul_repo
 from core.config import settings
+from app.core.telemetry import configure_json_logging, setup_telemetry
 
 # Creamos la maldita libreta de Jules
-logging.basicConfig(level=logging.INFO)
+configure_json_logging()
+logging.getLogger().setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize Sleep Manager (Phase 4)
@@ -84,6 +86,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=lifespan)
 
+# Configure OpenTelemetry
+setup_telemetry(app)
+
 # Register Routers (Phase 5)
 app.include_router(warmup.router)
 app.include_router(agents.router)
@@ -102,7 +107,7 @@ app.add_middleware(
 
 @app.get("/health")
 async def health_check():
-    return {"status": "Kizuna Engine Online"}
+    return {"status": "ok", "version": "1.0"}
 
 
 @app.websocket("/ws/live")

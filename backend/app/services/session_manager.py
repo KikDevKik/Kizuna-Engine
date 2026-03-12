@@ -1,3 +1,5 @@
+import time
+import json
 import asyncio
 import logging
 
@@ -42,6 +44,7 @@ class SessionManager:
         """
         Main entry point for WebSocket connection handling.
         """
+        start_time = time.time()
         logger.info(f"👉 Received WebSocket connection request for {agent_id}")
         
         # Security: Verify Origin
@@ -325,7 +328,14 @@ class SessionManager:
                                 await asyncio.gather(*cognitive_tasks, return_exceptions=True)
 
                 except Exception as e:
-                    logger.error(f"Unexpected error managing Gemini Session: {e}")
+                    logger.error(json.dumps({
+                        "metric": "session_error",
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "agent_id": agent_id,
+                        "user_id": user_id,
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                    }))
                     break
 
                 # ¿Reconectar con nuevo contexto?
@@ -338,7 +348,18 @@ class SessionManager:
                 # Siempre salir del loop — no reconectar en la misma conexión WS
                 break
         except Exception as e:
-            logger.error(f"Unexpected error managing Gemini Session: {e}")
+            if 'user_id' in locals():
+                uid = user_id
+            else:
+                uid = "unknown"
+            logger.error(json.dumps({
+                "metric": "session_error",
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "agent_id": agent_id,
+                "user_id": uid,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            }))
         finally:
             # MODULE 1: CLEANUP COGNITIVE TASKS
             # Ensure background tasks are killed when the session ends.
@@ -352,6 +373,16 @@ class SessionManager:
                 await asyncio.gather(*cognitive_tasks, return_exceptions=True)
 
             logger.info("WebSocket session closed.")
+
+            if 'user_id' in locals():
+                duration = time.time() - start_time
+                logger.info(json.dumps({
+                    "metric": "session_duration",
+                    "duration_seconds": round(duration, 2),
+                    "agent_id": agent_id,
+                    "user_id": user_id,
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                }))
             subconscious_mind.cleanup(user_id)
 
             # Update Last Seen (Phase 3)

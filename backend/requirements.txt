@@ -19,3 +19,7 @@ aiosqlite==0.22.1
 json-repair==0.30.3
 google-cloud-firestore==2.16.0
 neo4j==5.26.0
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+opentelemetry-exporter-gcp-trace
