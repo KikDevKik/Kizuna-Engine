@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request
-from app.core.rate_limiter import limiter, Header, Depends, HTTPException, BackgroundTasks
+from app.core.rate_limiter import limiter
+from fastapi import Header, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 import logging
 from app.services.soul_assembler import assemble_soul

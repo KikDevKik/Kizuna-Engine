@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request
-from app.core.rate_limiter import limiter, HTTPException, Depends
+from app.core.rate_limiter import limiter
+from fastapi import HTTPException, Depends
 from app.repositories.base import SoulRepository
 from app.repositories.local_graph import LocalSoulRepository
 from app.dependencies import get_repository, get_current_user

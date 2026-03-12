@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request
-from app.core.rate_limiter import limiter, HTTPException, status, Response, Header, Depends
+from app.core.rate_limiter import limiter
+from fastapi import HTTPException, status, Response, Header, Depends
 from typing import List, Optional, Any
 from pydantic import BaseModel, Field, field_validator
 import logging

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request
-from app.core.rate_limiter import limiter, Depends, HTTPException
+from app.core.rate_limiter import limiter
+from fastapi import Depends, HTTPException
 from pydantic import BaseModel
 from ..services.subconscious import subconscious_mind
 from ..dependencies import get_current_user
