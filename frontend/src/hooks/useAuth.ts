@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { onAuthStateChanged, signInWithCustomToken, signOut } from "firebase/auth";
 import type { User, Auth } from "firebase/auth";
 import { auth } from "../lib/firebase";
+import { API_URL } from "../config";
 
 export const useAuth = () => {
     const [user, setUser] = useState<User | null>(null);
@@ -18,7 +19,7 @@ export const useAuth = () => {
                 // Forgemaster: Verify backend sync on load
                 try {
                     const token = await firebaseUser.getIdToken();
-                    const response = await fetch('http://localhost:8000/api/auth/sync', {
+                    const response = await fetch(`${API_URL}/api/auth/sync`, {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${token}`

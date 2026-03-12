@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { API_URL } from '../config';
 
 export interface Agent {
   id: string;
@@ -38,7 +39,7 @@ export const RosterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setError(null);
 
       // Fetch "My Agents" (Filtered by InteractedWith on backend)
-      const res = await fetch('http://localhost:8000/api/agents/');
+      const res = await fetch(`${API_URL}/api/agents/`);
 
       if (!res.ok) {
         throw new Error(`Failed to fetch agents: ${res.statusText}`);

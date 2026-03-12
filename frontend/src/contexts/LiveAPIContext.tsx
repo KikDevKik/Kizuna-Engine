@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
 import { createAudioBuffer } from '../utils/audioUtils';
 import { useAuth } from '../hooks/useAuth';
+import { WS_URL } from '../config';
 // import type { ServerMessage } from '../types/websocket';
 
 export const isSessionActive = (status: string) => status === 'connected' || status === 'ready';
@@ -92,8 +93,7 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     try {
       // Initialize WebSocket
-      // Assuming localhost:8000 based on standard dev setup if proxy isn't configured
-      let wsUrl = `ws://localhost:8000/ws/live?agent_id=${agentId}`;
+      let wsUrl = `${WS_URL}/ws/live?agent_id=${agentId}`;
       const token = await getToken();
       if (token) {
         wsUrl += `&token=${token}`;
