@@ -28,10 +28,19 @@ class LocalSoulRepository(SoulRepository):
     Replaces the 'Ghost Graph' flat-file system.
     """
 
+    def __init__(self):
+        import os
+        from .neo4j_graph import Neo4jSoulRepository
+        self.use_neo4j = bool(os.environ.get("NEO4J_URI"))
+        if self.use_neo4j:
+            self.neo4j_repo = Neo4jSoulRepository()
+
     async def initialize(self) -> None:
         """Initialize the SQLite database."""
         await init_db()
         logger.info("SQLite Database Initialized.")
+        if self.use_neo4j:
+            await self.neo4j_repo.initialize()
 
     async def _get_node(self, node_id: str, label: str = None) -> Optional[Any]:
         async with AsyncSessionLocal() as session:
@@ -66,6 +75,8 @@ class LocalSoulRepository(SoulRepository):
                     session.add(new_node)
 
     async def get_or_create_user(self, user_id: str, name: str = "Anonymous") -> UserNode:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_or_create_user(user_id=user_id, name=name)
         node_model = await self._get_node(user_id, "UserNode")
         if node_model:
             return UserNode(**node_model.data)
@@ -75,12 +86,16 @@ class LocalSoulRepository(SoulRepository):
         return new_user
 
     async def get_agent(self, agent_id: str) -> Optional[AgentNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_agent(agent_id=agent_id)
         node_model = await self._get_node(agent_id, "AgentNode")
         if node_model:
             return AgentNode(**node_model.data)
         return None
 
     async def get_or_sync_agent(self, user_id: str, agent_id: str) -> Optional[AgentNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_or_sync_agent(user_id=user_id, agent_id=agent_id)
         """
         ARQUITECTURA-01: Unified agent resolution.
         1. Check SQLite NodeModel
@@ -107,9 +122,13 @@ class LocalSoulRepository(SoulRepository):
         return None
 
     async def create_agent(self, agent: AgentNode):
+        if self.use_neo4j:
+            return await self.neo4j_repo.create_agent(agent=agent)
         await self._save_node(agent.id, "AgentNode", agent.model_dump(mode='json'))
 
     async def get_resonance(self, user_id: str, agent_id: str) -> ResonanceEdge:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_resonance(user_id=user_id, agent_id=agent_id)
         async with AsyncSessionLocal() as session:
             async with session.begin():
                 stmt = select(EdgeModel).where(
@@ -137,6 +156,8 @@ class LocalSoulRepository(SoulRepository):
                 return new_resonance
 
     async def update_resonance(self, user_id: str, agent_id: str, delta: float) -> ResonanceEdge:
+        if self.use_neo4j:
+            return await self.neo4j_repo.update_resonance(user_id=user_id, agent_id=agent_id, delta=delta)
         resonance = await self.get_resonance(user_id, agent_id)
         new_affinity = max(0.0, min(100.0, resonance.affinity_level + delta))
         resonance.affinity_level = new_affinity
@@ -159,6 +180,8 @@ class LocalSoulRepository(SoulRepository):
         return resonance
 
     async def save_episode(self, user_id: str, agent_id: str, summary: str, valence: float, raw_transcript: Optional[str] = None) -> MemoryEpisodeNode:
+        if self.use_neo4j:
+            return await self.neo4j_repo.save_episode(user_id=user_id, agent_id=agent_id, summary=summary, valence=valence, raw_transcript=raw_transcript)
         embedding = await embedding_service.embed_text(summary)
         episode = MemoryEpisodeNode(
             summary=summary,
@@ -219,6 +242,8 @@ class LocalSoulRepository(SoulRepository):
         return episode
 
     async def get_recent_episodes(self, user_id: str, limit: int = 10) -> List[MemoryEpisodeNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_recent_episodes(user_id=user_id, limit=limit)
         async with AsyncSessionLocal() as session:
             # Join Edge -> Node
             # Find experienced edges where source_id = user_id
@@ -249,6 +274,8 @@ class LocalSoulRepository(SoulRepository):
             return episodes[-limit:] if limit < len(episodes) else episodes
 
     async def save_fact(self, user_id: str, content: str, category: str) -> FactNode:
+        if self.use_neo4j:
+            return await self.neo4j_repo.save_fact(user_id=user_id, content=content, category=category)
         embedding = await embedding_service.embed_text(content)
         fact = FactNode(content=content, category=category, embedding=embedding)
 
@@ -266,6 +293,8 @@ class LocalSoulRepository(SoulRepository):
         return fact
 
     async def get_relevant_facts(self, user_id: str, query: str, limit: int = 5) -> List[FactNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_relevant_facts(user_id=user_id, query=query, limit=limit)
         # Semantic search implementation
         # 1. Get all facts known by user
         async with AsyncSessionLocal() as session:
@@ -311,6 +340,8 @@ class LocalSoulRepository(SoulRepository):
             return []
 
     async def save_dream(self, user_id: str, dream: DreamNode) -> DreamNode:
+        if self.use_neo4j:
+            return await self.neo4j_repo.save_dream(user_id=user_id, dream=dream)
         await self._save_node(dream.id, "DreamNode", dream.model_dump(mode='json'))
         async with AsyncSessionLocal() as session:
             async with session.begin():
@@ -324,6 +355,8 @@ class LocalSoulRepository(SoulRepository):
         return dream
 
     async def get_last_dream(self, user_id: str) -> Optional[DreamNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_last_dream(user_id=user_id)
         async with AsyncSessionLocal() as session:
             stmt = select(NodeModel).join(
                 EdgeModel,
@@ -336,6 +369,8 @@ class LocalSoulRepository(SoulRepository):
             return None
 
     async def consolidate_memories(self, user_id: str, dream_generator=None) -> None:
+        if self.use_neo4j:
+            return await self.neo4j_repo.consolidate_memories(user_id=user_id, dream_generator=dream_generator)
         # Complex logic, simplified for SQLite.
         # Fetch recent episodes, check count, compress.
         # Ideally, we follow the same logic as json_graph.py but adapted.
@@ -377,6 +412,8 @@ class LocalSoulRepository(SoulRepository):
             # Functional parity is implied but exact internal logic can be improved later.
 
     async def get_relevant_episodes(self, user_id: str, query: str, limit: int = 5) -> List[MemoryEpisodeNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_relevant_episodes(user_id=user_id, query=query, limit=limit)
         async with AsyncSessionLocal() as session:
             stmt = select(NodeModel).join(
                 EdgeModel,
@@ -392,11 +429,15 @@ class LocalSoulRepository(SoulRepository):
     # --- Evolution Phase 1 ---
 
     async def create_archetype(self, name: str, description: str, triggers: Dict) -> ArchetypeNode:
+        if self.use_neo4j:
+            return await self.neo4j_repo.create_archetype(name=name, description=description, triggers=triggers)
         arc = ArchetypeNode(name=name, description=description, triggers=triggers)
         await self._save_node(arc.id, "ArchetypeNode", arc.model_dump(mode='json'))
         return arc
 
     async def get_archetype(self, name: str) -> Optional[ArchetypeNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_archetype(name=name)
         # Searching inside JSON... SQLite JSON queries are possible but basic selection is easier if we just label them.
         # We need to filter by data->>'name' == name.
         async with AsyncSessionLocal() as session:
@@ -418,6 +459,8 @@ class LocalSoulRepository(SoulRepository):
             return None
 
     async def link_agent_archetype(self, agent_id: str, archetype_id: str, strength: float = 1.0) -> None:
+        if self.use_neo4j:
+            return await self.neo4j_repo.link_agent_archetype(agent_id=agent_id, archetype_id=archetype_id, strength=strength)
         async with AsyncSessionLocal() as session:
             async with session.begin():
                 edge = EmbodiesEdge(source_id=agent_id, target_id=archetype_id, strength=strength)
@@ -430,6 +473,8 @@ class LocalSoulRepository(SoulRepository):
                 session.add(new_edge)
 
     async def get_agent_archetype(self, agent_id: str) -> Optional[ArchetypeNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_agent_archetype(agent_id=agent_id)
         async with AsyncSessionLocal() as session:
             stmt = select(NodeModel).join(
                 EdgeModel,
@@ -444,12 +489,16 @@ class LocalSoulRepository(SoulRepository):
     # --- Global Singletons ---
 
     async def get_global_dream(self) -> GlobalDreamNode:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_global_dream()
         node = await self._get_node("global-dream", "GlobalDreamNode")
         if node:
             return GlobalDreamNode(**node.data)
         return GlobalDreamNode()
 
     async def update_global_dream(self, themes: List[str], intensity: float) -> None:
+        if self.use_neo4j:
+            return await self.neo4j_repo.update_global_dream(themes=themes, intensity=intensity)
         gd = await self.get_global_dream()
         gd.themes = themes
         gd.intensity = intensity
@@ -457,17 +506,23 @@ class LocalSoulRepository(SoulRepository):
         await self._save_node(gd.id, "GlobalDreamNode", gd.model_dump(mode='json'))
 
     async def get_system_config(self) -> SystemConfigNode:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_system_config()
         node = await self._get_node("system-config", "SystemConfigNode")
         if node:
             return SystemConfigNode(**node.data)
         return SystemConfigNode()
 
     async def update_system_config(self, config: SystemConfigNode) -> None:
+        if self.use_neo4j:
+            return await self.neo4j_repo.update_system_config(config=config)
         await self._save_node(config.id, "SystemConfigNode", config.model_dump(mode='json'))
 
     # --- Phase 3: Locations & Events ---
 
     async def get_or_create_location(self, name: str, type: str, description: str) -> LocationNode:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_or_create_location(name=name, type=type, description=description)
         # Scan for existing
         async with AsyncSessionLocal() as session:
             stmt = select(NodeModel).where(NodeModel.label == "LocationNode")
@@ -482,6 +537,8 @@ class LocalSoulRepository(SoulRepository):
         return loc
 
     async def get_all_locations(self) -> List[LocationNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_all_locations()
         async with AsyncSessionLocal() as session:
             stmt = select(NodeModel).where(NodeModel.label == "LocationNode")
             result = await session.execute(stmt)
@@ -489,11 +546,15 @@ class LocalSoulRepository(SoulRepository):
             return [LocationNode(**n.data) for n in nodes]
 
     async def record_collective_event(self, event: CollectiveEventNode):
+        if self.use_neo4j:
+            return await self.neo4j_repo.record_collective_event(event=event)
         embedding = await embedding_service.embed_text(event.summary)
         event.embedding = embedding
         await self._save_node(event.id, "CollectiveEventNode", event.model_dump(mode='json'))
 
     async def get_recent_collective_events(self, limit: int = 5) -> List[CollectiveEventNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_recent_collective_events(limit=limit)
         async with AsyncSessionLocal() as session:
             stmt = select(NodeModel).where(NodeModel.label == "CollectiveEventNode").order_by(NodeModel.created_at.desc()).limit(limit)
             result = await session.execute(stmt)
@@ -501,6 +562,8 @@ class LocalSoulRepository(SoulRepository):
             return [CollectiveEventNode(**n.data) for n in nodes]
 
     async def get_agent_collective_events(self, agent_id: str, limit: int = 5) -> List[CollectiveEventNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_agent_collective_events(agent_id=agent_id, limit=limit)
         async with AsyncSessionLocal() as session:
             # participatedIn edge -> CollectiveEventNode
             stmt = select(NodeModel).join(
@@ -513,7 +576,9 @@ class LocalSoulRepository(SoulRepository):
             return [CollectiveEventNode(**n.data) for n in nodes]
 
     async def get_relevant_collective_events(self, query: str, limit: int = 5) -> List[CollectiveEventNode]:
-         async with AsyncSessionLocal() as session:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_relevant_collective_events(query=query, limit=limit)
+        async with AsyncSessionLocal() as session:
             stmt = select(NodeModel).where(NodeModel.label == "CollectiveEventNode")
             result = await session.execute(stmt)
             nodes = result.scalars().all()
@@ -524,6 +589,8 @@ class LocalSoulRepository(SoulRepository):
     # --- Affinity Edges ---
 
     async def get_agent_affinity(self, source_id: str, target_id: str) -> AgentAffinityEdge:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_agent_affinity(source_id=source_id, target_id=target_id)
         async with AsyncSessionLocal() as session:
             async with session.begin():
                 stmt = select(EdgeModel).where(
@@ -550,6 +617,8 @@ class LocalSoulRepository(SoulRepository):
                 return new_edge_obj
 
     async def update_agent_affinity(self, source_id: str, target_id: str, delta: float) -> AgentAffinityEdge:
+        if self.use_neo4j:
+            return await self.neo4j_repo.update_agent_affinity(source_id=source_id, target_id=target_id, delta=delta)
         edge = await self.get_agent_affinity(source_id, target_id)
         edge.affinity = max(0.0, min(100.0, edge.affinity + delta))
         edge.last_interaction = datetime.now()
@@ -572,6 +641,8 @@ class LocalSoulRepository(SoulRepository):
     # --- Explicit Graph Edges ---
 
     async def create_edge(self, edge: GraphEdge) -> None:
+        if self.use_neo4j:
+            return await self.neo4j_repo.create_edge(edge=edge)
         async with AsyncSessionLocal() as session:
             async with session.begin():
                 # Check for uniqueness if needed, but GraphEdge is generic.
@@ -584,6 +655,8 @@ class LocalSoulRepository(SoulRepository):
                 session.add(db_edge)
 
     async def get_edges(self, source_id: str = None, target_id: str = None, type: str = None) -> List[GraphEdge]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_edges(source_id=source_id, target_id=target_id, type=type)
         async with AsyncSessionLocal() as session:
             stmt = select(EdgeModel)
             if source_id:
@@ -633,6 +706,8 @@ class LocalSoulRepository(SoulRepository):
             return results
 
     async def record_interaction(self, user_id: str, agent_id: str) -> None:
+        if self.use_neo4j:
+            return await self.neo4j_repo.record_interaction(user_id=user_id, agent_id=agent_id)
         async with AsyncSessionLocal() as session:
             async with session.begin():
                 stmt = select(EdgeModel).where(
@@ -666,6 +741,8 @@ class LocalSoulRepository(SoulRepository):
                     session.add(db_edge)
 
     async def get_active_peers(self, user_id: str, time_window_minutes: int = 15) -> List[AgentNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_active_peers(user_id=user_id, time_window_minutes=time_window_minutes)
         cutoff = datetime.now() - timedelta(minutes=time_window_minutes)
         # 1. Direct interaction edges > cutoff
         # 2. Shared participation edges > cutoff
@@ -709,6 +786,8 @@ class LocalSoulRepository(SoulRepository):
         return results
 
     async def get_last_interaction(self, user_id: str, agent_id: str) -> datetime:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_last_interaction(user_id=user_id, agent_id=agent_id)
         # Same logic as json but using SQL queries would be better.
         # For now, reuse get_edges or manual query.
         last_time = datetime.min
@@ -730,6 +809,8 @@ class LocalSoulRepository(SoulRepository):
 
     # ... Other abstract methods like update_user_last_seen need to be implemented ...
     async def update_user_last_seen(self, user_id: str):
+        if self.use_neo4j:
+            return await self.neo4j_repo.update_user_last_seen(user_id=user_id)
         node = await self._get_node(user_id, "UserNode")
         if node:
             data = node.data
@@ -740,14 +821,20 @@ class LocalSoulRepository(SoulRepository):
     # Legacy import/export not strictly needed for SQLite if we rely on DB backup,
     # but interface requires it.
     async def export_to_json_ld(self) -> Dict[str, Any]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.export_to_json_ld()
         return {"error": "Not implemented for SQLite yet"}
 
     async def import_from_json_ld(self, data: Dict[str, Any]) -> None:
+        if self.use_neo4j:
+            return await self.neo4j_repo.import_from_json_ld(data=data)
         pass # Migration handles this.
 
     # --- Module 2: Social Friction ---
 
     async def update_agent_friction(self, agent_id: str, delta: float) -> Optional[AgentNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.update_agent_friction(agent_id=agent_id, delta=delta)
         """
         Updates the agent's current_friction score.
         delta: can be positive (increase friction) or negative (decrease/heal).
@@ -772,6 +859,8 @@ class LocalSoulRepository(SoulRepository):
     # --- Module 1.5: Nemesis & Social Spawning ---
 
     async def get_nemesis_agents(self, user_id: str) -> List[AgentNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_nemesis_agents(user_id=user_id)
         """
         Fetch agents that have a 'Nemesis' edge with the user.
         """
@@ -787,6 +876,8 @@ class LocalSoulRepository(SoulRepository):
             return [AgentNode(**n.data) for n in nodes]
 
     async def get_gossip_candidates(self, user_id: str) -> List[AgentNode]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_gossip_candidates(user_id=user_id)
         """
         Fetch agents that were spawned via Gossip (Gossip_Source edge)
         and have NOT yet been interacted with by the user.
@@ -818,6 +909,8 @@ class LocalSoulRepository(SoulRepository):
 
     # --- Module 1.6: The Great Purge (Module 1: The Great Rebirth) ---
     async def purge_all_memories(self) -> bool:
+        if self.use_neo4j:
+            return await self.neo4j_repo.purge_all_memories()
         """
         THE GREAT REBIRTH: Factory Reset.
         Eradicates all nodes and edges EXCEPT KizunaChronicle (which is in Firestore now).
@@ -849,6 +942,10 @@ class LocalSoulRepository(SoulRepository):
         emotional_tone: str,
         interaction_count: int = 1,
     ) -> None:
+        if self.use_neo4j:
+            return await self.neo4j_repo.upsert_chronicle(user_id=user_id, agent_id=agent_id, agent_name=agent_name, relationship_summary=relationship_summary, dominant_topics=dominant_topics, emotional_tone=emotional_tone, interaction_count=interaction_count)
+        if self.use_neo4j:
+            return await self.neo4j_repo.upsert_chronicle(user_id=user_id, agent_id=agent_id, agent_name=agent_name, relationship_summary=relationship_summary, dominant_topics=dominant_topics, emotional_tone=emotional_tone, interaction_count=interaction_count)
         """Creates or updates a KizunaChronicle entry in Firestore."""
         try:
             from app.services.firestore_service import firestore_service
@@ -873,6 +970,8 @@ class LocalSoulRepository(SoulRepository):
 
 
     async def get_chronicles_for_user(self, user_id: str) -> list:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_chronicles_for_user(user_id=user_id)
         """Returns all Chronicle entries for a given user from Firestore."""
         try:
             from app.services.firestore_service import firestore_service
@@ -890,6 +989,8 @@ class LocalSoulRepository(SoulRepository):
 
 
     async def get_chronicle(self, user_id: str, agent_id: str) -> Optional[Any]:
+        if self.use_neo4j:
+            return await self.neo4j_repo.get_chronicle(user_id=user_id, agent_id=agent_id)
         """Returns a specific Chronicle entry from Firestore."""
         try:
             from app.services.firestore_service import firestore_service
