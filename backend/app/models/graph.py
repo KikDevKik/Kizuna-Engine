@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+import json
 from datetime import datetime
 from uuid import uuid4
 from enum import Enum
@@ -101,6 +102,34 @@ class AgentNode(BaseModel, JSONLDMixin):
     # New: Emotional Resonance Matrix Override (Optional)
     # Allows agents to react differently to emotions (e.g., a sadist might gain affinity from anger)
     emotional_resonance_matrix: Optional[dict] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def deserialize_json_fields(cls, data: Any) -> Any:
+        """
+        Self-healing: If fields that expect dicts/lists arrive as JSON strings
+        (common when loading from certain DBs or Firestore), deserialize them.
+        """
+        if isinstance(data, dict):
+            # Fields that are often serialized as JSON strings
+            json_fields = [
+                "traits", "known_languages", "neural_signature", "identity_anchors",
+                "tags", "interiority", "emotional_resonance_matrix",
+                "affinity_matrix", "emotional_state", "voice_profile", "linguistic_dna",
+                "relational_matrix"
+            ]
+            for field in json_fields:
+                if field in data and isinstance(data[field], str):
+                    try:
+                        # Attempt to parse as JSON
+                        parsed = json.loads(data[field])
+                        # Only replace if it successfully parsed into a dict or list
+                        if isinstance(parsed, (dict, list)):
+                            data[field] = parsed
+                    except Exception:
+                        # If it's not valid JSON, leave it as is (Pydantic will likely fail later, which is fine)
+                        pass
+        return data
 
 class MemoryEpisodeNode(BaseModel, JSONLDMixin):
     id: str = Field(default_factory=lambda: str(uuid4()))
