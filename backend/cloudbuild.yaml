@@ -17,7 +17,7 @@ steps:
       - '--image'
       - 'gcr.io/$PROJECT_ID/kizuna-engine'
       - '--region'
-      - 'us-central1'
+      - 'asia-northeast1'
       - '--allow-unauthenticated'
       - '--port'
       - '8080'
