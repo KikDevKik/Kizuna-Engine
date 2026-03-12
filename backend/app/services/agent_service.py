@@ -27,6 +27,22 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+JSON_AGENT_FIELDS = [
+    "traits", "known_languages", "neural_signature", "identity_anchors",
+    "affinity_matrix", "emotional_state", "voice_profile", "linguistic_dna",
+    "relational_matrix", "interiority", "emotional_resonance_matrix",
+]
+
+def _deserialize_agent_data(data: dict) -> dict:
+    """Parse JSON-string fields back to native Python types before constructing AgentNode."""
+    for field in JSON_AGENT_FIELDS:
+        if field in data and isinstance(data[field], str):
+            try:
+                data[field] = json.loads(data[field])
+            except Exception:
+                pass
+    return data
+
 # Define the path relative to the project root or use an environment variable
 AGENTS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "agents"
 
@@ -141,7 +157,7 @@ class AgentService:
             firestore_agents = await firestore_service.list_agents(user_id)
             for data in firestore_agents:
                 try:
-                    agents.append(AgentNode(**data))
+                    agents.append(AgentNode(**_deserialize_agent_data(data)))
                 except Exception as e:
                     logger.error(f"Error parsing agent from Firestore: {e}")
             if agents:
@@ -155,7 +171,7 @@ class AgentService:
                 async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                     content = await f.read()
                     data = json.loads(content)
-                    agent = AgentNode(**data)
+                    agent = AgentNode(**_deserialize_agent_data(data))
                     agents.append(agent)
             except Exception as e:
                 logger.error(f"Failed to load agent {file_path.name}: {e}")
@@ -166,7 +182,7 @@ class AgentService:
             agent_data = await firestore_service.get_agent(user_id, agent_id)
             if agent_data:
                 try:
-                    return AgentNode(**agent_data)
+                    return AgentNode(**_deserialize_agent_data(agent_data))
                 except Exception as e:
                     logger.error(f"Failed to parse agent {agent_id} from Firestore: {e}")
                     return None
