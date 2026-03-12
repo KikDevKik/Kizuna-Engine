@@ -2,7 +2,7 @@ import os
 import firebase_admin
 from firebase_admin import credentials, auth
 from fastapi import HTTPException
-from app.core.config import settings
+from core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
