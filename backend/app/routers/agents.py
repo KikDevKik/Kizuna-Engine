@@ -116,6 +116,8 @@ async def list_agents(request: Request,
 
         my_agents = [a for a in my_agents if a.id not in nemesis_ids]
 
+        if not my_agents:
+            return all_agents if all_agents else []
         return my_agents
 
     except Exception as e:
