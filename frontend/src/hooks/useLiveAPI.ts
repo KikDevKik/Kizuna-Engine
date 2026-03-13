@@ -179,7 +179,7 @@ export const useLiveAPI = (): UseLiveAPI => {
             statusRef.current = 'error';
             disconnect();
         }
-    }, [disconnect, setupListeners]);
+    }, [disconnect, setupListeners, getToken]);
 
     const sendImage = useCallback(async (base64: string) => {
         if (connected && status === 'ready') {

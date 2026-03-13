@@ -63,8 +63,8 @@ export const useAuth = () => {
     };
 
     const getToken = async () => {
-        if (!user) return null;
-        return user.getIdToken();
+        if (!auth || !auth.currentUser) return null;
+        return auth.currentUser.getIdToken();
     };
 
     return { user, loading, loginWithGoogle, loginWithToken, logout, getToken };
