@@ -944,8 +944,6 @@ class LocalSoulRepository(SoulRepository):
     ) -> None:
         if self.use_neo4j:
             return await self.neo4j_repo.upsert_chronicle(user_id=user_id, agent_id=agent_id, agent_name=agent_name, relationship_summary=relationship_summary, dominant_topics=dominant_topics, emotional_tone=emotional_tone, interaction_count=interaction_count)
-        if self.use_neo4j:
-            return await self.neo4j_repo.upsert_chronicle(user_id=user_id, agent_id=agent_id, agent_name=agent_name, relationship_summary=relationship_summary, dominant_topics=dominant_topics, emotional_tone=emotional_tone, interaction_count=interaction_count)
         """Creates or updates a KizunaChronicle entry in Firestore."""
         try:
             from app.services.firestore_service import firestore_service
@@ -1005,4 +1003,4 @@ class LocalSoulRepository(SoulRepository):
             return None
         except Exception as e:
             logger.error(f"Failed to get chronicle from Firestore: {e}")
-            return None.scalar_one_or_none()
+            return None
