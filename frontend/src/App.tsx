@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useLiveAPI } from './hooks/useLiveAPI';
+import { useAuth } from './hooks/useAuth';
 import { isSessionActive } from './contexts/LiveAPIContext';
 import { Layout } from './components/Layout';
 import { KizunaCore } from './components/KizunaCore';
@@ -11,6 +12,7 @@ import { SystemLogs } from './components/SystemLogs';
 import { JulesSanctuary } from './components/JulesSanctuary';
 import { ConfigurationPanel } from './components/ConfigurationPanel';
 import { ConnectionSeveredModal } from './components/ConnectionSeveredModal';
+import { LoginScreen } from './components/LoginScreen';
 import { RitualProvider } from './contexts/RitualContext';
 import { RosterProvider } from './contexts/RosterContext';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -18,6 +20,7 @@ import { Power, Settings } from 'lucide-react';
 import './KizunaHUD.css';
 
 function App() {
+  const { user, loading } = useAuth();
   const liveApi = useLiveAPI();
   const {
     status,
@@ -97,6 +100,23 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // ─── Auth gate ───────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <motion.div
+          className="w-8 h-8 rounded-full border-2 border-purple-500/40 border-t-purple-500"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+        />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginScreen />;
+  }
 
   return (
     <RitualProvider>

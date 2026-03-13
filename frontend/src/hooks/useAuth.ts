@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { onAuthStateChanged, signInWithCustomToken, signOut } from "firebase/auth";
+import { onAuthStateChanged, signInWithCustomToken, signInWithPopup, signOut, GoogleAuthProvider } from "firebase/auth";
 import type { User, Auth } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import { API_URL } from "../config";
@@ -16,32 +16,31 @@ export const useAuth = () => {
 
         const unsubscribe = onAuthStateChanged(auth as unknown as Auth, async (firebaseUser) => {
             if (firebaseUser) {
-                // Forgemaster: Verify backend sync on load
                 try {
                     const token = await firebaseUser.getIdToken();
                     const response = await fetch(`${API_URL}/api/auth/sync`, {
                         method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
+                        headers: { 'Authorization': `Bearer ${token}` }
                     });
-
                     if (!response.ok) {
-                        console.error('Failed to sync user with backend during auth state change', response.status);
-                    } else {
-                        console.log('User synced successfully with backend');
+                        console.error('Failed to sync user with backend', response.status);
                     }
                 } catch (error) {
                     console.error('Error syncing user with backend:', error);
                 }
             }
-
             setUser(firebaseUser);
             setLoading(false);
         });
 
         return () => unsubscribe();
     }, []);
+
+    const loginWithGoogle = async () => {
+        if (!auth) throw new Error("Firebase Auth not initialized");
+        const provider = new GoogleAuthProvider();
+        return signInWithPopup(auth as unknown as Auth, provider);
+    };
 
     const loginWithToken = async (token: string) => {
         if (!auth) throw new Error("Firebase Auth not initialized");
@@ -58,5 +57,5 @@ export const useAuth = () => {
         return user.getIdToken();
     };
 
-    return { user, loading, loginWithToken, logout, getToken };
+    return { user, loading, loginWithGoogle, loginWithToken, logout, getToken };
 };
