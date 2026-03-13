@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { API_URL } from '../config';
+import { auth } from '../lib/firebase';
 
 export interface Agent {
   id: string;
@@ -39,7 +40,12 @@ export const RosterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setError(null);
 
       // Fetch "My Agents" (Filtered by InteractedWith on backend)
-      const res = await fetch(`${API_URL}/api/agents/`);
+      const token = await auth?.currentUser?.getIdToken();
+      const res = await fetch(`${API_URL}/api/agents/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
       if (!res.ok) {
         throw new Error(`Failed to fetch agents: ${res.statusText}`);

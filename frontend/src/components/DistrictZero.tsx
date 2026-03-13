@@ -4,6 +4,7 @@ import { Activity, X, Network, ChevronLeft, ChevronRight, Eye } from 'lucide-rea
 import { useRoster } from '../contexts/RosterContext';
 import '../KizunaHUD.css';
 import { API_URL } from '../config';
+import { auth } from '../lib/firebase';
 
 // ------------------------------------------------------------------
 // DATA: THE LOCAL MATRIX (ILLUSION PROTOCOL)
@@ -96,7 +97,10 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
   useEffect(() => {
     const fetchStrangers = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/agents/strangers`);
+        const token = await auth?.currentUser?.getIdToken();
+        const res = await fetch(`${API_URL}/api/agents/strangers`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         if (res.ok) {
           const strangers: EnigmaIdentity[] = await res.json();
           if (strangers.length > 0) {
@@ -181,9 +185,13 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
         return;
       }
 
+      const token = await auth?.currentUser?.getIdToken();
       const response = await fetch(`${API_URL}/api/agents/forge_hollow`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ aesthetic_description: shell.description })
       });
 

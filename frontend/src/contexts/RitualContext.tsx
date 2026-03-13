@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import { API_URL } from '../config';
+import { auth } from '../lib/firebase';
 
 export interface RitualMessage {
   role: 'system' | 'user';
@@ -57,11 +58,13 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         url.searchParams.append('archetype', archetype);
       }
 
+      const token = await auth.currentUser?.getIdToken();
       const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept-Language': locale
+          'Accept-Language': locale,
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify([]),
         signal: controller.signal
@@ -114,11 +117,13 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         url.searchParams.append('archetype', archetype);
       }
 
+      const token = await auth.currentUser?.getIdToken();
       const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept-Language': locale
+          'Accept-Language': locale,
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(newHistory),
         signal: controller.signal

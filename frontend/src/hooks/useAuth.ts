@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { onAuthStateChanged, signInWithCustomToken, signInWithRedirect, getRedirectResult, signOut, GoogleAuthProvider } from "firebase/auth";
 import type { User, Auth } from "firebase/auth";
 import { auth } from "../lib/firebase";
-import { API_URL } from "../config";
 
 export const useAuth = () => {
     const [user, setUser] = useState<User | null>(null);
@@ -34,18 +33,6 @@ export const useAuth = () => {
             // Step 2: Subscribe to auth state AFTER redirect result is resolved.
             unsubscribe = onAuthStateChanged(auth as unknown as Auth, async (firebaseUser) => {
                 if (firebaseUser) {
-                    try {
-                        const token = await firebaseUser.getIdToken();
-                        const response = await fetch(`${API_URL}/api/auth/sync`, {
-                            method: 'POST',
-                            headers: { 'Authorization': `Bearer ${token}` }
-                        });
-                        if (!response.ok) {
-                            console.error('Backend sync failed:', response.status);
-                        }
-                    } catch (error) {
-                        console.error('Error syncing user with backend:', error);
-                    }
                 }
                 setUser(firebaseUser);
                 setLoading(false);

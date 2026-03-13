@@ -6,6 +6,7 @@ import { DeleteAgentModal } from './DeleteAgentModal';
 import { useRoster, type Agent } from '../contexts/RosterContext';
 import '../KizunaHUD.css';
 import { API_URL } from '../config';
+import { auth } from '../lib/firebase';
 
 interface AgentRosterProps {
   onSelect?: (agentId: string) => void;
@@ -138,8 +139,10 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   const handleDeleteConfirm = async () => {
     if (!agentToDelete) return;
     try {
+      const token = await auth?.currentUser?.getIdToken();
       const res = await fetch(`${API_URL}/api/agents/${agentToDelete.id}`, {
         method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
         throw new Error('Failed to delete agent');
