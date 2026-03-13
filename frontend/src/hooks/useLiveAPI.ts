@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { useAuth } from './useAuth';
 
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'ready' | 'error';
 
@@ -28,6 +29,7 @@ export interface UseLiveAPI {
 }
 
 export const useLiveAPI = (): UseLiveAPI => {
+    const { getToken } = useAuth();
     const [connected, setConnected] = useState(false);
     const [status, setStatus] = useState<ConnectionState>('idle');
     const [isAiSpeaking, setIsAiSpeaking] = useState(false);
@@ -161,9 +163,9 @@ export const useLiveAPI = (): UseLiveAPI => {
 
         try {
             const userLang = navigator.language || 'en';
-            // Hardcode token for now, or extract from where it usually comes from.
-            // In a real app, this should come from auth state.
-            const token = localStorage.getItem('token') || 'dev_token';
+
+            // Get the actual Firebase auth token
+            const token = await getToken() || 'dev_token';
 
             await invoke('start_audio_pipeline', {
                 agentId,
