@@ -22,7 +22,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
   // Bio-Link Transmit
   const handleBioTransmit = async () => {
     try {
-      const token = await auth.currentUser?.getIdToken();
+      const token = await auth?.currentUser?.getIdToken();
       const res = await fetch("/api/bio/submit", {
         method: "POST",
         headers: {

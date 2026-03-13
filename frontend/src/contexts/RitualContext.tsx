@@ -58,7 +58,7 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         url.searchParams.append('archetype', archetype);
       }
 
-      const token = await auth.currentUser?.getIdToken();
+      const token = await auth?.currentUser?.getIdToken();
       const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
@@ -117,7 +117,7 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         url.searchParams.append('archetype', archetype);
       }
 
-      const token = await auth.currentUser?.getIdToken();
+      const token = await auth?.currentUser?.getIdToken();
       const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
