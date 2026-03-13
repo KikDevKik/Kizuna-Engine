@@ -14,38 +14,49 @@ export const useAuth = () => {
             return;
         }
 
-        // Capture redirect result first (Tauri flow)
-        getRedirectResult(auth as unknown as Auth).then(async (result) => {
-            if (result?.user) {
-                // Backend sync handled by onAuthStateChanged below
-                console.log('Redirect sign-in successful:', result.user.email);
-            }
-        }).catch((err) => {
-            if (err.code !== 'auth/no-auth-event') {
-                console.error('Redirect result error:', err);
-            }
-        });
+        let unsubscribe: (() => void) | null = null;
 
-        const unsubscribe = onAuthStateChanged(auth as unknown as Auth, async (firebaseUser) => {
-            if (firebaseUser) {
-                try {
-                    const token = await firebaseUser.getIdToken();
-                    const response = await fetch(`${API_URL}/api/auth/sync`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (!response.ok) {
-                        console.error('Failed to sync user with backend', response.status);
-                    }
-                } catch (error) {
-                    console.error('Error syncing user with backend:', error);
+        const init = async () => {
+            // Step 1: Await redirect result BEFORE subscribing to auth state.
+            // This prevents the flash of "logged out" that causes the login loop.
+            try {
+                const result = await getRedirectResult(auth as unknown as Auth);
+                if (result?.user) {
+                    console.log('Redirect sign-in captured:', result.user.email);
+                }
+            } catch (err: any) {
+                // auth/no-auth-event is expected when no redirect just happened — ignore it.
+                if (err.code && err.code !== 'auth/no-auth-event') {
+                    console.error('Redirect result error:', err);
                 }
             }
-            setUser(firebaseUser);
-            setLoading(false);
-        });
 
-        return () => unsubscribe();
+            // Step 2: Subscribe to auth state AFTER redirect result is resolved.
+            unsubscribe = onAuthStateChanged(auth as unknown as Auth, async (firebaseUser) => {
+                if (firebaseUser) {
+                    try {
+                        const token = await firebaseUser.getIdToken();
+                        const response = await fetch(`${API_URL}/api/auth/sync`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (!response.ok) {
+                            console.error('Backend sync failed:', response.status);
+                        }
+                    } catch (error) {
+                        console.error('Error syncing user with backend:', error);
+                    }
+                }
+                setUser(firebaseUser);
+                setLoading(false);
+            });
+        };
+
+        init();
+
+        return () => {
+            if (unsubscribe) unsubscribe();
+        };
     }, []);
 
     const loginWithGoogle = async () => {
