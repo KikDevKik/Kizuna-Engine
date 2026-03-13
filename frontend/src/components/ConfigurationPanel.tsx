@@ -35,7 +35,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
     try {
       const token = await auth?.currentUser?.getIdToken();
       const res = await fetch("/api/system/config", {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
       });
       const data = await res.json();
       setConfig(data);
@@ -57,7 +57,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
         },
         body: JSON.stringify(newConfig)
       });
@@ -84,7 +84,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
       const token = await auth?.currentUser?.getIdToken();
       const res = await fetch("/api/system/purge-memories", {
         method: "DELETE",
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
       });
 
       if (res.ok) {

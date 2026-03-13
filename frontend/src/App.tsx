@@ -16,11 +16,11 @@ import { LoginScreen } from './components/LoginScreen';
 import { RitualProvider } from './contexts/RitualContext';
 import { RosterProvider } from './contexts/RosterContext';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Power, Settings } from 'lucide-react';
+import { Power, Settings, LogOut } from 'lucide-react';
 import './KizunaHUD.css';
 
 function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const liveApi = useLiveAPI();
   const {
     status,
@@ -135,6 +135,21 @@ function App() {
             </div>
 
             <div className="flex gap-4 pointer-events-auto items-center">
+              {/* Logout Button */}
+              <button
+                onClick={async () => {
+                  try {
+                    await logout();
+                  } catch (e) {
+                    console.error("Logout failed", e);
+                  }
+                }}
+                className="text-alert-red/60 hover:text-alert-red transition-colors mr-2 flex items-center gap-2 font-technical text-[10px] tracking-widest border border-alert-red/30 px-3 py-1 bg-alert-red/5"
+                title="Disconnect from Kizuna Engine"
+              >
+                <LogOut size={14} /> LOGOUT
+              </button>
+
               {/* Config Button */}
               <button
                 onClick={() => setIsConfigOpen(true)}

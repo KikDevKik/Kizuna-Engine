@@ -43,7 +43,7 @@ export const RosterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const token = await auth?.currentUser?.getIdToken();
       const res = await fetch(`${API_URL}/api/agents/`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         }
       });
 

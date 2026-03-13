@@ -64,7 +64,7 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         headers: {
           'Content-Type': 'application/json',
           'Accept-Language': locale,
-          'Authorization': `Bearer ${token}`
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify([]),
         signal: controller.signal
@@ -123,7 +123,7 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         headers: {
           'Content-Type': 'application/json',
           'Accept-Language': locale,
-          'Authorization': `Bearer ${token}`
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify(newHistory),
         signal: controller.signal

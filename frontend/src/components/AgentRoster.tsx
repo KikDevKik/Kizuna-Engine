@@ -142,7 +142,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
       const token = await auth?.currentUser?.getIdToken();
       const res = await fetch(`${API_URL}/api/agents/${agentToDelete.id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
       });
       if (!res.ok) {
         throw new Error('Failed to delete agent');

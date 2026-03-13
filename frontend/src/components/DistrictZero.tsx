@@ -99,7 +99,7 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
       try {
         const token = await auth?.currentUser?.getIdToken();
         const res = await fetch(`${API_URL}/api/agents/strangers`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
         });
         if (res.ok) {
           const strangers: EnigmaIdentity[] = await res.json();
@@ -190,7 +190,7 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({ aesthetic_description: shell.description })
       });
