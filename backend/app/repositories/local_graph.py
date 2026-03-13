@@ -656,7 +656,7 @@ class LocalSoulRepository(SoulRepository):
 
     async def get_edges(self, source_id: str = None, target_id: str = None, type: str = None) -> List[GraphEdge]:
         if self.use_neo4j:
-            return await self.neo4j_repo.get_edges(source_id=source_id, target_id=target_id, type=type)
+            return await self.neo4j_repo.get_edges(source_id=source_id, target_id=target_id, edge_type=type)
         async with AsyncSessionLocal() as session:
             stmt = select(EdgeModel)
             if source_id:
