@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithRedirect, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import type { Auth } from 'firebase/auth';
 import { motion } from 'framer-motion';
@@ -91,12 +91,10 @@ export function LoginScreen({ onGuestMode }: LoginScreenProps) {
         }
         try {
             const provider = new GoogleAuthProvider();
-            await signInWithPopup(auth as unknown as Auth, provider);
-            // onAuthStateChanged in useAuth.ts handles the rest
+            await signInWithRedirect(auth as unknown as Auth, provider);
+            // getRedirectResult in useAuth.ts captures the result after the browser returns
         } catch (err: any) {
-            if (err.code !== 'auth/popup-closed-by-user') {
-                console.error('Google Sign-In error:', err);
-            }
+            console.error('Google Sign-In redirect error:', err);
         }
     };
 

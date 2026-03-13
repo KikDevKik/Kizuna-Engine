@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { onAuthStateChanged, signInWithCustomToken, signInWithPopup, signOut, GoogleAuthProvider } from "firebase/auth";
+import { onAuthStateChanged, signInWithCustomToken, signInWithRedirect, getRedirectResult, signOut, GoogleAuthProvider } from "firebase/auth";
 import type { User, Auth } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import { API_URL } from "../config";
@@ -13,6 +13,18 @@ export const useAuth = () => {
             setLoading(false);
             return;
         }
+
+        // Capture redirect result first (Tauri flow)
+        getRedirectResult(auth as unknown as Auth).then(async (result) => {
+            if (result?.user) {
+                // Backend sync handled by onAuthStateChanged below
+                console.log('Redirect sign-in successful:', result.user.email);
+            }
+        }).catch((err) => {
+            if (err.code !== 'auth/no-auth-event') {
+                console.error('Redirect result error:', err);
+            }
+        });
 
         const unsubscribe = onAuthStateChanged(auth as unknown as Auth, async (firebaseUser) => {
             if (firebaseUser) {
@@ -39,7 +51,7 @@ export const useAuth = () => {
     const loginWithGoogle = async () => {
         if (!auth) throw new Error("Firebase Auth not initialized");
         const provider = new GoogleAuthProvider();
-        return signInWithPopup(auth as unknown as Auth, provider);
+        return signInWithRedirect(auth as unknown as Auth, provider);
     };
 
     const loginWithToken = async (token: string) => {
