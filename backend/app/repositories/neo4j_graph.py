@@ -462,7 +462,8 @@ class Neo4jSoulRepository(SoulRepository):
             records = await result.data()
             edges = []
             for r in records:
-                props = dict(r['r'])
+                # `r['r']` is a Neo4j Relationship object which might not be directly iterable if empty
+                props = dict(r['r'].items()) if r.get('r') else {}
                 properties = {k.replace('prop_', ''): v for k, v in props.items() if k.startswith('prop_')}
                 clean_props = {k: v for k, v in props.items() if not k.startswith('prop_')}
 
