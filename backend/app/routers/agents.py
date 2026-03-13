@@ -96,6 +96,17 @@ async def list_agents(request: Request,
             if agent.id in interacted_agent_ids
         ]
 
+        # Ensure Kizuna is present for new users
+        if not my_agents:
+            kizuna_agent = next((a for a in all_agents if a.id == "kizuna"), None)
+            if kizuna_agent:
+                my_agents.append(kizuna_agent)
+                try:
+                    await repository.record_interaction(current_user, kizuna_agent.id)
+                    logger.info(f"Auto-recorded interaction for Kizuna on new user {current_user}")
+                except Exception as e:
+                    logger.error(f"Failed to auto-record interaction for Kizuna: {e}")
+
         # ARCH-01: Ensure all JSON agents are registered in SQLite
         for agent in all_agents:
             try:

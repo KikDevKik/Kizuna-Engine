@@ -157,6 +157,17 @@ class AgentService:
                     data = json.loads(content)
                     agent = AgentNode(**data)
                     agents.append(agent)
+                    
+                    # If we aren't in fallback mode but we are here, it means Firestore was empty 
+                    # for this user. Seed this local agent.
+                    if not firestore_service.fallback_mode:
+                        try:
+                            # Use agent.id in case the file name differs from the ID inside it
+                            await firestore_service.save_agent(user_id, agent.id, data)
+                            logger.info(f"Seeded agent {agent.id} to Firestore for user {user_id}")
+                        except Exception as seed_err:
+                            logger.error(f"Failed to seed agent {agent.id} to Firestore: {seed_err}")
+
             except Exception as e:
                 logger.error(f"Failed to load agent {file_path.name}: {e}")
         return agents
