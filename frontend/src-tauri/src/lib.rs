@@ -22,6 +22,31 @@ fn capture_screen() -> Result<String, String> {
     Ok(STANDARD.encode(buf.into_inner()))
 }
 
+#[tauri::command]
+async fn start_audio_pipeline(
+    app: tauri::AppHandle,
+    agent_id: String,
+    lang: String,
+    token: String,
+) -> Result<(), String> {
+    log::info!("Starting audio pipeline for agent {} in lang {}", agent_id, lang);
+    app.emit("audio_connected", ()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn stop_audio_pipeline(app: tauri::AppHandle) -> Result<(), String> {
+    log::info!("Stopping audio pipeline");
+    app.emit("audio_disconnected", ()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn send_ws_message(payload: String) -> Result<(), String> {
+    log::info!("Sending ws message: {}", payload);
+    Ok(())
+}
+
 // Estado global del micrófono PTT — accesible desde Rust y frontend via evento
 static MIC_ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -30,7 +55,12 @@ pub fn run() {
     tauri::Builder::default()
         // Plugins preexistentes e invocación de comandos
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![capture_screen])
+        .invoke_handler(tauri::generate_handler![
+            capture_screen,
+            start_audio_pipeline,
+            stop_audio_pipeline,
+            send_ws_message
+        ])
         // Plugin de logs y setup de tray / shortcuts
         .setup(|app| {
             if cfg!(debug_assertions) {
