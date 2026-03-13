@@ -20,8 +20,8 @@ pub async fn start(agent_id: String, lang: String, token: String, app: tauri::Ap
     }
     IS_RUNNING.store(true, Ordering::SeqCst);
 
-    // Default to dev backend, but can be overwritten by env var VITE_BACKEND_URL in future
-    let mut ws_url = String::from("ws://127.0.0.1:8000/ws/live");
+    // Default to production backend, but can be overwritten by env var VITE_BACKEND_URL in future
+    let mut ws_url = String::from("wss://kizuna-engine-smdnfrav2a-an.a.run.app/ws/live");
     if let Ok(url) = std::env::var("VITE_BACKEND_URL") {
         ws_url = url.replace("http://", "ws://").replace("https://", "wss://") + "/ws/live";
     }
