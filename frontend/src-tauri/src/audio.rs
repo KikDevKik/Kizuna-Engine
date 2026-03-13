@@ -78,24 +78,36 @@ pub async fn start(agent_id: String, lang: String, token: String, app: tauri::Ap
             None => return,
         };
 
-        // We need 16kHz mono for input (Gemini req)
-        let input_config = cpal::StreamConfig {
-            channels: 1,
-            sample_rate: cpal::SampleRate(16000),
-            buffer_size: cpal::BufferSize::Default,
+        // Get supported default configs
+        let input_config_supported = match input_device.default_input_config() {
+            Ok(c) => c,
+            Err(e) => {
+                log::error!("Failed to get default input config: {}", e);
+                return;
+            }
+        };
+        let output_config_supported = match output_device.default_output_config() {
+            Ok(c) => c,
+            Err(e) => {
+                log::error!("Failed to get default output config: {}", e);
+                return;
+            }
         };
 
-        // We need 24kHz mono for output (Gemini response)
-        let output_config = cpal::StreamConfig {
-            channels: 1,
-            sample_rate: cpal::SampleRate(24000),
-            buffer_size: cpal::BufferSize::Default,
-        };
+        let input_config = input_config_supported.config();
+        let in_channels = input_config.channels as usize;
+        let in_sample_rate = input_config.sample_rate.0;
+
+        let output_config = output_config_supported.config();
+        let out_channels = output_config.channels as usize;
+        let out_sample_rate = output_config.sample_rate.0;
+
+        log::info!("Audio Default Configs - IN: {}Hz {}ch | OUT: {}Hz {}ch", in_sample_rate, in_channels, out_sample_rate, out_channels);
 
         let tx_ws_clone = tx_ws.clone();
         
-        // Create RingBuffer for Playback (Capacity for ~1 second of 24kHz f32 audio)
-        let rb = ringbuf::HeapRb::<f32>::new(24000 * 2);
+        // Create RingBuffer for Playback (Capacity for ~1 second of out_sample_rate f32 audio)
+        let rb = ringbuf::HeapRb::<f32>::new((out_sample_rate as usize) * 2);
         let (mut prod, mut cons) = ringbuf::traits::Split::split(rb);
 
         // Spawn Input Stream
@@ -104,14 +116,28 @@ pub async fn start(agent_id: String, lang: String, token: String, app: tauri::Ap
             move |data: &[f32], _: &_| {
                 // Push-To-Talk / VAD simulation: only send if MIC_ACTIVE is true
                 if MIC_ACTIVE.load(Ordering::SeqCst) {
-                    // Convert f32 to PCM16 little-endian bytes for Gemini
-                    let mut pcm16_bytes = Vec::with_capacity(data.len() * 2);
-                    for &sample in data {
-                        // scale f32 [-1.0, 1.0] to i16
-                        let s_i16 = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
-                        pcm16_bytes.extend_from_slice(&s_i16.to_le_bytes());
+                    // Convert multi-channel to mono
+                    let mono_samples: Vec<f32> = data.chunks(in_channels).map(|chunk| {
+                        chunk.iter().sum::<f32>() / in_channels as f32
+                    }).collect();
+
+                    // Resample native in_sample_rate to 16kHz
+                    let out_len = (mono_samples.len() as f32 * 16000.0 / in_sample_rate as f32) as usize;
+                    let mut pcm16_bytes = Vec::with_capacity(out_len * 2);
+
+                    for i in 0..out_len {
+                        let src_idx = (i as f32 * in_sample_rate as f32 / 16000.0) as usize;
+                        if src_idx < mono_samples.len() {
+                            let sample = mono_samples[src_idx];
+                            // scale f32 [-1.0, 1.0] to i16
+                            let s_i16 = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
+                            pcm16_bytes.extend_from_slice(&s_i16.to_le_bytes());
+                        }
                     }
-                    let _ = tx_ws_clone.send(Message::Binary(pcm16_bytes.into()));
+
+                    if !pcm16_bytes.is_empty() {
+                        let _ = tx_ws_clone.send(Message::Binary(pcm16_bytes.into()));
+                    }
                 }
             },
             move |err| {
@@ -126,8 +152,11 @@ pub async fn start(agent_id: String, lang: String, token: String, app: tauri::Ap
         let output_stream = output_device.build_output_stream(
             &output_config,
             move |data: &mut [f32], _: &_| {
-                for sample in data.iter_mut() {
-                    *sample = ringbuf::traits::Consumer::try_pop(&mut cons).unwrap_or(0.0);
+                for frame in data.chunks_mut(out_channels) {
+                    let sample = ringbuf::traits::Consumer::try_pop(&mut cons).unwrap_or(0.0);
+                    for channel_sample in frame.iter_mut() {
+                        *channel_sample = sample;
+                    }
                 }
             },
             move |err| {
@@ -150,13 +179,23 @@ pub async fn start(agent_id: String, lang: String, token: String, app: tauri::Ap
 
                 match msg {
                     Ok(Message::Binary(bin)) => {
-                        // Gemini returns 24kHz PCM16. Convert back to f32 for output.
+                        // Gemini returns 24kHz PCM16. Convert back to mono f32.
+                        let mut mono_24k = Vec::new();
                         let mut i = 0;
                         while i + 1 < bin.len() {
                             let sample_i16 = i16::from_le_bytes([bin[i], bin[i + 1]]);
                             let sample_f32 = (sample_i16 as f32) / 32768.0;
-                            let _ = ringbuf::traits::Producer::try_push(&mut prod, sample_f32);
+                            mono_24k.push(sample_f32);
                             i += 2;
+                        }
+
+                        // Resample 24kHz -> out_sample_rate
+                        let out_len = (mono_24k.len() as f32 * out_sample_rate as f32 / 24000.0) as usize;
+                        for i in 0..out_len {
+                            let src_idx = (i as f32 * 24000.0 / out_sample_rate as f32) as usize;
+                            if src_idx < mono_24k.len() {
+                                let _ = ringbuf::traits::Producer::try_push(&mut prod, mono_24k[src_idx]);
+                            }
                         }
                     }
                     Ok(Message::Text(text)) => {
