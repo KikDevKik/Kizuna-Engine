@@ -15,11 +15,19 @@ def initialize_firebase():
     if _firebase_initialized:
         return
 
-    # Check for credentials path from environment
-    cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
-    if cred_path and os.path.exists(cred_path):
+    # Check for credentials path or content from environment/settings
+    cred_data = settings.FIREBASE_CREDENTIALS
+    if cred_data:
         try:
-            cred = credentials.Certificate(cred_path)
+            if cred_data.startswith("{"):
+                # It's a JSON string
+                import json
+                cred_dict = json.loads(cred_data)
+                cred = credentials.Certificate(cred_dict)
+            else:
+                # It's a file path
+                cred = credentials.Certificate(cred_data)
+                
             firebase_admin.initialize_app(cred)
             _firebase_initialized = True
             logger.info("Firebase Admin initialized successfully.")
