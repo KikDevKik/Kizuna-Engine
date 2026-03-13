@@ -51,7 +51,7 @@ class Settings:
             return self.MODEL_SUBCONSCIOUS
         return self._MODEL_DREAM_PROD
 
-    CORS_ORIGINS: list[str] = json.loads(os.getenv("CORS_ORIGINS", '["http://localhost:5173", "http://localhost:3000", "tauri://localhost", "https://tauri.localhost"]'))
+    CORS_ORIGINS: list[str] = json.loads(os.getenv("CORS_ORIGINS", '["http://localhost:5173", "http://localhost:3000", "tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]'))
 
     # GCP Configuration (Phase 3.2)
     GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "")
