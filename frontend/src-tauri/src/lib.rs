@@ -10,6 +10,8 @@ use image::codecs::jpeg::JpegEncoder;
 use std::io::Cursor;
 use xcap::Monitor;
 
+mod audio;
+
 #[tauri::command]
 fn capture_screen() -> Result<String, String> {
     let monitors = Monitor::all().map_err(|e| e.to_string())?;
@@ -29,26 +31,26 @@ async fn start_audio_pipeline(
     lang: String,
     token: String,
 ) -> Result<(), String> {
-    log::info!("Starting audio pipeline for agent {} in lang {}", agent_id, lang);
-    app.emit("audio_connected", ()).map_err(|e| e.to_string())?;
-    Ok(())
+    log::info!("Starting audio pipeline logic...");
+    audio::start(agent_id, lang, token, app).await
 }
 
 #[tauri::command]
 async fn stop_audio_pipeline(app: tauri::AppHandle) -> Result<(), String> {
-    log::info!("Stopping audio pipeline");
+    log::info!("Stopping audio pipeline logic...");
+    audio::stop().await?;
     app.emit("audio_disconnected", ()).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
 async fn send_ws_message(payload: String) -> Result<(), String> {
-    log::info!("Sending ws message: {}", payload);
-    Ok(())
+    log::info!("Sending ws message");
+    audio::send_ws_message(payload).await
 }
 
 // Estado global del micrófono PTT — accesible desde Rust y frontend via evento
-static MIC_ACTIVE: AtomicBool = AtomicBool::new(false);
+pub static MIC_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
