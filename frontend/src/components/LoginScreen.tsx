@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
-    GoogleAuthProvider,
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import type { Auth } from 'firebase/auth';
