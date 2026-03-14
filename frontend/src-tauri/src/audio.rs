@@ -161,7 +161,7 @@ pub async fn start(agent_id: String, lang: String, token: String, app: tauri::Ap
                         // Delay playback until buffer accumulates (Jitter buffering)
                         // If we can peek that the producer has pushed enough, or just count what we pop.
                         // For simplicity, we just count how many we COULD pop versus waiting.
-                        if cons.len() > pcm_start_threshold {
+                        if cons.occupied_len() > pcm_start_threshold {
                             frames_played = pcm_start_threshold; // Trigger playback start
                             ringbuf::traits::Consumer::try_pop(&mut cons).unwrap_or(0.0)
                         } else {
