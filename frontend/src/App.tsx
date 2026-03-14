@@ -38,6 +38,7 @@ function App() {
   const [viewMode, setViewMode] = useState<'core' | 'roster' | 'district'>('roster'); // Default to Roster to force selection
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [isSanctuaryOpen, setIsSanctuaryOpen] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   // Configuration State
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -65,15 +66,18 @@ function App() {
     // Stay in District mode to see the Mock Session UI
   }, []);
 
-  const handleToggleConnection = () => {
+  const handleToggleConnection = async () => {
     if (isSessionActive(status)) {
       disconnect();
     } else {
       if (selectedAgentId) {
+        setIsConnecting(true);
+        // Fake delay to allow UI to show "SYNCING..." before capturing mic
+        await new Promise(resolve => setTimeout(resolve, 2500));
+        setIsConnecting(false);
         connect(selectedAgentId);
       } else {
-        // Fallback: If no agent selected (shouldn't happen in Core view if we force Roster first),
-        // maybe switch back to roster?
+        // Fallback: If no agent selected
         console.warn("No agent selected. Switching to Roster.");
         setViewMode('roster');
       }
@@ -197,22 +201,38 @@ function App() {
                   transition={{ duration: 0.5 }}
                   className="flex flex-col items-center justify-center"
                 >
-                  <KizunaCore
-                    volumeRef={volumeRef}
-                    isListening={isListening}
-                    isAiSpeaking={isAiSpeaking}
-                    status={status}
-                  />
+                  <div className="relative flex flex-col items-center justify-center">
+                    <KizunaCore
+                      volumeRef={volumeRef}
+                      isListening={isListening}
+                      isAiSpeaking={isAiSpeaking}
+                      status={status}
+                    />
+
+                    {/* VAD Listening Indicator */}
+                    <AnimatePresence>
+                      {status === 'ready' && isListening && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          className="absolute -bottom-8 text-electric-blue font-technical text-xs tracking-widest animate-pulse"
+                        >
+                          // ESCUCHANDO //
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
 
                   {/* Connection Toggle (Core View) */}
                   <div className="mt-12 pointer-events-auto flex flex-col items-center gap-4">
                     <button
                       onClick={handleToggleConnection}
-                      disabled={status === 'connecting'}
+                      disabled={status === 'connecting' || isConnecting}
                       className={`kizuna-shard-btn-wrapper ${!selectedAgentId ? 'opacity-50 grayscale' : ''}`}
                     >
                       <span className="kizuna-shard-btn-inner">
-                        {status === 'connecting' ? (
+                        {status === 'connecting' || isConnecting ? (
                           'SYNCING...'
                         ) : isSessionActive(status) ? (
                           <>TERMINATE <Power size={20} /></>

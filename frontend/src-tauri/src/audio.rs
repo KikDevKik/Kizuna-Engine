@@ -148,13 +148,36 @@ pub async fn start(agent_id: String, lang: String, token: String, app: tauri::Ap
         input_stream.play().unwrap();
 
         // Spawn Output Stream
+        // Jitter Buffer logic
+        let mut frames_played = 0;
+        let pcm_start_threshold = (out_sample_rate as f32 * 0.2) as usize; // ~200ms of audio
+        
         let output_stream = output_device.build_output_stream(
             &output_config,
             move |data: &mut [f32], _: &_| {
                 for frame in data.chunks_mut(out_channels) {
-                    let sample = ringbuf::traits::Consumer::try_pop(&mut cons).unwrap_or(0.0);
+                    let play_sample = if frames_played < pcm_start_threshold {
+                        // Delay playback until buffer accumulates (Jitter buffering)
+                        // If we can peek that the producer has pushed enough, or just count what we pop.
+                        // For simplicity, we just count how many we COULD pop versus waiting.
+                        if cons.len() > pcm_start_threshold {
+                            frames_played = pcm_start_threshold; // Trigger playback start
+                            ringbuf::traits::Consumer::try_pop(&mut cons).unwrap_or(0.0)
+                        } else {
+                            0.0 // Silence while buffering
+                        }
+                    } else {
+                        // Play normal
+                        let s = ringbuf::traits::Consumer::try_pop(&mut cons).unwrap_or(0.0);
+                        if s == 0.0 && cons.is_empty() {
+                            // Reset jitter buffer if we starved
+                            frames_played = 0;
+                        }
+                        s
+                    };
+
                     for channel_sample in frame.iter_mut() {
-                        *channel_sample = sample;
+                        *channel_sample = play_sample;
                     }
                 }
             },
