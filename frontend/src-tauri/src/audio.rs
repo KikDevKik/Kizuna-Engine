@@ -3,6 +3,7 @@ use tauri::Emitter;
 use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use url::Url;
+use ringbuf::traits::Observer;
 
 // Continuous audio stream (VAD server-side)
 

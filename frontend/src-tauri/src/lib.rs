@@ -1,10 +1,8 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Emitter,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, RunEvent, WindowEvent,
 };
-use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use image::codecs::jpeg::JpegEncoder;
 use std::io::Cursor;
