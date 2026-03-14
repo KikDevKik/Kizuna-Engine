@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { API_URL } from '../config';
+import { auth } from '../lib/firebase';
 
 export interface RitualMessage {
   role: 'system' | 'user';
@@ -51,16 +53,18 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     try {
       const locale = navigator.language || 'en';
-      const url = new URL('http://localhost:8000/api/agents/ritual');
+      const url = new URL(`${API_URL}/api/agents/ritual`);
       if (archetype) {
-          url.searchParams.append('archetype', archetype);
+        url.searchParams.append('archetype', archetype);
       }
 
+      const token = await auth?.currentUser?.getIdToken();
       const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
-            'Accept-Language': locale
+          'Content-Type': 'application/json',
+          'Accept-Language': locale,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify([]),
         signal: controller.signal
@@ -69,10 +73,10 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-          if (response.status === 405) {
-             throw new Error('Method Not Allowed (405). Check backend routing.');
-          }
-          throw new Error(`Failed to initiate ritual: ${response.status}`);
+        if (response.status === 405) {
+          throw new Error('Method Not Allowed (405). Check backend routing.');
+        }
+        throw new Error(`Failed to initiate ritual: ${response.status}`);
       }
 
       const data = await response.json();
@@ -82,9 +86,9 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
     } catch (err: any) {
       if (err.name === 'AbortError') {
-          setError('The Void is silent (Timeout). Check the roster, the soul may have been forged properly.');
+        setError('The Void is silent (Timeout). Check the roster, the soul may have been forged properly.');
       } else {
-          setError(err.message || 'Connection to the Void failed.');
+        setError(err.message || 'Connection to the Void failed.');
       }
       setStatus('error');
     } finally {
@@ -108,16 +112,18 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     try {
       const locale = navigator.language || 'en';
-      const url = new URL('http://localhost:8000/api/agents/ritual');
+      const url = new URL(`${API_URL}/api/agents/ritual`);
       if (archetype) {
-          url.searchParams.append('archetype', archetype);
+        url.searchParams.append('archetype', archetype);
       }
 
+      const token = await auth?.currentUser?.getIdToken();
       const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
-            'Accept-Language': locale
+          'Content-Type': 'application/json',
+          'Accept-Language': locale,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify(newHistory),
         signal: controller.signal
@@ -135,11 +141,11 @@ export const RitualProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setMessages(prev => [...prev, { role: 'system', content: data.message }]);
       }
     } catch (err: any) {
-        if (err.name === 'AbortError') {
-            setError('The Void is silent (Timeout). Check the roster, the soul may have been forged properly.');
-        } else {
-            setError(err.message || 'Ritual interrupted.');
-        }
+      if (err.name === 'AbortError') {
+        setError('The Void is silent (Timeout). Check the roster, the soul may have been forged properly.');
+      } else {
+        setError(err.message || 'Ritual interrupted.');
+      }
       setStatus('error');
     } finally {
       clearTimeout(timeoutId);

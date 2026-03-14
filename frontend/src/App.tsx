@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useLiveAPI } from './hooks/useLiveAPI';
+import { useAuth } from './hooks/useAuth';
 import { isSessionActive } from './contexts/LiveAPIContext';
 import { Layout } from './components/Layout';
 import { KizunaCore } from './components/KizunaCore';
@@ -11,16 +12,17 @@ import { SystemLogs } from './components/SystemLogs';
 import { JulesSanctuary } from './components/JulesSanctuary';
 import { ConfigurationPanel } from './components/ConfigurationPanel';
 import { ConnectionSeveredModal } from './components/ConnectionSeveredModal';
+import { LoginScreen } from './components/LoginScreen';
 import { RitualProvider } from './contexts/RitualContext';
 import { RosterProvider } from './contexts/RosterContext';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Power, Settings } from 'lucide-react';
+import { Power, Settings, LogOut } from 'lucide-react';
 import './KizunaHUD.css';
 
 function App() {
+  const { user, loading, logout } = useAuth();
   const liveApi = useLiveAPI();
   const {
-    connected,
     status,
     volumeRef,
     isAiSpeaking,
@@ -36,6 +38,7 @@ function App() {
   const [viewMode, setViewMode] = useState<'core' | 'roster' | 'district'>('roster'); // Default to Roster to force selection
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [isSanctuaryOpen, setIsSanctuaryOpen] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   // Configuration State
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -63,15 +66,18 @@ function App() {
     // Stay in District mode to see the Mock Session UI
   }, []);
 
-  const handleToggleConnection = () => {
+  const handleToggleConnection = async () => {
     if (isSessionActive(status)) {
       disconnect();
     } else {
       if (selectedAgentId) {
+        setIsConnecting(true);
+        // Fake delay to allow UI to show "SYNCING..." before capturing mic
+        await new Promise(resolve => setTimeout(resolve, 2500));
+        setIsConnecting(false);
         connect(selectedAgentId);
       } else {
-        // Fallback: If no agent selected (shouldn't happen in Core view if we force Roster first),
-        // maybe switch back to roster?
+        // Fallback: If no agent selected
         console.warn("No agent selected. Switching to Roster.");
         setViewMode('roster');
       }
@@ -89,189 +95,237 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.ctrlKey && event.shiftKey && (event.key === 'P' || event.key === 'p')) {
-            event.preventDefault();
-            setIsSanctuaryOpen(prev => !prev);
-        }
+      if (event.ctrlKey && event.shiftKey && (event.key === 'P' || event.key === 'p')) {
+        event.preventDefault();
+        setIsSanctuaryOpen(prev => !prev);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // ─── Auth gate ───────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <motion.div
+          className="w-8 h-8 rounded-full border-2 border-purple-500/40 border-t-purple-500"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+        />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginScreen />;
+  }
+
   return (
     <RitualProvider>
-    <RosterProvider>
-    <Layout showScanlines={showScanlines}>
-      {/* HEADER / NAV */}
-      <header className="fixed top-0 left-0 w-full p-6 flex justify-between items-start z-50 pointer-events-none">
-        <div className="flex flex-col pointer-events-auto">
-          <h1 className="font-monumental text-5xl skew-x-[-10deg] tracking-tighter leading-none">
-            KIZUNA<span className="text-electric-blue">ENGINE</span>
-          </h1>
-          <div className="h-1 w-32 bg-electric-blue skew-x-[-10deg] mt-1" />
-          <div className="font-technical text-xs mt-1 opacity-70 text-electric-blue">
-            MULTIMODAL INTERFACE V4.0 // AGENT: {selectedAgentId || 'NONE'}
-          </div>
-        </div>
-
-        <div className="flex gap-4 pointer-events-auto items-center">
-          {/* Config Button */}
-          <button
-            onClick={() => setIsConfigOpen(true)}
-            className="text-electric-blue/60 hover:text-electric-blue transition-colors mr-4"
-          >
-             <Settings size={24} />
-          </button>
-
-          <button
-            onClick={() => setViewMode('core')}
-            className={`kizuna-shard-nav-btn ${viewMode === 'core' ? 'active' : ''}`}
-          >
-            <div className="kizuna-shard-nav-inner">
-              CORE VIEW
-            </div>
-          </button>
-          <button
-            onClick={() => setViewMode('district')}
-            className={`kizuna-shard-nav-btn ${viewMode === 'district' ? 'active' : ''}`}
-          >
-            <div className="kizuna-shard-nav-inner">
-              DISTRICT ZERO
-            </div>
-          </button>
-          <button
-            onClick={() => setViewMode('roster')}
-            className={`kizuna-shard-nav-btn ${viewMode === 'roster' ? 'active' : ''}`}
-          >
-            <div className="kizuna-shard-nav-inner">
-              AGENT ROSTER
-            </div>
-          </button>
-        </div>
-      </header>
-
-      {/* MAIN CONTENT AREA */}
-      <main className="relative w-full h-full flex items-center justify-center z-10">
-        <AnimatePresence mode="wait">
-          {viewMode === 'core' ? (
-            <motion.div
-              key="core-view"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }}
-              transition={{ duration: 0.5 }}
-              className="flex flex-col items-center justify-center"
-            >
-              <KizunaCore
-                volumeRef={volumeRef}
-                isListening={isListening}
-                isAiSpeaking={isAiSpeaking}
-                status={status}
-              />
-
-              {/* Connection Toggle (Core View) */}
-              <div className="mt-12 pointer-events-auto">
-                <button
-                  onClick={handleToggleConnection}
-                  disabled={status === 'connecting'}
-                  className={`kizuna-shard-btn-wrapper ${!selectedAgentId ? 'opacity-50 grayscale' : ''}`}
-                >
-                  <span className="kizuna-shard-btn-inner">
-                    {status === 'connecting' ? (
-                      'SYNCING...'
-                    ) : isSessionActive(status) ? (
-                      <>TERMINATE <Power size={20} /></>
-                    ) : (
-                      <>{selectedAgentId ? 'INITIATE LINK' : 'SELECT AGENT'} <Power size={20} /></>
-                    )}
-                  </span>
-                </button>
+      <RosterProvider>
+        <Layout showScanlines={showScanlines}>
+          {/* HEADER / NAV */}
+          <header className="fixed top-0 left-0 w-full p-6 flex justify-between items-start z-50 pointer-events-none">
+            <div className="flex flex-col pointer-events-auto">
+              <h1 className="font-monumental text-5xl skew-x-[-10deg] tracking-tighter leading-none">
+                KIZUNA<span className="text-electric-blue">ENGINE</span>
+              </h1>
+              <div className="h-1 w-32 bg-electric-blue skew-x-[-10deg] mt-1" />
+              <div className="font-technical text-xs mt-1 opacity-70 text-electric-blue">
+                MULTIMODAL INTERFACE V4.0 // AGENT: {selectedAgentId || 'NONE'}
               </div>
-            </motion.div>
-          ) : viewMode === 'district' ? (
-             <motion.div
-              key="district-view"
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -50, filter: 'blur(10px)' }}
-              transition={{ duration: 0.5 }}
-              className="w-full h-full flex items-center justify-center pointer-events-auto"
-            >
-              <DistrictZero
-                connect={connect}
-                disconnect={disconnect}
-                onAgentForged={handleAgentForged}
-              />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="roster-view"
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -50, filter: 'blur(10px)' }}
-              transition={{ duration: 0.5 }}
-              className="w-full h-full flex items-center justify-center pointer-events-auto"
-            >
-              <AgentRoster onSelect={handleAgentSelect} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </main>
+            </div>
 
-      {/* PERIPHERAL PANELS */}
-      <VisionPanel
-        status={status}
-        sendImage={sendImage}
-        addSystemAudio={addSystemAudio}
-        removeSystemAudio={removeSystemAudio}
-      />
-      <EpistemicPanel />
-      <SystemLogs />
+            <div className="flex gap-4 pointer-events-auto items-center">
+              {/* Logout Button */}
+              <button
+                onClick={async () => {
+                  try {
+                    await logout();
+                  } catch (e) {
+                    console.error("Logout failed", e);
+                  }
+                }}
+                className="text-alert-red/60 hover:text-alert-red transition-colors mr-2 flex items-center gap-2 font-technical text-[10px] tracking-widest border border-alert-red/30 px-3 py-1 bg-alert-red/5"
+                title="Disconnect from Kizuna Engine"
+              >
+                <LogOut size={14} /> LOGOUT
+              </button>
 
-      <JulesSanctuary
-        isOpen={isSanctuaryOpen}
-        onClose={() => setIsSanctuaryOpen(false)}
-        api={liveApi}
-      />
+              {/* Config Button */}
+              <button
+                onClick={() => setIsConfigOpen(true)}
+                className="text-electric-blue/60 hover:text-electric-blue transition-colors mr-4"
+              >
+                <Settings size={24} />
+              </button>
 
-      <ConfigurationPanel
-        isOpen={isConfigOpen}
-        onClose={() => setIsConfigOpen(false)}
-        showScanlines={showScanlines}
-        setShowScanlines={setShowScanlines}
-      />
+              <button
+                onClick={() => setViewMode('core')}
+                className={`kizuna-shard-nav-btn ${viewMode === 'core' ? 'active' : ''}`}
+              >
+                <div className="kizuna-shard-nav-inner">
+                  CORE VIEW
+                </div>
+              </button>
+              <button
+                onClick={() => setViewMode('district')}
+                className={`kizuna-shard-nav-btn ${viewMode === 'district' ? 'active' : ''}`}
+              >
+                <div className="kizuna-shard-nav-inner">
+                  DISTRICT ZERO
+                </div>
+              </button>
+              <button
+                onClick={() => setViewMode('roster')}
+                className={`kizuna-shard-nav-btn ${viewMode === 'roster' ? 'active' : ''}`}
+              >
+                <div className="kizuna-shard-nav-inner">
+                  AGENT ROSTER
+                </div>
+              </button>
+            </div>
+          </header>
 
-      {/* CRITICAL ALERTS */}
-      <AnimatePresence>
-        {isSevered && (
-            <motion.div
-            key="modal-severed"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5 }}
-            className="fixed inset-0 z-[100] pointer-events-auto"
-            >
-            <ConnectionSeveredModal
-                reason={severanceReason}
-                onReboot={handleReboot}
-            />
-            </motion.div>
-        )}
-      </AnimatePresence>
+          {/* MAIN CONTENT AREA */}
+          <main className="relative w-full h-full flex items-center justify-center z-10">
+            <AnimatePresence mode="wait">
+              {viewMode === 'core' ? (
+                <motion.div
+                  key="core-view"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }}
+                  transition={{ duration: 0.5 }}
+                  className="flex flex-col items-center justify-center"
+                >
+                  <div className="relative flex flex-col items-center justify-center">
+                    <KizunaCore
+                      volumeRef={volumeRef}
+                      isListening={isListening}
+                      isAiSpeaking={isAiSpeaking}
+                      status={status}
+                    />
 
-      {/* FOOTER STATUS */}
-      <footer className="fixed bottom-0 left-0 w-full p-4 flex justify-between items-end z-40 pointer-events-none opacity-80 text-[10px] font-technical text-vintage-navy">
-        <div>
-           MEMORY_USAGE: 64TB // LATENCY: 12ms
-        </div>
-        <div>
-           SECURE_CHANNEL: {isSessionActive(status) ? 'ENCRYPTED' : 'OPEN'} // TARGET: {selectedAgentId || 'NULL'}
-        </div>
-      </footer>
-    </Layout>
-    </RosterProvider>
+                    {/* VAD Listening Indicator */}
+                    <AnimatePresence>
+                      {status === 'ready' && isListening && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          className="absolute -bottom-8 text-electric-blue font-technical text-xs tracking-widest animate-pulse"
+                        >
+                          // ESCUCHANDO //
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Connection Toggle (Core View) */}
+                  <div className="mt-12 pointer-events-auto flex flex-col items-center gap-4">
+                    <button
+                      onClick={handleToggleConnection}
+                      disabled={status === 'connecting' || isConnecting}
+                      className={`kizuna-shard-btn-wrapper ${!selectedAgentId ? 'opacity-50 grayscale' : ''}`}
+                    >
+                      <span className="kizuna-shard-btn-inner">
+                        {status === 'connecting' || isConnecting ? (
+                          'SYNCING...'
+                        ) : isSessionActive(status) ? (
+                          <>TERMINATE <Power size={20} /></>
+                        ) : (
+                          <>{selectedAgentId ? 'INITIATE LINK' : 'SELECT AGENT'} <Power size={20} /></>
+                        )}
+                      </span>
+                    </button>
+                  </div>
+                </motion.div>
+              ) : viewMode === 'district' ? (
+                <motion.div
+                  key="district-view"
+                  initial={{ opacity: 0, x: 50 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -50, filter: 'blur(10px)' }}
+                  transition={{ duration: 0.5 }}
+                  className="w-full h-full flex items-center justify-center pointer-events-auto"
+                >
+                  <DistrictZero
+                    connect={connect}
+                    disconnect={disconnect}
+                    onAgentForged={handleAgentForged}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="roster-view"
+                  initial={{ opacity: 0, y: 50 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -50, filter: 'blur(10px)' }}
+                  transition={{ duration: 0.5 }}
+                  className="w-full h-full flex items-center justify-center pointer-events-auto"
+                >
+                  <AgentRoster onSelect={handleAgentSelect} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </main>
+
+          {/* PERIPHERAL PANELS */}
+          <VisionPanel
+            status={status}
+            sendImage={sendImage}
+            addSystemAudio={addSystemAudio}
+            removeSystemAudio={removeSystemAudio}
+          />
+          <EpistemicPanel />
+          <SystemLogs />
+
+          <JulesSanctuary
+            isOpen={isSanctuaryOpen}
+            onClose={() => setIsSanctuaryOpen(false)}
+            api={liveApi}
+          />
+
+          <ConfigurationPanel
+            isOpen={isConfigOpen}
+            onClose={() => setIsConfigOpen(false)}
+            showScanlines={showScanlines}
+            setShowScanlines={setShowScanlines}
+          />
+
+          {/* CRITICAL ALERTS */}
+          <AnimatePresence>
+            {isSevered && (
+              <motion.div
+                key="modal-severed"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5 }}
+                className="fixed inset-0 z-[100] pointer-events-auto"
+              >
+                <ConnectionSeveredModal
+                  reason={severanceReason}
+                  onReboot={handleReboot}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* FOOTER STATUS */}
+          <footer className="fixed bottom-0 left-0 w-full p-4 flex justify-between items-end z-40 pointer-events-none opacity-80 text-[10px] font-technical text-vintage-navy">
+            <div>
+              MEMORY_USAGE: 64TB // LATENCY: 12ms
+            </div>
+            <div>
+              SECURE_CHANNEL: {isSessionActive(status) ? 'ENCRYPTED' : 'OPEN'} // TARGET: {selectedAgentId || 'NULL'}
+            </div>
+          </footer>
+        </Layout>
+      </RosterProvider>
     </RitualProvider>
   );
 }

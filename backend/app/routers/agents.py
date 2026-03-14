@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, status, Response, Header, Depends
+from fastapi import APIRouter, Request
+from app.core.rate_limiter import limiter
+from fastapi import HTTPException, status, Response, Header, Depends
 from typing import List, Optional, Any
 from pydantic import BaseModel, Field, field_validator
 import logging
@@ -64,9 +66,10 @@ class RitualFlowResponse(BaseModel):
     message: Optional[str] = None
     agent: Optional[AgentNode] = None
 
+@limiter.limit("60/minute")
 @router.get("/", response_model=List[AgentNode])
-async def list_agents(
-    user_id: str = Depends(get_current_user),
+async def list_agents(request: Request,
+    current_user: dict = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
     """
@@ -74,20 +77,16 @@ async def list_agents(
     """
     try:
         # 1. Fetch all agents from filesystem
-        all_agents = await agent_service.list_agents()
+        all_agents = await agent_service.list_agents(current_user)
 
         # 2. Fetch interaction edges for the current user
-        # We need to find agents where an 'InteractedWith' edge exists with the user.
-        # Since LocalSoulRepository.record_interaction creates (User -> Agent),
-        # we look for edges where source_id == user_id.
-
-        # Use get_edges if available (LocalSoulRepository)
+        # Use get_edges if available — filter by type manually for repo compatibility
         if hasattr(repository, 'get_edges'):
-            edges = await repository.get_edges(source_id=user_id, type="interactedWith")
+            all_edges = await repository.get_edges(source_id=current_user)
+            edges = [e for e in all_edges if e.type == "interactedWith"]
             interacted_agent_ids = {edge.target_id for edge in edges}
         else:
-            # Fallback for other repositories (should not happen in this phase)
-            # Just return all agents if we can't filter
+            # Fallback: return all agents if we can't filter
             logger.warning("Repository does not support get_edges filtering. Returning all agents.")
             return all_agents
 
@@ -97,32 +96,38 @@ async def list_agents(
             if agent.id in interacted_agent_ids
         ]
 
-        # ARQUITECTURA-01 FALLBACK: Si no hay edges pero hay agentes en disco,
-        # re-registrar automáticamente los agentes existentes
-        if not my_agents and all_agents:
-            logger.info(f"🔧 ARQUITECTURA-01: No interactedWith edges found for {user_id}. Re-registering {len(all_agents)} agents.")
-            for agent in all_agents:
-                try:
-                    await repository.record_interaction(user_id, agent.id)
-                except Exception as e:
-                    logger.warning(f"Failed to re-register agent {agent.name}: {e}")
-            my_agents = all_agents
+        if not my_agents:
+            # SQLite vacío (Cloud Run efímero) — retornar agentes de Firestore directamente
+            return all_agents if all_agents else []
+
+        # ARCH-01: Ensure all JSON agents are registered in SQLite
+        for agent in all_agents:
+            try:
+                existing = await repository._get_node(agent.id, "AgentNode")
+                if not existing:
+                    await repository._save_node(agent.id, "AgentNode", agent.model_dump(mode='json'))
+                    logger.info(f"🔧 ARCH-01: Synced missing agent '{agent.name}' to SQLite")
+            except Exception as e:
+                logger.warning(f"ARCH-01: Sync failed for {agent.name}: {e}")
 
         # 4. Roster Eviction: Remove Nemesis (Module 1.5)
-        nemesis_agents = await repository.get_nemesis_agents(user_id)
+        nemesis_agents = await repository.get_nemesis_agents(current_user)
         nemesis_ids = {a.id for a in nemesis_agents}
 
         my_agents = [a for a in my_agents if a.id not in nemesis_ids]
 
+        if not my_agents:
+            return all_agents if all_agents else []
         return my_agents
 
     except Exception as e:
         logger.exception("Error listing agents")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+@limiter.limit("60/minute")
 @router.get("/strangers", response_model=List[StrangerNode])
-async def list_strangers(
-    user_id: str = Depends(get_current_user),
+async def list_strangers(request: Request,
+    current_user: dict = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
     """
@@ -133,7 +138,7 @@ async def list_strangers(
         results = []
 
         # 1. Fetch Nemesis Agents
-        nemesis_agents = await repository.get_nemesis_agents(user_id)
+        nemesis_agents = await repository.get_nemesis_agents(current_user)
         for agent in nemesis_agents:
             results.append(StrangerNode(
                 id=agent.id,
@@ -145,7 +150,7 @@ async def list_strangers(
             ))
 
         # 2. Fetch Gossip Candidates
-        gossip_agents = await repository.get_gossip_candidates(user_id)
+        gossip_agents = await repository.get_gossip_candidates(current_user)
         for agent in gossip_agents:
             # Try to get context from traits if available
             vibe = agent.base_instruction
@@ -161,9 +166,31 @@ async def list_strangers(
                 is_gossip=True
             ))
 
-        # Note: We return ONLY backend-managed strangers.
-        # The frontend will merge these with static Enigma Shells if needed,
-        # or use these primarily.
+        # 3. Fetch hollow-forged agents from filesystem (not yet in user's roster)
+        all_agents = await agent_service.list_agents(current_user)
+        if hasattr(repository, 'get_edges'):
+            _re = await repository.get_edges(source_id=current_user)
+            roster_edges = [e for e in _re if e.type == "interactedWith"]
+        else:
+            roster_edges = []
+        roster_ids = {edge.target_id for edge in roster_edges}
+        existing_ids = {r.id for r in results}
+
+        for agent in all_agents:
+            if (
+                "hollow-forged" in (agent.tags or [])
+                and agent.id not in roster_ids
+                and agent.id not in existing_ids
+            ):
+                vibe = agent.base_instruction[:120] + "..." if agent.base_instruction else "Unknown entity."
+                results.append(StrangerNode(
+                    id=agent.id,
+                    description=vibe,
+                    tempAlias=f"Unknown_0x{agent.id[:4].upper()}",
+                    visualHint="bg-purple-500/10",
+                    is_nemesis=False,
+                    is_gossip=True
+                ))
 
         return results
 
@@ -171,30 +198,34 @@ async def list_strangers(
         logger.exception("Error listing strangers")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+@limiter.limit("60/minute")
 @router.post("/", response_model=AgentNode, status_code=status.HTTP_201_CREATED)
-async def create_agent(request: CreateAgentRequest):
+async def create_agent(request: Request, body: CreateAgentRequest, current_user: dict = Depends(get_current_user)):
     """
     Create a new agent.
     """
     try:
         new_agent = await agent_service.create_agent(
-            name=request.name,
-            role=request.role,
-            base_instruction=request.base_instruction,
-            voice_name=request.voice_name,
-            traits=request.traits,
-            tags=request.tags,
-            native_language=request.native_language,
-            known_languages=request.known_languages
+            user_id=current_user,
+            name=body.name,
+            role=body.role,
+            base_instruction=body.base_instruction,
+            voice_name=body.voice_name,
+            traits=body.traits,
+            tags=body.tags,
+            native_language=body.native_language,
+            known_languages=body.known_languages
         )
         return new_agent
     except Exception as e:
-        logger.exception(f"Error creating agent '{request.name}'")
+        logger.exception(f"Error creating agent '{body.name}'")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+@limiter.limit("60/minute")
 @router.post("/forge_hollow", response_model=AgentNode, status_code=status.HTTP_201_CREATED)
-async def forge_hollow_agent(
-    request: HollowForgeRequest,
+async def forge_hollow_agent(request: Request,
+    body: HollowForgeRequest,
+    current_user: dict = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
     """
@@ -203,10 +234,11 @@ async def forge_hollow_agent(
     """
     try:
         # 1. Forge the Soul (Generate Content)
-        agent_node, memories = await agent_service.forge_hollow_agent(request.aesthetic_description)
+        agent_node, memories = await agent_service.forge_hollow_agent(body.aesthetic_description)
 
         # 2. Bind the Soul to Matter (Save File)
         saved_agent = await agent_service.create_agent(
+            user_id=current_user,
             name=agent_node.name,
             role=agent_node.role,
             base_instruction=agent_node.base_instruction,
@@ -236,7 +268,7 @@ async def forge_hollow_agent(
         try:
             # Query for existing agents (candidates)
             # list_agents returns ALL agents.
-            all_agents = await agent_service.list_agents()
+            all_agents = await agent_service.list_agents(current_user.uid)
             candidates = [a for a in all_agents if a.id != saved_agent.id]
 
             if candidates:
@@ -267,6 +299,8 @@ async def forge_hollow_agent(
         except Exception as e:
             logger.error(f"Gossip Protocol failed: {e}")
 
+        # 6. Record Interaction so the agent appears in the user's roster
+        await repository.record_interaction(current_user, saved_agent.id)
         logger.info(f"Hollow Forging Complete: {saved_agent.name} ({saved_agent.id}) with {len(memories)} memories.")
         return saved_agent
 
@@ -276,9 +310,11 @@ async def forge_hollow_agent(
         logger.exception(f"Error forging hollow agent")
         raise HTTPException(status_code=500, detail="Soul Forge Malfunction")
 
+@limiter.limit("60/minute")
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_agent(
+async def delete_agent(request: Request,
     agent_id: str,
+    current_user: str = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
     """
@@ -287,7 +323,7 @@ async def delete_agent(
     """
     try:
         # 1. Fetch Agent (Cache/File)
-        agent = await agent_service.get_agent(agent_id)
+        agent = await agent_service.get_agent(current_user, agent_id)
         if not agent:
              raise HTTPException(status_code=404, detail="Agent not found")
 
@@ -302,20 +338,22 @@ async def delete_agent(
             # OR if it is the SOURCE (meaning it spawned someone, less critical but potentially important)
             # The rule is: "Any Agent node with a Gossip_Source edge... is strictly EXEMPT"
 
-            # Check Incoming Gossip (Spawned by someone)
-            incoming = await repository.get_edges(target_id=agent_id, type="Gossip_Source")
+            # Check Incoming Gossip (Spawned by someone) — filter by type manually for repo compatibility
+            _inc = await repository.get_edges(target_id=agent_id)
+            incoming = [e for e in _inc if e.type == "Gossip_Source"]
             if incoming:
                 logger.warning(f"🛡️ Hollow Preservation: Blocked deletion of {agent.name} (Incoming Gossip Edge)")
                 raise HTTPException(status_code=403, detail="Hollow Preservation: This agent is a node in a Gossip Chain.")
 
             # Check Outgoing Gossip (Spawned someone)
-            outgoing = await repository.get_edges(source_id=agent_id, type="Gossip_Source")
+            _out = await repository.get_edges(source_id=agent_id)
+            outgoing = [e for e in _out if e.type == "Gossip_Source"]
             if outgoing:
                  logger.warning(f"🛡️ Hollow Preservation: Blocked deletion of {agent.name} (Outgoing Gossip Edge)")
                  raise HTTPException(status_code=403, detail="Hollow Preservation: This agent is a source of active rumors.")
 
         # 4. Proceed with Deletion
-        success = await agent_service.delete_agent(agent_id)
+        success = await agent_service.delete_agent(current_user, agent_id)
         if not success:
             raise HTTPException(status_code=404, detail="Agent not found during deletion")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -326,13 +364,14 @@ async def delete_agent(
          logger.exception(f"Error deleting agent '{agent_id}'")
          raise HTTPException(status_code=500, detail="Internal Server Error")
 
+@limiter.limit("60/minute")
 @router.post("/ritual", response_model=RitualFlowResponse, status_code=status.HTTP_200_OK)
-async def conduct_ritual(
+async def conduct_ritual(request: Request,
     history: List[RitualMessage],
     response: Response,
     archetype: Optional[str] = None,
     accept_language: str = Header(default="en"),
-    user_id: str = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
     repository: SoulRepository = Depends(get_repository)
 ):
     """
@@ -361,6 +400,7 @@ async def conduct_ritual(
                 traits["lore"] = data["lore"]
 
             new_agent = await agent_service.create_agent(
+                user_id=current_user,
                 name=data.get("name", "Unnamed"),
                 role=data.get("role", "Unknown"),
                 base_instruction=data.get("base_instruction", ""),
@@ -401,19 +441,19 @@ async def conduct_ritual(
             initial_affinity = data.get("initial_affinity", 50)
             if initial_affinity is not None:
                 try:
-                    # Calculate delta dynamically to reach target (Robust to default changes)
-                    # We first fetch the resonance (which creates it if missing)
-                    resonance = await repository.get_resonance(user_id, new_agent.id)
+                    resonance = await repository.get_resonance(current_user, new_agent.id)
                     current_affinity = resonance.affinity_level
                     target_affinity = float(initial_affinity)
 
-                    # Only update if there is a significant difference
                     if abs(target_affinity - current_affinity) > 0.1:
                         delta = target_affinity - current_affinity
-                        await repository.update_resonance(user_id, new_agent.id, delta)
+                        await repository.update_resonance(current_user, new_agent.id, delta)
                         logger.info(f"Initialized affinity for {new_agent.name} to {initial_affinity} (Delta: {delta})")
                 except Exception as e:
                     logger.error(f"Failed to set initial affinity: {e}")
+
+            if new_agent:
+                await repository.record_interaction(current_user, new_agent.id)
 
             response.status_code = status.HTTP_201_CREATED
             return RitualFlowResponse(

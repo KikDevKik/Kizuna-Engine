@@ -41,7 +41,16 @@ class MockSession:
         self._output_queue = asyncio.Queue()
         self._received_bytes = 0
 
-    async def send(self, input, end_of_turn=False):
+    async def send_realtime_input(self, audio=None, video=None, audio_stream_end=False):
+        if video is not None:
+            logger.debug(f"Mock: Vision frame received ({len(video.data) if hasattr(video, 'data') else '?'} bytes) — ignored in mock")
+            return
+
+        if audio is not None and hasattr(audio, 'data'):
+            input = {"data": audio.data}
+        else:
+            return
+
         if isinstance(input, dict) and "data" in input:
             data = input["data"]
             await self._input_queue.put(data)

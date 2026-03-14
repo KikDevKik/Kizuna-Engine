@@ -8,7 +8,7 @@ class PCMProcessor extends AudioWorkletProcessor {
     this.silenceFrames = 0;
     this.isSpeaking = false;
     this.MIN_SPEAKING_RMS = 0.005; // Slightly higher to trigger "speaking" state
-    this.SILENCE_FRAMES_THRESHOLD = 25; // ~500ms at 16khz if process is 128 samples (~8ms per call)
+    this.SILENCE_FRAMES_THRESHOLD = 75; // ~1500ms at 16khz if process is 128 samples (~20ms per call approx)
   }
 
   process(inputs, outputs, parameters) {

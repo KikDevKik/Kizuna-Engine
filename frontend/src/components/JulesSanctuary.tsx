@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { UseLiveAPI } from '../hooks/useLiveAPI';
 import { useVision } from '../hooks/useVision';
 import { Terminal, Camera, Activity, X } from 'lucide-react';
+import { auth } from '../lib/firebase';
 import '../KizunaHUD.css';
 
 interface JulesSanctuaryProps {
@@ -21,22 +22,22 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
   // Bio-Link Transmit
   const handleBioTransmit = async () => {
     try {
-        const token = localStorage.getItem("token") || "guest-token";
-        const res = await fetch("/api/bio/submit", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
-            },
-            body: JSON.stringify({ bpm })
-        });
-        if (res.ok) {
-            addLog(`BIO: Pulse transmitted (${bpm} BPM)`);
-        } else {
-            addLog("BIO: Error transmitting");
-        }
+      const token = await auth?.currentUser?.getIdToken();
+      const res = await fetch("/api/bio/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ bpm })
+      });
+      if (res.ok) {
+        addLog(`BIO: Pulse transmitted (${bpm} BPM)`);
+      } else {
+        addLog("BIO: Error transmitting");
+      }
     } catch {
-        addLog(`BIO: Network Error`);
+      addLog(`BIO: Network Error`);
     }
   };
 
@@ -73,9 +74,9 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
 
   // Monitor AI Messages
   useEffect(() => {
-      if (api.lastAiMessage) {
-          addLog(`AI: ${api.lastAiMessage.substring(0, 50)}...`);
-      }
+    if (api.lastAiMessage) {
+      addLog(`AI: ${api.lastAiMessage.substring(0, 50)}...`);
+    }
   }, [api.lastAiMessage]);
 
   return (
@@ -114,10 +115,10 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
                   />
                   {!isCameraReady && <div className="absolute text-vintage-navy font-technical">NO SIGNAL</div>}
                   {isSessionActive(api.status) && isCameraReady && (
-                      <div className="absolute top-2 right-2 flex gap-1">
-                          <div className="w-2 h-2 bg-alert-red rounded-full animate-pulse" />
-                          <span className="text-[10px] text-alert-red font-mono">LIVE</span>
-                      </div>
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <div className="w-2 h-2 bg-alert-red rounded-full animate-pulse" />
+                      <span className="text-[10px] text-alert-red font-mono">LIVE</span>
+                    </div>
                   )}
                 </div>
 
@@ -158,7 +159,7 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
                     <div className="flex justify-between">
                       <span>AUDIO IN:</span>
                       <div className="w-20 h-4 bg-vintage-navy/50 overflow-hidden relative">
-                         <span className="text-[10px] absolute inset-0 flex items-center justify-center">{api.isAiSpeaking ? "AI SPEAKING" : "LISTENING"}</span>
+                        <span className="text-[10px] absolute inset-0 flex items-center justify-center">{api.isAiSpeaking ? "AI SPEAKING" : "LISTENING"}</span>
                       </div>
                     </div>
                   </div>
@@ -166,26 +167,26 @@ export const JulesSanctuary: React.FC<JulesSanctuaryProps> = ({ isOpen, onClose,
 
                 {/* Bio-Link Simulation (Phase 3) */}
                 <div className="p-3 bg-vintage-navy/10 border border-electric-blue/30">
-                    <h3 className="text-xs font-technical text-electric-blue/60 mb-2">BIO-LINK SIMULATION</h3>
-                    <div className="flex items-center gap-2 mb-2">
-                        <Activity size={16} className="text-alert-red animate-pulse" />
-                        <span className="text-sm font-mono text-electric-blue">{bpm} BPM</span>
-                    </div>
-                    <input
-                        type="range" min="40" max="160" value={bpm}
-                        onChange={(e) => setBpm(Number(e.target.value))}
-                        className="w-full h-2 bg-vintage-navy rounded-lg appearance-none cursor-pointer mb-2 accent-electric-blue"
-                    />
-                    <button onClick={handleBioTransmit} className="w-full bg-electric-blue/20 hover:bg-electric-blue/40 text-electric-blue font-technical py-1 text-xs border border-electric-blue/50">
-                        INJECT SIGNAL
-                    </button>
+                  <h3 className="text-xs font-technical text-electric-blue/60 mb-2">BIO-LINK SIMULATION</h3>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Activity size={16} className="text-alert-red animate-pulse" />
+                    <span className="text-sm font-mono text-electric-blue">{bpm} BPM</span>
+                  </div>
+                  <input
+                    type="range" min="40" max="160" value={bpm}
+                    onChange={(e) => setBpm(Number(e.target.value))}
+                    className="w-full h-2 bg-vintage-navy rounded-lg appearance-none cursor-pointer mb-2 accent-electric-blue"
+                  />
+                  <button onClick={handleBioTransmit} className="w-full bg-electric-blue/20 hover:bg-electric-blue/40 text-electric-blue font-technical py-1 text-xs border border-electric-blue/50">
+                    INJECT SIGNAL
+                  </button>
                 </div>
 
                 {/* Logs */}
                 <div className="flex-1 bg-abyssal-black/50 border border-vintage-navy/50 p-2 font-mono text-[10px] text-electric-blue overflow-y-auto">
-                   {logs.map((log, i) => (
-                       <div key={i} className="mb-1 border-b border-vintage-navy/20 pb-1">{log}</div>
-                   ))}
+                  {logs.map((log, i) => (
+                    <div key={i} className="mb-1 border-b border-vintage-navy/20 pb-1">{log}</div>
+                  ))}
                 </div>
 
               </div>

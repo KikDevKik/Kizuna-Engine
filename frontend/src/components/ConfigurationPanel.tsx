@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, Save, AlertTriangle, X, Monitor } from 'lucide-react';
 import { useRoster } from '../contexts/RosterContext';
 import '../KizunaHUD.css';
+import { auth } from '../lib/firebase';
 
 interface ConfigurationPanelProps {
   isOpen: boolean;
@@ -32,7 +33,10 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
   const fetchConfig = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/system/config");
+      const token = await auth?.currentUser?.getIdToken();
+      const res = await fetch("/api/system/config", {
+        headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+      });
       const data = await res.json();
       setConfig(data);
       setCoreDirective(data.core_directive || "");
@@ -48,9 +52,13 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
     try {
       // Merge current config with updated directive
       const newConfig = { ...config, core_directive: coreDirective };
+      const token = await auth?.currentUser?.getIdToken();
       const res = await fetch("/api/system/config", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(newConfig)
       });
       if (res.ok) {
@@ -73,8 +81,10 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
     }
 
     try {
+      const token = await auth?.currentUser?.getIdToken();
       const res = await fetch("/api/system/purge-memories", {
-        method: "DELETE"
+        method: "DELETE",
+        headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
       });
 
       if (res.ok) {
@@ -182,27 +192,27 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
 
               {/* SECTION 3: DANGER ZONE */}
               <div className="space-y-4">
-                 <h3 className="font-monumental text-xl text-alert-red border-b border-alert-red/30 pb-2">
-                    DANGER ZONE
-                 </h3>
-                 <div className="bg-alert-red/5 p-4 border border-alert-red/20 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                       <AlertTriangle size={24} className="text-alert-red" />
-                       <div>
-                          <div className="font-technical text-alert-red">SCORCHED EARTH PROTOCOL</div>
-                          <div className="text-xs text-alert-red/60 font-mono">
-                             Permanently wipe all episodic memories and dreams. Irreversible.
-                          </div>
-                       </div>
+                <h3 className="font-monumental text-xl text-alert-red border-b border-alert-red/30 pb-2">
+                  DANGER ZONE
+                </h3>
+                <div className="bg-alert-red/5 p-4 border border-alert-red/20 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <AlertTriangle size={24} className="text-alert-red" />
+                    <div>
+                      <div className="font-technical text-alert-red">SCORCHED EARTH PROTOCOL</div>
+                      <div className="text-xs text-alert-red/60 font-mono">
+                        Permanently wipe all episodic memories and dreams. Irreversible.
+                      </div>
                     </div>
-                    <button
-                       type="button"
-                       onClick={handleWipeGraph}
-                       className="px-4 py-2 bg-alert-red/10 border border-alert-red text-alert-red font-technical hover:bg-alert-red/20 transition-all"
-                    >
-                       WIPE GRAPH
-                    </button>
-                 </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleWipeGraph}
+                    className="px-4 py-2 bg-alert-red/10 border border-alert-red text-alert-red font-technical hover:bg-alert-red/20 transition-all"
+                  >
+                    WIPE GRAPH
+                  </button>
+                </div>
               </div>
 
             </div>

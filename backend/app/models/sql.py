@@ -31,3 +31,4 @@ class EdgeModel(Base):
     __table_args__ = (
         Index("ix_edges_source_target_type", "source_id", "target_id", "type"),
     )
+

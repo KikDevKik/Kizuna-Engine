@@ -1,11 +1,14 @@
+import { invoke } from '@tauri-apps/api/core';
 import { useRef, useEffect, useState, useCallback } from 'react';
 
-export type VisionMode = 'off' | 'camera' | 'screen';
+export type VisionMode = 'off' | 'camera' | 'screen' | 'screen-native';
 
 export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const modeRef = useRef(mode);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
   const [audioTrack, setAudioTrack] = useState<MediaStreamTrack | null>(null);
 
   useEffect(() => {
@@ -30,6 +33,12 @@ export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
     if (mode === 'off') {
       stopStream();
       return;
+    }
+
+    if (mode === 'screen-native') {
+        stopStream();
+        if (isMounted) setIsReady(true);
+        return () => { isMounted = false; setIsReady(false); };
     }
 
     const startStream = async () => {
@@ -118,6 +127,16 @@ export const useVision = (mode: VisionMode = 'off', onReset?: () => void) => {
 
   // Async capture to prevent UI freeze (Argus Optimization)
   const captureFrame = useCallback(async (): Promise<string | null> => {
+    if (modeRef.current === 'screen-native') {
+        try {
+            const base64 = await invoke<string>('capture_screen');
+            return base64 || null;
+        } catch (e) {
+            console.error('[UseVision] Native capture failed:', e);
+            return null;
+        }
+    }
+
     if (!videoRef.current || !isReady) return null;
 
     const video = videoRef.current;

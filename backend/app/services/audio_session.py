@@ -1,4 +1,5 @@
 import asyncio
+import re
 import base64
 import logging
 import json
@@ -29,7 +30,78 @@ logger = logging.getLogger(__name__)
 # SDK v1.65.0: use send_realtime_input(audio=Blob) / audio_stream_end=True
 # 16000 Hz * 2 bytes/sample = 32000 bytes/sec; 2048 bytes ~= 64ms
 AUDIO_BUFFER_THRESHOLD = 2048
-VAD_SILENCE_MS = 900  # ms
+VAD_SILENCE_MS = 1500  # ms
+
+# Requires explicit platform name alongside action verb — prevents false triggers in normal conversation
+ACTION_PATTERNS = [
+    # "busca X en YouTube", "search X on Spotify", "find X on Google"
+    r'\b(busca|b\u00fascalo|b\u00fascala|buscar|search|find|abre|open)\b.{1,60}\b(youtube|spotify|google|web)\b',
+    # "en YouTube busca X", "Spotify pon X"
+    r'\b(youtube|spotify|google)\b.{0,40}\b(busca|b\u00fascalo|search|find|pon|play|reproduce)\b',
+    # "pon X en Spotify", "play X on YouTube"
+    r'\b(pon|play|reproduce)\b.{1,60}\b(youtube|spotify)\b',
+]
+
+ALLOWED_ACTION_URLS = (
+    "https://www.google.com/search",
+    "https://open.spotify.com/search",
+    "https://www.youtube.com/results",
+    "https://www.youtube.com/watch",
+    "https://music.youtube.com",
+    "https://www.google.com/maps/search",
+)
+
+
+async def _detect_and_execute_action(transcript: str, websocket: WebSocket):
+    """
+    Computer Use — Intent Detection Channel.
+    Fires when a user transcript contains action keywords.
+    Uses a lightweight Gemini Flash text call to resolve the
+    intent into a concrete URL, then relays it to the frontend.
+    Never blocks the audio pipeline (called via asyncio.create_task).
+    """
+    import os
+    from google import genai as _genai
+
+    prompt = f"""The user said: "{transcript}"
+
+Extract ONLY the search term they want to find, removing any command words like "busca", "search", "find", "abre", "pon", "Kizuna", "reproduce", "open", "play", etc.
+
+Then respond with ONLY one of these formats:
+OPEN_URL:https://www.youtube.com/results?search_query=SEARCH_TERM_HERE
+OPEN_URL:https://www.google.com/search?q=SEARCH_TERM_HERE
+OPEN_URL:https://open.spotify.com/search/SEARCH_TERM_HERE
+OPEN_URL:https://www.google.com/maps/search/PLACE_HERE
+
+Choose YouTube if they mention YouTube or videos, Spotify if they mention Spotify, music or songs, Google otherwise.
+URL-encode the search term (spaces as +, special chars encoded).
+
+If they are NOT asking to search anything, respond with: NO_ACTION
+
+Respond with ONLY the URL line or NO_ACTION. Nothing else."""
+
+    try:
+        client = _genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+        result = response.text.strip() if response.text else "NO_ACTION"
+        logger.debug(f"🔍 Intent detection result: {result!r}")
+
+        if result.startswith("OPEN_URL:"):
+            url = result[9:].strip()
+            if url.startswith(ALLOWED_ACTION_URLS):
+                await websocket.send_json({
+                    "type": "action",
+                    "action": "open_url",
+                    "url": url
+                })
+                logger.info(f"🖥️ Computer Use [intent]: {url}")
+            else:
+                logger.warning(f"Computer Use [intent]: BLOCKED — not in whitelist: {url}")
+    except Exception as e:
+        logger.warning(f"Computer Use intent detection failed: {e}")
 
 
 async def send_injections_to_gemini(session, injection_queue, session_closed_event, eot_reset_event=None):
@@ -75,6 +147,7 @@ async def send_to_gemini(
     transcript_buffer: list[str] | None = None,
     transcript_queue: asyncio.Queue | None = None,
     eot_reset_event: asyncio.Event | None = None,
+    parallel_transcript_queue: asyncio.Queue | None = None,
 ):
     """
     Task A: Client -> Gemini
@@ -222,7 +295,7 @@ async def send_to_gemini(
 
                 if len(audio_buffer) >= AUDIO_BUFFER_THRESHOLD:
                     try:
-                        logger.info(f"📤 Sending audio packet: {len(audio_buffer)} bytes")
+                        logger.debug(f"📤 Sending audio packet: {len(audio_buffer)} bytes")
                         await session.send_realtime_input(
                             audio=types.Blob(
                                 data=bytes(audio_buffer),
@@ -271,7 +344,46 @@ async def send_to_gemini(
                                 transcript_buffer.append(f"User: {transcript_text}")
                             if transcript_queue:
                                 transcript_queue.put_nowait(transcript_text)
-                            continue
+
+                            # Reenviar al Canal 2 si está activo
+                            if parallel_transcript_queue is not None:
+                                try:
+                                    parallel_transcript_queue.put_nowait(transcript_text)
+                                except asyncio.QueueFull:
+                                    pass
+
+                            # Computer Use — Intent Detection
+                            # Requires explicit platform mention to avoid triggering on normal conversation.
+                            if any(re.search(p, transcript_text.lower()) for p in ACTION_PATTERNS):
+                                logger.info(f"🎯 Computer Use pattern matched — launching intent detection")
+                                asyncio.create_task(
+                                    _detect_and_execute_action(transcript_text, websocket)
+                                )
+                        continue
+
+                    if control.get("type") == "image":
+                        try:
+                            image_b64 = control.get("data", "")
+                            if not image_b64:
+                                continue
+                            if types is None:
+                                logger.warning("Vision frame dropped: google.genai.types not available — SDK import failed")
+                                continue
+
+                            if image_b64.startswith("data:"):
+                                image_b64 = image_b64.split(",")[1]
+
+                            image_bytes = base64.b64decode(image_b64)
+                            await session.send_realtime_input(
+                                video=types.Blob(
+                                    data=image_bytes,
+                                    mime_type="image/jpeg"
+                                )
+                            )
+                            logger.debug(f"🎥 Vision frame relayed to Gemini ({len(image_bytes)} bytes)")
+                        except Exception as img_err:
+                            logger.warning(f"Vision frame relay failed: {img_err}")
+                        continue
 
                 except json.JSONDecodeError:
                     logger.warning(f"📨 Non-JSON text message ignored: {repr(text[:100])}")
@@ -307,6 +419,7 @@ async def receive_from_gemini(
     """
     try:
         turn_aborted = False
+        turn_text_buffer: list[str] = []  # Accumulates ALL text parts across the entire turn
 
         logger.info("📥 receive_from_gemini: Starting receive loop.")
         try:
@@ -315,8 +428,8 @@ async def receive_from_gemini(
             # re-call it in an outer while loop to stay alive across turns.
             while not session_closed_event.is_set():
               async for response in session.receive():
-                logger.info(f"📥 Gemini raw response FULL: {response}")
-                logger.info(
+                logger.debug(f"📥 Gemini raw response FULL: {response}")
+                logger.debug(
                     f"📥 has data attr: {hasattr(response, 'data')} | "
                     f"data value: {getattr(response, 'data', None) is not None} | "
                     f"server_content: {response.server_content is not None} | "
@@ -326,6 +439,16 @@ async def receive_from_gemini(
                 if session_closed_event.is_set():
                     logger.info("📥 Session closed mid-receive. Stopping.")
                     break
+
+                # BARGE-IN: Detectar interrupción inmediatamente
+                if hasattr(response, 'server_content') and response.server_content:
+                    if getattr(response.server_content, 'interrupted', False):
+                        logger.info("🤚 Barge-in detected — user interrupted agent. Flushing audio.")
+                        await websocket.send_json({
+                            "type": "CONTROL",
+                            "action": "FLUSH_AUDIO"
+                        })
+                        continue  # NO esperar transcripción — saltar inmediatamente
 
                 # 🛡️ BASTION: Robust Audio Extraction (SDK 0.3.0 path + legacy)
                 audio_data = None
@@ -340,7 +463,7 @@ async def receive_from_gemini(
                             break
 
                 if audio_data:
-                    logger.info(
+                    logger.debug(
                         f"🔊 Audio received from Gemini ({len(audio_data)} bytes). "
                         f"Auction state: winner={auction_service._current_winner!r}, "
                         f"turn_aborted={turn_aborted}, agent_id={agent_id!r}"
@@ -373,7 +496,7 @@ async def receive_from_gemini(
 
                     try:
                         await websocket.send_bytes(audio_data)
-                        logger.info(f"🔊 Audio sent to client: {len(audio_data)} bytes")
+                        logger.debug(f"🔊 Audio sent to client: {len(audio_data)} bytes")
                     except Exception:
                         raise WebSocketDisconnect()
 
@@ -416,6 +539,38 @@ async def receive_from_gemini(
                             text_to_process = part.text
                             if not turn_aborted:
                                 stripped = text_to_process.strip()
+
+                                # ── COMPUTER USE: Immediate scan on each part ────────────
+                                # Native audio model may emit ACTION tags in any text part
+                                # across multiple response packets. Scan immediately AND
+                                # accumulate for the turn-end scan.
+                                turn_text_buffer.append(stripped)
+
+                                ALLOWED_URL_PREFIXES = (
+                                    "https://www.google.com/search",
+                                    "https://open.spotify.com/search",
+                                    "https://www.youtube.com/results",
+                                    "https://www.youtube.com/watch",
+                                    "https://music.youtube.com",
+                                    "https://www.google.com/maps/search",
+                                )
+
+                                url_match = re.search(r'\[ACTION: OPEN_URL:([^\]]+)\]', stripped)
+                                if url_match:
+                                    action_url = url_match.group(1).strip()
+                                    if action_url.startswith(ALLOWED_URL_PREFIXES):
+                                        try:
+                                            await websocket.send_json({
+                                                "type": "action",
+                                                "action": "open_url",
+                                                "url": action_url
+                                            })
+                                            logger.info(f"🖥️ Computer Use [part]: relayed open_url → {action_url}")
+                                        except Exception as cu_err:
+                                            logger.warning(f"Computer Use: failed to relay: {cu_err}")
+                                    else:
+                                        logger.warning(f"Computer Use: BLOCKED — not in whitelist: {action_url}")
+
                                 if "[THOUGHT]" in stripped:
                                     continue
 
@@ -432,6 +587,37 @@ async def receive_from_gemini(
 
                 if server_content.turn_complete:
                     logger.info(f"✅ Turn complete for {agent_name} (turn_aborted={turn_aborted})")
+
+                    # ── COMPUTER USE: Turn-end cumulative scan ──────────────
+                    # Catch ACTION tags that arrived across multiple packets
+                    # (native audio model may interleave text + audio parts)
+                    if turn_text_buffer and not turn_aborted:
+                        full_turn_text = " ".join(turn_text_buffer)
+                        ALLOWED_URL_PREFIXES = (
+                            "https://www.google.com/search",
+                            "https://open.spotify.com/search",
+                            "https://www.youtube.com/results",
+                            "https://www.youtube.com/watch",
+                            "https://music.youtube.com",
+                            "https://www.google.com/maps/search",
+                        )
+                        for url_match in re.finditer(r'\[ACTION: OPEN_URL:([^\]]+)\]', full_turn_text):
+                            action_url = url_match.group(1).strip()
+                            if action_url.startswith(ALLOWED_URL_PREFIXES):
+                                try:
+                                    await websocket.send_json({
+                                        "type": "action",
+                                        "action": "open_url",
+                                        "url": action_url
+                                    })
+                                    logger.info(f"🖥️ Computer Use [turn-end]: relayed open_url → {action_url}")
+                                except Exception as cu_err:
+                                    logger.warning(f"Computer Use [turn-end]: failed to relay: {cu_err}")
+                            else:
+                                logger.warning(f"Computer Use [turn-end]: BLOCKED — not in whitelist: {action_url}")
+                    turn_text_buffer.clear()
+                    # ───────────────────────────────────────────────────────
+
                     turn_aborted = False
                     if agent_id:
                         await auction_service.release(agent_id)

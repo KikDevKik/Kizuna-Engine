@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Header, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Request
+from app.core.rate_limiter import limiter
+from fastapi import Header, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 import logging
 from app.services.soul_assembler import assemble_soul
@@ -31,9 +33,10 @@ async def perform_warmup(user_id: str, agent_id: str, repo: SoulRepository):
     except Exception as e:
         logger.error(f"❌ Warmup Failed: {e}")
 
+@limiter.limit("60/minute")
 @router.post("/")
-async def warmup_soul(
-    request: WarmupRequest,
+async def warmup_soul(request: Request,
+    body: WarmupRequest,
     background_tasks: BackgroundTasks,
     authorization: str = Header(None), # Bearer Token
     repo: SoulRepository = Depends(get_repository)
@@ -60,6 +63,6 @@ async def warmup_soul(
         raise HTTPException(status_code=401, detail="Authentication Required")
 
     # 2. Trigger Background Warm-up (Non-blocking response)
-    background_tasks.add_task(perform_warmup, user_id, request.agent_id, repo)
+    background_tasks.add_task(perform_warmup, user_id, body.agent_id, repo)
 
-    return {"status": "warming_up", "agent_id": request.agent_id, "user_id": user_id}
+    return {"status": "warming_up", "agent_id": body.agent_id, "user_id": user_id}

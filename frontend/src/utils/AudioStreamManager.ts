@@ -8,7 +8,6 @@ export class AudioStreamManager {
   private systemSourceNode: MediaStreamAudioSourceNode | null = null;
   private mediaStream: MediaStream | null = null;
   private analyser: AnalyserNode | null = null;
-  private isMicEnabled: boolean = false;
   private animationFrame: number | null = null;
   private nextStartTime: number = 0;
 
@@ -52,31 +51,31 @@ export class AudioStreamManager {
   }
 
   addSystemAudioTrack(track: MediaStreamTrack) {
-      if (!this.ctx || !this.workletNode) {
-          console.warn("AudioContext not ready for system audio.");
-          return;
-      }
+    if (!this.ctx || !this.workletNode) {
+      console.warn("AudioContext not ready for system audio.");
+      return;
+    }
 
-      console.log("Adding System Audio Track to Mixer...");
+    console.log("Adding System Audio Track to Mixer...");
 
-      // If a previous system source exists, disconnect it
-      if (this.systemSourceNode) {
-          this.systemSourceNode.disconnect();
-      }
+    // If a previous system source exists, disconnect it
+    if (this.systemSourceNode) {
+      this.systemSourceNode.disconnect();
+    }
 
-      const stream = new MediaStream([track]);
-      this.systemSourceNode = this.ctx.createMediaStreamSource(stream);
+    const stream = new MediaStream([track]);
+    this.systemSourceNode = this.ctx.createMediaStreamSource(stream);
 
-      // Mix into the same Worklet Node (Web Audio API sums inputs automatically)
-      this.systemSourceNode.connect(this.workletNode);
+    // Mix into the same Worklet Node (Web Audio API sums inputs automatically)
+    this.systemSourceNode.connect(this.workletNode);
   }
 
   removeSystemAudioTrack() {
-      if (this.systemSourceNode) {
-          console.log("Removing System Audio Track...");
-          this.systemSourceNode.disconnect();
-          this.systemSourceNode = null;
-      }
+    if (this.systemSourceNode) {
+      console.log("Removing System Audio Track...");
+      this.systemSourceNode.disconnect();
+      this.systemSourceNode = null;
+    }
   }
 
   async start() {
@@ -100,7 +99,7 @@ export class AudioStreamManager {
       });
 
       const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Microphone access timed out (10s).")), 10000)
+        setTimeout(() => reject(new Error("Microphone access timed out (10s).")), 10000)
       );
 
       this.mediaStream = await Promise.race([getUserMediaPromise, timeoutPromise]) as MediaStream;
@@ -110,9 +109,9 @@ export class AudioStreamManager {
 
       this.workletNode.port.onmessage = (event) => {
         if (event.data instanceof ArrayBuffer || event.data instanceof Int16Array) {
-            this.onAudioInput(event.data);
+          this.onAudioInput(event.data as ArrayBuffer);
         } else {
-            this.onControl(event.data);
+          this.onControl(event.data);
         }
       };
 
@@ -140,19 +139,19 @@ export class AudioStreamManager {
     const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
 
     const updateVolume = () => {
-        if (!this.analyser) return;
-        this.analyser.getByteFrequencyData(dataArray);
+      if (!this.analyser) return;
+      this.analyser.getByteFrequencyData(dataArray);
 
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
-        }
-        const average = sum / dataArray.length;
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / dataArray.length;
 
-        // Update the ref directly
-        this.volumeRef.current = Math.min(1, average / 128);
+      // Update the ref directly
+      this.volumeRef.current = Math.min(1, average / 128);
 
-        this.animationFrame = requestAnimationFrame(updateVolume);
+      this.animationFrame = requestAnimationFrame(updateVolume);
     };
     updateVolume();
   }
@@ -176,16 +175,16 @@ export class AudioStreamManager {
 
     // Track source for cancellation
     source.onended = () => {
-        this.activeSources = this.activeSources.filter(s => s !== source);
+      this.activeSources = this.activeSources.filter(s => s !== source);
     };
     this.activeSources.push(source);
 
     // AEC Audio Tag Hack: Route to stream destination instead of context.destination
     if (this.streamDestination) {
-        source.connect(this.streamDestination);
+      source.connect(this.streamDestination);
     } else {
-        // Fallback (should not happen if initialized correctly)
-        source.connect(this.ctx.destination);
+      // Fallback (should not happen if initialized correctly)
+      source.connect(this.ctx.destination);
     }
 
     const currentTime = this.ctx.currentTime;
@@ -201,14 +200,14 @@ export class AudioStreamManager {
     // 1. Underrun Handling (The Gap)
     // If nextStartTime is in the past, we ran dry. Reset to now + small buffer.
     if (startTime < currentTime) {
-        startTime = currentTime + JITTER_BUFFER_MS;
+      startTime = currentTime + JITTER_BUFFER_MS;
     }
 
     // 2. Latency Handling (The Drift)
     // If buffer is too large (startTime is far in future), play faster to catch up.
     let playbackRate = 1.0;
     if (startTime > currentTime + MAX_LATENCY_MS) {
-        playbackRate = CATCHUP_RATE;
+      playbackRate = CATCHUP_RATE;
     }
 
     source.playbackRate.value = playbackRate;
@@ -224,22 +223,22 @@ export class AudioStreamManager {
    * Flushes all pending audio buffers and resets the timeline.
    */
   flush() {
-      if (!this.ctx) return;
-      console.log("🔇 Sovereign Voice: Flushing Audio Buffer...");
+    if (!this.ctx) return;
+    console.log("🔇 Sovereign Voice: Flushing Audio Buffer...");
 
-      // 1. Stop all active sources
-      this.activeSources.forEach(source => {
-          try {
-              source.stop();
-              source.disconnect();
-          } catch (e) {
-              // Ignore already stopped errors
-          }
-      });
-      this.activeSources = [];
+    // 1. Stop all active sources
+    this.activeSources.forEach(source => {
+      try {
+        source.stop();
+        source.disconnect();
+      } catch (e) {
+        // Ignore already stopped errors
+      }
+    });
+    this.activeSources = [];
 
-      // 2. Reset timeline to now
-      this.nextStartTime = this.ctx.currentTime;
+    // 2. Reset timeline to now
+    this.nextStartTime = this.ctx.currentTime;
   }
 
   cleanup() {
@@ -251,39 +250,39 @@ export class AudioStreamManager {
     }
 
     if (this.sourceNode) {
-        this.sourceNode.disconnect();
-        this.sourceNode = null;
+      this.sourceNode.disconnect();
+      this.sourceNode = null;
     }
 
     if (this.systemSourceNode) {
-        this.systemSourceNode.disconnect();
-        this.systemSourceNode = null;
+      this.systemSourceNode.disconnect();
+      this.systemSourceNode = null;
     }
 
     if (this.workletNode) {
-        this.workletNode.disconnect();
-        this.workletNode = null;
+      this.workletNode.disconnect();
+      this.workletNode = null;
     }
 
     if (this.mediaStream) {
-        this.mediaStream.getTracks().forEach(track => track.stop());
-        this.mediaStream = null;
+      this.mediaStream.getTracks().forEach(track => track.stop());
+      this.mediaStream = null;
     }
 
     if (this.hiddenAudioElement) {
-        this.hiddenAudioElement.pause();
-        this.hiddenAudioElement.srcObject = null;
-        this.hiddenAudioElement = null;
+      this.hiddenAudioElement.pause();
+      this.hiddenAudioElement.srcObject = null;
+      this.hiddenAudioElement = null;
     }
 
     if (this.streamDestination) {
-        this.streamDestination.disconnect();
-        this.streamDestination = null;
+      this.streamDestination.disconnect();
+      this.streamDestination = null;
     }
 
     if (this.ctx) {
-        this.ctx.close();
-        this.ctx = null;
+      this.ctx.close();
+      this.ctx = null;
     }
 
     this.volumeRef.current = 0;

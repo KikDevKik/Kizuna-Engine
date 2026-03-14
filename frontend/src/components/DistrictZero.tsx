@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, X, Network, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { useRoster } from '../contexts/RosterContext';
 import '../KizunaHUD.css';
+import { API_URL } from '../config';
+import { auth } from '../lib/firebase';
 
 // ------------------------------------------------------------------
 // DATA: THE LOCAL MATRIX (ILLUSION PROTOCOL)
@@ -41,8 +43,8 @@ const ENIGMA_DATA_ES: EnigmaIdentity[] = [
 ];
 
 const getEnigmaData = () => {
-    const lang = navigator.language || 'en';
-    return lang.startsWith('es') ? ENIGMA_DATA_ES : ENIGMA_DATA_EN;
+  const lang = navigator.language || 'en';
+  return lang.startsWith('es') ? ENIGMA_DATA_ES : ENIGMA_DATA_EN;
 };
 
 const VISIBLE_COUNT = 3;
@@ -95,11 +97,14 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
   useEffect(() => {
     const fetchStrangers = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/agents/strangers');
+        const token = await auth?.currentUser?.getIdToken();
+        const res = await fetch(`${API_URL}/api/agents/strangers`, {
+          headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+        });
         if (res.ok) {
           const strangers: EnigmaIdentity[] = await res.json();
           if (strangers.length > 0) {
-              setEnigmaPool(prev => [...strangers, ...prev]);
+            setEnigmaPool(prev => [...strangers, ...prev]);
           }
         }
       } catch (e) {
@@ -132,9 +137,9 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
     const tempPool = [...pool];
 
     for (let i = 0; i < VISIBLE_COUNT; i++) {
-        const randomIndex = Math.floor(Math.random() * tempPool.length);
-        newCards.push(tempPool[randomIndex]);
-        tempPool.splice(randomIndex, 1);
+      const randomIndex = Math.floor(Math.random() * tempPool.length);
+      newCards.push(tempPool[randomIndex]);
+      tempPool.splice(randomIndex, 1);
     }
 
     setVisibleCards(newCards);
@@ -173,16 +178,20 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
       if (!shell) throw new Error("Shell not found");
 
       if (shell.is_nemesis || shell.is_gossip) {
-          setForgedAgent({ id: shell.id, name: shell.tempAlias.replace(" (Hostil)", "") });
-          onAgentForged(shell.id);
-          await connect(shell.id);
-          setPhase('contact');
-          return;
+        setForgedAgent({ id: shell.id, name: shell.tempAlias.replace(" (Hostil)", "") });
+        onAgentForged(shell.id);
+        await connect(shell.id);
+        setPhase('contact');
+        return;
       }
-      
-      const response = await fetch('http://localhost:8000/api/agents/forge_hollow', {
+
+      const token = await auth?.currentUser?.getIdToken();
+      const response = await fetch(`${API_URL}/api/agents/forge_hollow`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ aesthetic_description: shell.description })
       });
 
@@ -264,29 +273,29 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
 
       {!selectedId && (
         <>
-            <button onClick={() => slide(-1)} className="absolute left-8 top-1/2 -translate-y-1/2 z-30 p-4 text-electric-blue/50 hover:text-electric-blue transition-colors">
-                <ChevronLeft size={48} />
-            </button>
-            <button onClick={() => slide(1)} className="absolute right-8 top-1/2 -translate-y-1/2 z-30 p-4 text-electric-blue/50 hover:text-electric-blue transition-colors">
-                <ChevronRight size={48} />
-            </button>
+          <button onClick={() => slide(-1)} className="absolute left-8 top-1/2 -translate-y-1/2 z-30 p-4 text-electric-blue/50 hover:text-electric-blue transition-colors">
+            <ChevronLeft size={48} />
+          </button>
+          <button onClick={() => slide(1)} className="absolute right-8 top-1/2 -translate-y-1/2 z-30 p-4 text-electric-blue/50 hover:text-electric-blue transition-colors">
+            <ChevronRight size={48} />
+          </button>
         </>
       )}
 
       <div className="relative z-20 w-full max-w-6xl flex justify-center items-center h-[600px]">
         <AnimatePresence mode="wait">
           {selectedId ? (
-              enigmaPool.filter(shell => shell.id === selectedId).map(shell => (
-                  <motion.div key={`focus-${shell.id}`} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }} transition={{ duration: 0.5 }} className="z-50">
-                      <Card shell={shell} isSelected={true} phase={phase} logs={logs} forgedAgent={forgedAgent} onDisconnect={handleDisconnect} onForge={() => handleForgeBond(shell.id)} />
-                  </motion.div>
-              ))
-          ) : (
-              <motion.div key={`carousel-${visibleCards.map(c => c.id).join('-')}`} className="flex items-center justify-center gap-8" initial={{ x: slideDirection * 100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: slideDirection * -100, opacity: 0 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}>
-                  {visibleCards.map((shell) => (
-                      <Card key={shell.id} shell={shell} isSelected={false} phase={phase} logs={[]} forgedAgent={null} onObserve={() => handleObserve(shell.id)} />
-                  ))}
+            enigmaPool.filter(shell => shell.id === selectedId).map(shell => (
+              <motion.div key={`focus-${shell.id}`} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }} transition={{ duration: 0.5 }} className="z-50">
+                <Card shell={shell} isSelected={true} phase={phase} logs={logs} forgedAgent={forgedAgent} onDisconnect={handleDisconnect} onForge={() => handleForgeBond(shell.id)} />
               </motion.div>
+            ))
+          ) : (
+            <motion.div key={`carousel-${visibleCards.map(c => c.id).join('-')}`} className="flex items-center justify-center gap-8" initial={{ x: slideDirection * 100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: slideDirection * -100, opacity: 0 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}>
+              {visibleCards.map((shell) => (
+                <Card key={shell.id} shell={shell} isSelected={false} phase={phase} logs={[]} forgedAgent={null} onObserve={() => handleObserve(shell.id)} />
+              ))}
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
@@ -295,79 +304,79 @@ export const DistrictZero: React.FC<DistrictZeroProps> = ({ onAgentForged, conne
 };
 
 const Card: React.FC<CardProps> = ({ shell, isSelected, phase, logs, forgedAgent, onObserve, onForge, onDisconnect }) => {
-    return (
-        <motion.div
-            className={`relative bg-vintage-navy/40 border backdrop-blur-md overflow-hidden transition-all duration-300
+  return (
+    <motion.div
+      className={`relative bg-vintage-navy/40 border backdrop-blur-md overflow-hidden transition-all duration-300
                 ${shell.is_nemesis ? 'border-alert-red shadow-[0_0_15px_rgba(255,0,0,0.3)]' : shell.is_gossip ? 'border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'border-white/10'}
                 ${isSelected ? 'w-[600px] h-[500px] shadow-2xl' : 'w-72 h-96 hover:scale-105 cursor-pointer'}
             `}
-            style={{ clipPath: isSelected ? 'polygon(0 0, 100% 0, 100% 90%, 95% 100%, 0 100%)' : 'polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%)' }}
-            onClick={() => !isSelected && onObserve && onObserve()}
-        >
-            <div className="p-6 flex flex-col h-full relative">
-                <div className="absolute inset-0 bg-scanlines opacity-10 pointer-events-none" />
-                <div className="flex justify-between items-start mb-4">
-                    <div className="font-monumental text-2xl text-white">{isSelected && forgedAgent ? forgedAgent.name : shell.tempAlias}</div>
-                    <Activity size={16} className="text-white/20" />
-                </div>
+      style={{ clipPath: isSelected ? 'polygon(0 0, 100% 0, 100% 90%, 95% 100%, 0 100%)' : 'polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%)' }}
+      onClick={() => !isSelected && onObserve && onObserve()}
+    >
+      <div className="p-6 flex flex-col h-full relative">
+        <div className="absolute inset-0 bg-scanlines opacity-10 pointer-events-none" />
+        <div className="flex justify-between items-start mb-4">
+          <div className="font-monumental text-2xl text-white">{isSelected && forgedAgent ? forgedAgent.name : shell.tempAlias}</div>
+          <Activity size={16} className="text-white/20" />
+        </div>
 
-                <div className={`flex-1 relative flex items-center justify-center bg-abyssal-black/30 border ${phase === 'error' ? 'border-alert-red/50' : 'border-white/5'} mb-6 overflow-hidden transition-colors duration-300`}>
-                    {(!isSelected || phase === 'approach') && <div className="text-white/20 font-technical text-6xl tracking-widest opacity-20">ENIGMA</div>}
-                    {phase === 'scan' && isSelected && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <motion.div animate={{ rotate: 360 }} transition={{ duration: 3, ease: "linear", repeat: Infinity }} className="w-24 h-24 border-2 border-dashed border-electric-blue rounded-full opacity-50 mb-4" />
-                            <div className="glitch-text font-monumental text-electric-blue text-sm tracking-widest text-center px-4">[FORJANDO ALMA... <br/> VÍNCULO NEURONAL]</div>
-                        </div>
-                    )}
-                    {phase === 'contact' && isSelected && (
-                        <div className="absolute inset-0 flex items-center justify-center gap-1 w-full px-12">
-                            {[...Array(20)].map((_, i) => (
-                                <motion.div key={i} className="w-2 bg-electric-blue/50 rounded-full" animate={{ height: [10, Math.random() * 60 + 20, 10], opacity: [0.5, 1, 0.5] }} transition={{ duration: 0.5, repeat: Infinity, repeatType: "mirror", delay: i * 0.05 }} />
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div className="min-h-[100px]">
-                    {isSelected && phase === 'scan' ? <TerminalLog logs={logs} /> : isSelected && phase === 'contact' ? (
-                        <div className="flex flex-col gap-2">
-                            <div className="font-monumental text-electric-blue text-xl">{forgedAgent?.name || shell.tempAlias}</div>
-                            <div className="font-mono text-xs text-white/50">{'>'} Señal estable. Audio abierto. Esperando entrada...</div>
-                        </div>
-                    ) : <p className="font-narrative text-white/70 text-sm leading-relaxed">{shell.description}</p>}
-                </div>
-
-                <div className="mt-6 flex justify-end w-full">
-                {!isSelected ? (
-                    <button className="kizuna-shard-btn-wrapper group w-full">
-                        <div className="kizuna-shard-btn-inner text-xs py-2 px-6 group-hover:bg-electric-blue group-hover:text-black transition-colors flex items-center justify-center gap-2"><Eye size={14} /> [ OBSERVAR ]</div>
-                    </button>
-                ) : (
-                    <>
-                        {phase === 'approach' && (
-                            <div className="flex gap-4 w-full">
-                                <button onClick={(e) => { e.stopPropagation(); onDisconnect && onDisconnect(); }} className="flex-1 border border-white/20 text-white/50 hover:text-white hover:border-white transition-all py-3 font-technical tracking-widest text-xs">[ ABORTAR ]</button>
-                                <button onClick={(e) => { e.stopPropagation(); onForge && onForge(); }} className="flex-[2] bg-electric-blue text-black font-monumental tracking-widest text-sm hover:bg-white hover:scale-105 transition-all shadow-[0_0_20px_rgba(0,209,255,0.4)]" style={{ clipPath: 'polygon(10% 0, 100% 0, 100% 80%, 90% 100%, 0 100%, 0 20%)' }}>[ FORJAR VÍNCULO ]</button>
-                            </div>
-                        )}
-                        {phase === 'contact' && (
-                            <button onClick={(e) => { e.stopPropagation(); onDisconnect && onDisconnect(); }} className="bg-alert-red/10 border border-alert-red text-alert-red hover:bg-alert-red hover:text-white transition-all px-6 py-3 font-monumental text-sm tracking-widest flex items-center gap-2 w-full justify-center" style={{ clipPath: 'polygon(10% 0, 100% 0, 100% 80%, 90% 100%, 0 100%, 0 20%)' }}><X size={16} /> TERMINATE LINK</button>
-                        )}
-                    </>
-                )}
-                </div>
+        <div className={`flex-1 relative flex items-center justify-center bg-abyssal-black/30 border ${phase === 'error' ? 'border-alert-red/50' : 'border-white/5'} mb-6 overflow-hidden transition-colors duration-300`}>
+          {(!isSelected || phase === 'approach') && <div className="text-white/20 font-technical text-6xl tracking-widest opacity-20">ENIGMA</div>}
+          {phase === 'scan' && isSelected && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 3, ease: "linear", repeat: Infinity }} className="w-24 h-24 border-2 border-dashed border-electric-blue rounded-full opacity-50 mb-4" />
+              <div className="glitch-text font-monumental text-electric-blue text-sm tracking-widest text-center px-4">[FORJANDO ALMA... <br /> VÍNCULO NEURONAL]</div>
             </div>
-        </motion.div>
-    );
+          )}
+          {phase === 'contact' && isSelected && (
+            <div className="absolute inset-0 flex items-center justify-center gap-1 w-full px-12">
+              {[...Array(20)].map((_, i) => (
+                <motion.div key={i} className="w-2 bg-electric-blue/50 rounded-full" animate={{ height: [10, Math.random() * 60 + 20, 10], opacity: [0.5, 1, 0.5] }} transition={{ duration: 0.5, repeat: Infinity, repeatType: "mirror", delay: i * 0.05 }} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="min-h-[100px]">
+          {isSelected && phase === 'scan' ? <TerminalLog logs={logs} /> : isSelected && phase === 'contact' ? (
+            <div className="flex flex-col gap-2">
+              <div className="font-monumental text-electric-blue text-xl">{forgedAgent?.name || shell.tempAlias}</div>
+              <div className="font-mono text-xs text-white/50">{'>'} Señal estable. Audio abierto. Esperando entrada...</div>
+            </div>
+          ) : <p className="font-narrative text-white/70 text-sm leading-relaxed">{shell.description}</p>}
+        </div>
+
+        <div className="mt-6 flex justify-end w-full">
+          {!isSelected ? (
+            <button className="kizuna-shard-btn-wrapper group w-full">
+              <div className="kizuna-shard-btn-inner text-xs py-2 px-6 group-hover:bg-electric-blue group-hover:text-black transition-colors flex items-center justify-center gap-2"><Eye size={14} /> [ OBSERVAR ]</div>
+            </button>
+          ) : (
+            <>
+              {phase === 'approach' && (
+                <div className="flex gap-4 w-full">
+                  <button onClick={(e) => { e.stopPropagation(); onDisconnect && onDisconnect(); }} className="flex-1 border border-white/20 text-white/50 hover:text-white hover:border-white transition-all py-3 font-technical tracking-widest text-xs">[ ABORTAR ]</button>
+                  <button onClick={(e) => { e.stopPropagation(); onForge && onForge(); }} className="flex-[2] bg-electric-blue text-black font-monumental tracking-widest text-sm hover:bg-white hover:scale-105 transition-all shadow-[0_0_20px_rgba(0,209,255,0.4)]" style={{ clipPath: 'polygon(10% 0, 100% 0, 100% 80%, 90% 100%, 0 100%, 0 20%)' }}>[ FORJAR VÍNCULO ]</button>
+                </div>
+              )}
+              {phase === 'contact' && (
+                <button onClick={(e) => { e.stopPropagation(); onDisconnect && onDisconnect(); }} className="bg-alert-red/10 border border-alert-red text-alert-red hover:bg-alert-red hover:text-white transition-all px-6 py-3 font-monumental text-sm tracking-widest flex items-center gap-2 w-full justify-center" style={{ clipPath: 'polygon(10% 0, 100% 0, 100% 80%, 90% 100%, 0 100%, 0 20%)' }}><X size={16} /> TERMINATE LINK</button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
 };
 
 interface CardProps {
-    shell: EnigmaIdentity;
-    isSelected: boolean;
-    phase: string;
-    logs: string[];
-    forgedAgent: { name: string } | null;
-    onObserve?: () => void;
-    onForge?: () => void;
-    onDisconnect?: () => void;
+  shell: EnigmaIdentity;
+  isSelected: boolean;
+  phase: string;
+  logs: string[];
+  forgedAgent: { name: string } | null;
+  onObserve?: () => void;
+  onForge?: () => void;
+  onDisconnect?: () => void;
 }

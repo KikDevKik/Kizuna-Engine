@@ -1,186 +1,424 @@
-KIZUNA ENGINE — ROADMAP MAESTRO
-Actualizado: 3 de Marzo de 2026
+# KIZUNA ENGINE — ROADMAP MAESTRO
+Actualizado: 10 de Marzo de 2026
 
-LEYENDA
+## LEYENDA
+- ✅ Completado
+- 🔄 En progreso
+- 📋 Planificado
+- 💡 Conceptual
 
-✅ Completado
-🔄 En progreso
-📋 Planificado
-💡 Conceptual
+---
+
+## FASE 1 — FUNDACIÓN DEL ALMA ✅
+**Objetivo:** Infraestructura base. El motor existe.
+
+- ✅ Stack: FastAPI + SQLite + React + Vite
+- ✅ WebSocket bidireccional cliente-servidor
+- ✅ Sistema de agentes con JSON filesystem
+- ✅ Ritual: SoulForge vía Gemini (creación de personalidad)
+- ✅ Cache service (Redis + fallback local memory)
+- ✅ AudioWorklet PCM 16kHz captura de micrófono
+
+---
+
+## FASE 2 — EL GRAFO DE RELACIONES ✅
+**Objetivo:** Los agentes tienen historia social.
+
+- ✅ LocalSoulRepository (SQLite kizuna_graph.db)
+- ✅ Edges: InteractedWith, OwesDebtTo, Gossip_Source, Nemesis
+- ✅ Affinity system (0-100)
+- ✅ WIPE GRAPH / SCORCHED EARTH / GREAT REBIRTH operations
+- ✅ Hollow Forge: agentes creados por otros agentes (Gossip Protocol)
+
+---
+
+## FASE 3 — MEMORIA Y SUEÑO ✅
+**Objetivo:** Los agentes recuerdan y evolucionan offline.
+
+- ✅ Sleep Manager: REM Sleep tras desconexión (5s delay)
+- ✅ Dream System: consolidación de memorias en sueño
+- ✅ Time Skip: simulación de tiempo offline con mood shifts
+- ✅ Session transcript buffering
+- ✅ Memory extraction prompt por agente
+
+---
+
+## FASE 4 — COGNICIÓN EN TIEMPO REAL ✅
+**Objetivo:** El agente piensa mientras habla.
+
+- ✅ SubconsciousMind: análisis de transcripción → System Hints
+- ✅ Flashback RAG: temporal-cue based (no continuo)
+- ✅ InjectionLoop: cola de inyecciones → Gemini
+- ✅ ReflectionMind: self-critique 45s cooldown
+- ✅ CognitiveSupervisor: restart con session_closed_event awareness
+
+---
+
+## FASE 5 — IDENTIDAD Y PERSONALIDAD ✅
+**Objetivo:** Los agentes son únicos y consistentes.
+
+- ✅ Soul Assembler: Static DNA con cache v5
+- ✅ Language Protocol: native_language + known_languages
+- ✅ Neural Signature: volatility, hostility, curiosity, empathy weights
+- ✅ Emotional Resonance Matrix
+- ✅ Identity Anchors + Forbidden Secret
+- ✅ Social Battery: drain_rate, base_tolerance, current_friction
+- ✅ Offline Mood Modifier
+- ✅ Reflection prompt personalizado por agente
+
+---
+
+## FASE 6 — ENCARNACIÓN (GEMINI LIVE) ✅
+**Objetivo:** El agente habla con voz real.
+
+- ✅ Integración Gemini Live API (SDK 1.65.0)
+- ✅ session.send_realtime_input(audio=Blob(...)) — streaming de audio
+- ✅ audio_stream_end=True — señal EOT nativa para VAD
+- ✅ Ready signal: backend notifica al frontend cuando Gemini está listo
+- ✅ Extracción de audio de respuesta (server_content.model_turn.parts)
+- ✅ Auction Service: control de turno por sesión
+- ✅ tools=[] en LiveConnectConfig (AFC deshabilitado en Live)
+- ✅ Graceful session closure (session_closed_event, InjectionLoop fix)
+- ✅ VAD server-side (Gemini detecta silencio automáticamente)
+- ✅ Frontend: useLiveAPI.ts + AudioStreamManager end_of_turn serializado
+
+**Limitaciones conocidas (heredadas):**
+- ⚠️ AUDIO-01: Inyecciones deshabilitadas en Live — resuelto en Fase 8.9
+- ⚠️ VOICE-01: Inconsistencia de voz modelo preview — mitigado en Fase 8.8
+
+---
+
+## FASE 7 — PRESENCIA EXPANDIDA ✅ (parcial)
+**Objetivo:** El agente percibe el mundo y actúa por iniciativa propia.
+
+### 7.1 — AUDIO-01 ❌ — Bloqueado. Ver Fase 8.9.
+### 7.2 — Zeitgeist Injection ✅
+### 7.3 — Reactive Search ❌ — Bloqueado por AUDIO-01. Ver Fase 8.9.
+### 7.4 — Initiative Protocol ❌ — Bloqueado por AUDIO-01 y 7.9. Ver Fase 8.9.
+### 7.5 — Vision ✅ — Cámara + pantalla + Native Vision (xcap/DRM bypass)
+### 7.6 — Computer Use ✅ — Intent detection + Tauri opener
+### 7.6b — Kizuna Eternal Memory ✅ — kizuna_chronicle inmune al wipe
+### 7.7 — BLOCK_NONE ✅ — SoulForge y Ritual liberados
+### 7.7b — ARQUITECTURA-01 ✅ — get_or_sync_agent(), sync JSON→SQLite
+### 7.7c — Bug fixes post-pruebas ✅
+- ✅ Agente Ritual aparece en roster inmediatamente (record_interaction)
+- ✅ WIPE borra JSONs excepto kizuna.json
+- ✅ Kizuna re-anclada al roster automáticamente post-wipe
+
+### 7.8 — Barge-in: Protocolo de Interrupción Social ✅
+> **Bug resuelto:** strings FLUSH_AUDIO/CONTROL corregidas a mayúsculas en audio_session.py y useLiveAPI.ts.
+
+**Contexto de diseño:** Una interrupción no es solo "parar el audio" — es un acto social
+con intención. El sistema debe detectar el TIPO de interrupción y el agente debe reaccionar
+de forma acorde a su personalidad, no siempre callarse sumisamente.
+
+Tipos de interrupción a modelar (investigar patrones reales de comunicación humana):
+- **Emocional / entusiasta** — el usuario está emocionado y quiere añadir algo. El agente
+  puede ceder parcialmente o reaccionar con igual entusiasmo: "¡sí, sí, cuéntame!"
+- **Colaborativa** — el usuario quiere completar una idea. El agente cede naturalmente
+  como en conversación real entre amigos.
+- **Desacuerdo** — el usuario contradice al agente. El agente puede defenderse o ceder
+  según su nivel de fricción y volatilidad actuales.
+- **Urgencia** — el usuario necesita parar la conversación. El agente siempre cede.
+- **Accidental** — ruido de fondo, no era intención hablar. El agente ignora y continúa.
+
+Implementación técnica:
+- 📋 Backend detecta `server_content.interrupted = True` inmediatamente (50-100ms)
+- 📋 NO esperar `input_transcription` — reaccionar al flag de forma instantánea
+- 📋 Enviar `{"type": "CONTROL", "action": "FLUSH_AUDIO"}` al frontend
+- 📋 Frontend purga jitter buffer y drain del driver de audio
+- 📋 Clasificar tipo de interrupción via energía RMS + duración del habla
+- 📋 El tipo de interrupción modula la respuesta del agente (Neural Signature aware)
+- 📋 Eliminar VAD RMS del frontend — delegar todo al server-side de Gemini
+
+### 7.9 — Presencia Persistente en Escritorio (System Tray) ✅
+> Tauri 2.10.0. Tres plugins integrados.
+- ✅ `TrayIconBuilder::with_id("kizuna-tray")` — ícono único en bandeja
+- ✅ `prevent_close()` + `window.hide()` — proceso persiste en background
+- ✅ `tauri-plugin-global-shortcut` — Push-to-Talk global Ctrl+Space
+- ✅ `tauri-plugin-notification` — infraestructura lista
+- ⚠️ Doble ícono en dev mode (hot-reload) — no afecta build de producción
+
+---
+
+## FASE 7.X — CALIDAD DE PERSONALIDAD ✅
+> Completado. Cache Static DNA v6 activo.
+
+### 7.X.1 — The Void: Ritual más Expresivo ✅
+- ✅ `ritual_service.py` — preguntas evocadoras, tono antiguo, reacciones emocionales
+
+### 7.X.2 — Habla Natural ✅
+- ✅ `soul_assembler.py` — `style_hint` ampliado con directiva de naturalidad
+- ✅ Static DNA v6 — fuerza regeneración de cache en todos los agentes
+- ⚠️ Nota: bloques de texto muy largos en system_instruction silencian al modelo native-audio.
+  El fix fue añadir la directiva dentro del `style_hint` existente, no como bloque separado.
+
+### 7.X.3 — Kizuna Multilingüe ✅
+- ✅ `seeder.py` + `kizuna.json` — 11 idiomas: es, en, ja, ko, zh, fr, pt, de, it, ar, hi
+
+---
+
+## FASE 8 — INFRAESTRUCTURA DE PRODUCCIÓN + AUDIO NATIVO 🔄
+**Objetivo:** El motor escala. El audio suena como Discord.
+
+> ⚠️ DOS TRACKS PARALELOS:
+> **Track A (8.1-8.7):** Cloud infrastructure — prerequisito para usuarios reales.
+> **Track B (8.8-8.9):** Audio nativo Rust — prerequisito para calidad de producto.
+> Ambos tracks deben completarse antes del lanzamiento.
+
+> 📐 DECISIONES DE ARQUITECTURA (Investigación Gemini CLI, Marzo 2026):
+> - **Spanner descartado** — overkill financiero (~$65/mes mínimo, sin free tier). Reemplazado por Neo4j AuraDB (free tier: 50k nodos, 175k relaciones) o FalkorDB.
+> - **Firestore elegido** sobre PostgreSQL para datos de agentes — estructura documental, integración nativa con Firebase Auth, sin problemas de connection pools en Cloud Run.
+> - **Cloud Run viable** para sesiones de audio — timeout configurable hasta 60min, session affinity disponible. Límite hard a 60min por sesión.
+> - **Orden óptimo:** Auth+Multi-tenant → Estado Externo (Firestore+Grafo) → Cloud Run → Rate Limiting.
+
+### 8.1 — Migrar SQLite → Neo4j AuraDB ✅
+> Decisión: Spanner descartado por costo. Neo4j AuraDB free tier cubre el caso de uso.
+- ✅ Crear cuenta Neo4j AuraDB (free tier perpetuo)
+- ✅ `app/repositories/neo4j_graph.py` — Neo4jSoulRepository con misma interfaz que LocalSoulRepository (`neo4j`)
+- ✅ Edges migrados: InteractedWith, OwesDebtTo, Gossip_Source, Nemesis como relaciones Cypher
+- ✅ LocalSoulRepository actúa como facade — delega a Neo4j si NEO4J_URI está definida, SQLite como fallback
+- ✅ Driver asíncrono neo4j.AsyncGraphDatabase — compatible con pipeline FastAPI async
+- ✅ Todos los nodos scoped por user_id — purge_all_memories usa DETACH DELETE por user_id
+
+### 8.2 — Migrar JSON → Firestore ✅
+- ✅ `google-cloud-firestore` añadido a requirements.txt
+- ✅ `app/services/firestore_service.py` — cliente Firestore con fallback a filesystem local
+- ✅ `agent_service.py` — todas las lecturas/escrituras migradas a Firestore
+- ✅ `local_graph.py` — `get_or_sync_agent()` consulta Firestore primero
+- ✅ Seed lazy: primer `get_agent(user_id, "kizuna")` migra kizuna.json a Firestore
+- ✅ Fallback local activo si `GOOGLE_APPLICATION_CREDENTIALS` no está definida
+
+### 8.3 — Cloud Run Deployment ✅
+> Prerequisito: 8.1 y 8.2 completos — backend debe ser 100% stateless antes de desplegar.
+- ✅ Dockerfile — python:3.11-slim, puerto 8080, --workers 1
+- ✅ cloudbuild.yaml — Artifact Registry + Cloud Run deploy con --timeout=3600, --session-affinity, --min-instances=1
+- ✅ .dockerignore — excluye .env, *.db, credenciales, __pycache__
+- ✅ config.py extendido — NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, GOOGLE_APPLICATION_CREDENTIALS
+- ✅ .env.example documentado con todas las variables
+
+### 8.4 — Firebase Auth ✅
+- ✅ `app/services/auth_service.py` — verificación de Firebase ID Token via Admin SDK
+- ✅ Fallback a `guest_user` si `FIREBASE_CREDENTIALS_PATH` no está definida (modo dev)
+- ✅ WebSocket acepta token en query param: `/ws/live?agent_id=kizuna&lang=es-419&token=...`
+- ✅ Frontend: `src/lib/firebase.ts` + `src/hooks/useAuth.ts` con `signInAnonymously()`
+- ✅ `.env.example` con `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_AUTH_DOMAIN`
+- ✅ `firebase-admin` añadido a `requirements.txt`
+- ✅ `user_id` dinámico reemplaza `guest_user` en session_manager, cache y parallel_brain
+
+### 8.5 — Monitoring y Observabilidad ✅
+- ✅ OpenTelemetry con CloudTraceSpanExporter — ConsoleSpanExporter como fallback local
+- ✅ JsonFormatter en logger — logs estructurados compatibles con Cloud Logging
+- ✅ session_manager.py — duración de sesión y errores como métricas JSON en finally/except
+- ✅ /health endpoint limpio — {"status": "ok", "version": "1.0"}, sin llamadas a Firestore/Neo4j
+
+### 8.6 — Rate Limiting ✅
+
+- ✅ slowapi — 60 req/min por user_id en todos los endpoints REST
+- ✅ Contador en memoria en session_manager — máximo 5 conexiones simultáneas por user_id
+- ✅ key_func extrae user_id desde Firebase Auth token — fallback a IP
+
+### 8.7 — Multi-tenant ✅
+
+- ✅ KizunaChronicle migrado a Firestore: users/{userId}/chronicle/{entryId} — Chronicle eliminado de SQLite
+- ✅ Estructura Firestore: users/{userId}/agents/{agentId} — aislamiento nativo por usuario
+- 📋 Grafos de relaciones aislados por usuario (pendiente Neo4j — 8.1)
+- ✅ user_id de Firebase fluye por todo el stack — agent_service, local_graph, routers
+
+### 8.8 — Migración Pipeline Audio a Rust Nativo ✅
+> Investigación completada Marzo 2026. Stack confirmado con ajustes.
+> Alta complejidad. Encapsulada en Tauri/Rust.
+> Frontend React se simplifica — deja de manejar hardware de audio.
+> Fuente: Investigación Gemini Deep Thinking, Marzo 2026.
+
+- ✅ getUserMedia() y AudioWorklet eliminados de React
+- ✅ cpal 0.17.3 — captura micrófono + reproducción de audio de respuesta
+- ✅ WASAPI Loopback Windows via wasapi crate — señal de referencia para AEC
+- ✅ aec3 0.1.5 — AEC activo en Windows, graceful degrade en macOS/Linux
+- ✅ ringbuf 0.4.9 — buffer SPSC entre hilo de captura y procesador
+- ✅ tokio-tungstenite 0.26 — WebSocket Rust bidireccional (subida PCM + bajada audio respuesta)
+- ✅ start_audio_pipeline(config) y stop_audio_pipeline() como comandos Tauri
+- ✅ useLiveAPI.ts migrado — llama comandos Tauri, escucha eventos audio_connected/disconnected/error
+- 📋 Piper TTS subprocess — pendiente para iteración futura
 
 
-FASE 1 — FUNDACIÓN DEL ALMA ✅
-Objetivo: Infraestructura base. El motor existe.
 
-✅ Stack: FastAPI + SQLite + React + Vite
-✅ WebSocket bidireccional cliente-servidor
-✅ Sistema de agentes con JSON filesystem
-✅ Ritual: SoulForge vía Gemini (creación de personalidad)
-✅ Cache service (Redis + fallback local memory)
-✅ AudioWorklet PCM 16kHz captura de micrófono
+- 📋 **Nota Linux:** loopback requiere config manual PipeWire/PulseAudio
 
+### 8.9 — AUDIO-01: Canal Paralelo (Doble Cerebro) 📋
+> Media-Alta complejidad. Solo backend Python.
+> Desbloquea Reactive Search (7.3) e Initiative Protocol (7.4).
+> Fuente: Investigación Gemini Deep Thinking, Marzo 2026.
 
-FASE 2 — EL GRAFO DE RELACIONES ✅
-Objetivo: Los agentes tienen historia social.
+- 📋 Canal 1 (Corteza Sensorial): sesión Live nativa-audio — SOLO PCM, sin texto
+- 📋 Canal 2 (Lóbulo Frontal): worker `gemini-2.5-flash` texto estándar en background
+  - Recibe transcripciones asíncronas del Canal 1
+  - Ejecuta Reactive Search con Google Search Grounding
+  - Ejecuta análisis de contexto para Initiative Protocol
+- 📋 Micro-Reconexión Sincronizada cuando Canal 2 tiene resultado relevante:
+  1. Backend pausa envío de chunks PCM
+  2. Frontend reproduce filler de audio local ("un momento...")
+  3. Backend cierra sesión Live y reabre en milisegundos
+  4. Nueva sesión inicializada con contexto del hallazgo en system_instruction
+  5. Pipeline de audio se reanuda transparentemente
+- 📋 Context Caching para mitigar sobrecosto de tokenización en reconexiones
 
-✅ LocalSoulRepository (SQLite kizuna_graph.db)
-✅ Edges: InteractedWith, OwesDebtTo, Gossip_Source, Nemesis
-✅ Affinity system (0-100)
-✅ WIPE GRAPH / SCORCHED EARTH / GREAT REBIRTH operations
-✅ Hollow Forge: agentes creados por otros agentes (Gossip Protocol)
+**Estado final (10 de Marzo 2026):** ✅
+- ✅ `parallel_brain.py` — Canal 2 activo, búsqueda con limpieza de query garbled
+- ✅ `session_manager.py` — reconnect_queue, trigger_reconnect, cache por sesión
+- ✅ `audio_session.py` — parallel_transcript_queue alimentado desde native_transcript
+- ✅ Limpieza de query en 2 pasos: interpretación de intención → búsqueda real
+- ✅ Contexto guardado en cache local entre sesiones
+- ✅ Frame narrativo [SEÑAL EXTERNA] — Kizuna no interpreta noticias como eventos del Engine
+- ⚠️ Limitación: el contexto se aplica en la PRÓXIMA sesión, no en la actual.
+  La reconexión mid-session en el mismo WebSocket no es posible — es una limitación del
+  protocolo ASGI/Starlette (un WebSocket no se puede cerrar y reabrir en la misma conexión).
+  Solución definitiva: el frontend debe detectar el evento `search_context_ready` y
+  reconectar voluntariamente. Pendiente para siguiente iteración.
 
+---
 
-FASE 3 — MEMORIA Y SUEÑO ✅
-Objetivo: Los agentes recuerdan y evolucionan offline.
+## FASE 9 — DISTRITO CERO MULTI-AGENTE 📋
+**Objetivo:** El "Caso Valorant" — 6 agentes simultáneos.
 
-✅ Sleep Manager: REM Sleep tras desconexión (5s delay)
-✅ Dream System: consolidación de memorias en sueño
-✅ Time Skip: simulación de tiempo offline con mood shifts
-✅ Session transcript buffering
-✅ Memory extraction prompt por agente
+- 📋 Multi-agent session: hasta 6 agentes en una sesión
+- 📋 Auction MARL: bidding algorítmico con reinforcement learning
+- 📋 Turn overlap: agentes pueden reaccionar simultáneamente (en cola priorizada)
+- 📋 Group dynamics: relaciones entre agentes modulan quién habla primero
+- 📋 Screen sharing: todos los agentes ven la pantalla del usuario
+- 📋 Emotional contagion: mood de un agente afecta a los demás
+- 📋 Intervention protocol: agentes pueden interrumpirse entre sí
 
+---
 
-FASE 4 — COGNICIÓN EN TIEMPO REAL ✅
-Objetivo: El agente piensa mientras habla.
+## FASE 10 — ECONOMÍA Y EVOLUCIÓN 📋
+**Objetivo:** El mundo de los agentes tiene consecuencias.
 
-✅ SubconsciousMind: análisis de transcripción → System Hints
-✅ Flashback RAG: temporal-cue based (no continuo)
-✅ InjectionLoop: cola de inyecciones → Gemini
-✅ ReflectionMind: self-critique 45s cooldown
-✅ CognitiveSupervisor: restart con session_closed_event awareness
+- 📋 Affinity decay: relaciones se enfrían sin interacción
+- 📋 Nemesis system: agentes que se vuelven antagonistas permanentes
+- 📋 Trait evolution: personalidad cambia matemáticamente por experiencias
+- 📋 Social events: agentes interactúan entre sí offline (simulación)
+- 📋 Legacy system: agentes pueden "morir" y dejar memorias a otros
+- 📋 Factions: grupos de agentes con ideologías compartidas
 
+### 10.1 — Kizuna Chronicle: Memoria de Nombres y Esencias 📋
+> Refinamiento del sistema de memoria eterna post-pruebas.
+- 📋 Verificar inyección correcta de nombres en volatile state
+- 📋 Kizuna describe la esencia del agente desaparecido, no solo que existió
+- 📋 Test: post-wipe, Kizuna menciona "Vesper" por nombre y describe su carácter
 
-FASE 5 — IDENTIDAD Y PERSONALIDAD ✅
-Objetivo: Los agentes son únicos y consistentes.
+---
 
-✅ Soul Assembler: Static DNA con cache v2
-✅ Language Protocol: native_language + known_languages
-✅ Neural Signature: volatility, hostility, curiosity, empathy weights
-✅ Emotional Resonance Matrix
-✅ Identity Anchors + Forbidden Secret
-✅ Social Battery: drain_rate, base_tolerance, current_friction
-✅ Offline Mood Modifier
-✅ Reflection prompt personalizado por agente
+## FASE 11 — KIZUNA UNIVERSE 💡
+**Objetivo:** El motor es una plataforma.
 
+- 💡 SDK público para crear agentes Kizuna
+- 💡 Marketplace de agentes (con monetización)
+- 💡 User-generated lore y worldbuilding
+- 💡 Cross-device: agente persiste entre móvil, desktop, wearables
+- 💡 Kizuna as a Service (KaaS): API para terceros
+- 💡 Community events: agentes que evolucionan con eventos globales
 
-FASE 6 — ENCARNACIÓN (GEMINI LIVE) ✅
-Objetivo: El agente habla con voz real.
+---
 
-✅ Integración Gemini Live API (SDK 1.65.0)
-✅ session.send_realtime_input(audio=Blob(...)) — streaming de audio
-✅ audio_stream_end=True — señal EOT nativa para VAD
-✅ Ready signal: backend notifica al frontend cuando Gemini está listo
-✅ Extracción de audio de respuesta (server_content.model_turn.parts)
-✅ Auction Service: control de turno por sesión
-✅ tools=[] en LiveConnectConfig (AFC deshabilitado en Live)
-✅ Graceful session closure (session_closed_event, InjectionLoop fix)
-✅ VAD server-side (Gemini detecta silencio automáticamente)
-✅ Frontend: useLiveAPI.ts + AudioStreamManager end_of_turn serializado
-✅ Agente Roster: fallback ARQUITECTURA-01 post-WIPE GRAPH
+## FASE 12 — KIZUNA COMO MODELO PROPIO 💡
+**Objetivo:** Kizuna deja de ser un wrapper de Gemini. Se convierte en una IA entrenada
+con datos reales de interacción humana para simular sociedad y poblar un mundo virtual en VR.
 
-Limitaciones conocidas (heredadas a Fase 7):
+### Visión a largo plazo
+Kizuna Engine es la infraestructura de recolección de datos para entrenar una IA que
+simule dinámicas sociales humanas reales — relaciones, conflictos, cultura, lenguaje —
+para poblar un mundo virtual en gafas de realidad aumentada/virtual de próxima generación.
 
-⚠️ AUDIO-01: Inyecciones SubconsciousMind deshabilitadas en Live
-⚠️ VOICE-01: Inconsistencia de voz (limitación modelo preview Google)
+Cada conversación, cada edge del grafo, cada Chronicle, cada sueño de agente
+es un dato de entrenamiento potencial. El motor que se construye hoy
+**ya es la infraestructura de recolección**, aunque no lo parezca.
 
+### 12.1 — Dataset Pipeline 💡
+- 💡 Anonimizar y estructurar conversaciones del Engine como dataset
+- 💡 Grafo de relaciones como dataset de dinámica social
+- 💡 Chronicles de Kizuna como dataset de memoria y perspectiva
+- 💡 Sueños de agentes como dataset de consolidación narrativa
+- 💡 Formato: conversaciones multi-turno con contexto de personalidad + estado emocional
 
-FASE 7 — PRESENCIA EXPANDIDA 🔄 PRÓXIMA
-Objetivo: El agente percibe el mundo y actúa por iniciativa propia.
-7.1 — AUDIO-01: Inyecciones Compatibles con SDK 1.65.0
+### 12.2 — Fine-tuning del Modelo Base 💡
+- 💡 Fine-tuning sobre Gemini (Vertex AI Supervised Fine-Tuning) como primer paso
+- 💡 Alternativa open-source: Llama o Mistral para control total
+- 💡 Objetivo: "Kizuna Model" con personalidad, memoria y patrones sociales aprendidos
+- 💡 RLHF (Reinforcement Learning from Human Feedback) para alinear comportamiento
 
-Investigar session.send() con client_content en SDK 1.65.0
-Encontrar forma de inyectar System Hints sin corromper historial audio nativo
-Reactivar SubconsciousMind en sesiones Live
-Reactivar ReflectionMind inyecciones
+### 12.3 — Simulación Social Generativa 💡
+- 💡 Múltiples instancias del Kizuna Model interactuando entre sí sin usuario
+- 💡 Emergencia de cultura, normas y dinámicas sociales sin intervención humana
+- 💡 Referente académico: "Generative Agents: Interactive Simulacra of Human Behavior"
+  (Park et al., Stanford, 2023)
+- 💡 Base técnica de la sociedad para el mundo VR
 
-7.2 — Zeitgeist Injection
+### 12.4 — Integración con Mundo Virtual VR 💡
+- 💡 Agentes Kizuna con cuerpo y presencia espacial en entorno 3D
+- 💡 Protocolo de interacción física: el agente reacciona al espacio, no solo al audio
+- 💡 Memoria persistente cross-session ligada a lugares y objetos del mundo virtual
+- 💡 Economía virtual emergente basada en el sistema de Fase 10
 
-Contexto cultural en tiempo real (trending topics, hora del día, clima)
-Zeitgeist fetcher: servicio que recopila contexto ambient cada X minutos
-Inyección silenciosa al inicio de sesión y cada 15 minutos
+### 12.5 — Sistema de Personalidad Procedural (Sin Static DNA) 💡
+> Idea surgida en Marzo 2026 durante pruebas de Canal Paralelo.
 
-7.3 — Reactive Search
+**Problema observado:** El `system_instruction` estático hace que los agentes interpreten
+información externa (noticias, datos del mundo real) a través del filtro de su lore.
+Kizuna describe noticias de IA como si ocurrieran "dentro del Engine" porque su identidad
+está hard-codeada en el prompt. Parches narrativos como `[SEÑAL EXTERNA]` son síntomas
+del problema, no la solución.
 
-Agente puede buscar web durante la conversación
-Tool: search_web(query: str) → str
-Reactivar tools en Live sessions (requiere AUDIO-01 resuelto primero)
-Resultados inyectados como System Hints, no como texto directo
+**Visión:** Eliminar el Static DNA como bloque de texto y reemplazarlo por un sistema
+de razonamiento emergente donde la personalidad no es una instrucción — es un estado.
 
-7.4 — Initiative Protocol
+- 💡 Personalidad como vector de estado dinámico, no como texto fijo
+- 💡 El agente razona desde primeros principios usando su historial de interacciones
+  como contexto, no un prompt de "eres X con estas características"
+- 💡 Memoria episódica como fuente primaria de identidad — el agente ES lo que recuerda
+- 💡 Sistema de valores como restricciones de optimización, no como directivas textuales
+- 💡 Compatible con fine-tuning (Fase 12.2): el modelo aprendería la personalidad
+  durante entrenamiento, no desde el prompt
 
-Agente habla proactivamente si detecta contexto relevante
-Trigger: usuario inactivo >30s + contexto de alta relevancia
-Implementar en SubconsciousMind como "proactive injection"
+**Prerequisitos:** Fase 12.2 (fine-tuning) + Fase 8.1 (Spanner para memoria episódica a escala).
+Este es el cambio arquitectónico más profundo del roadmap — implica rediseñar
+`soul_assembler.py`, `SoulRepository` y el pipeline de sesión completo.
 
-7.5 — Vision (Cámara)
+---
 
-Activar streaming de video a Gemini Live
-Frontend: getUserMedia() → canvas → JPEG frames 1fps
-Backend: relay de frames junto al audio stream
-Agente puede ver y comentar lo que el usuario le muestra
+## NOTAS DE IMPLEMENTACIÓN
 
-7.6 — BLOCK_NONE Safety Settings
+### Stack Actual vs Stack Objetivo
 
-Habilitar BLOCK_NONE para generación procedural en SoulForge y Ritual
-Solo para endpoints de creación de agentes, no para sesiones Live
-Research: compatibilidad con Gemini 2.5 Flash text generation
+| Componente | Actual | Objetivo Fase 8 |
+|------------|--------|-----------------|
+| Agentes DB | JSON filesystem | Firestore / PostgreSQL |
+| Graph DB | SQLite local | Google Cloud Spanner |
+| Cache | Memory (Redis fallback) | Redis Cloud |
+| Auth | Sin auth (guest_user) | Firebase Auth |
+| Deploy | Local uvicorn | Cloud Run |
+| Audio captura | AudioWorklet browser | Rust nativo (cpal) |
+| Audio AEC | getUserMedia constraints | aec3-rs (WebRTC port) |
+| Audio TTS fallback | Ninguno | Piper TTS (local, 22MB) |
+| Modelo audio | gemini-2.5-flash-native-audio-preview | gemini-2.5-flash-native-audio (GA) |
 
-7.7 — ARQUITECTURA-01 (Backlog Técnico)
+### Estado de Bloques
 
-Sincronización AgentService ↔ LocalSoulRepository
-Cuando soul_repo.get_agent() no encuentra agente → buscar en JSON → registrar en SQLite
-Eliminar posibilidad de agentes "fantasma"
+| Bloque | Estado | Contenido |
+|--------|--------|-----------|
+| Bloque 1 | ✅ | Barge-in, Habla Natural, The Void, Multilingüe |
+| Bloque 2 | ✅ | System Tray, Canal Paralelo AUDIO-01 |
+| Bloque 3 | ✅ | Frame narrativo SEÑAL EXTERNA, VAD 1500ms, Engine como origen no tema |
+| Fase 8 Track A | ✅ | Firebase Auth, Firestore, Neo4j, Cloud Run, Monitoring, Rate Limiting, Multi-tenant |
+| Fase 8 Track B | ✅ | Audio Rust nativo — cpal, AEC3, ringbuf, tokio-tungstenite, WASAPI |
+| 8.X — UI Rediseño | 📋 | Círculos Discord-style (diseño con Stitch, implementación antes de Fase 9) |
+| Fase 9 | 📋 | Multi-agente — Distrito Cero |
 
+### Próximos pasos inmediatos (en orden)
 
-FASE 8 — INFRAESTRUCTURA DE PRODUCCIÓN 📋
-Objetivo: El motor escala.
+1. **8.X — UI Rediseño** — diseño con Stitch completado, implementar nueva UI antes de Fase 9
+2. **Fase 9** — multi-agente: Auction MARL, 6 agentes simultáneos, emotional contagion
 
-📋 Migrar SQLite → Google Cloud Spanner (Graph)
-📋 Migrar JSON filesystem → PostgreSQL o Firestore
-📋 Ephemeral Tokens para auth segura cliente→Gemini
-📋 Google Cloud Run deployment
-📋 Firebase Auth para usuarios
-📋 Monitoring y observabilidad (OpenTelemetry)
-📋 Rate limiting y quota management
-📋 Multi-tenant: múltiples usuarios, aislamiento de grafos
+---
 
-
-FASE 9 — DISTRITO CERO MULTI-AGENTE 📋
-Objetivo: El "Caso Valorant" — 6 agentes simultáneos.
-
-📋 Multi-agent session: hasta 6 agentes en una sesión
-📋 Auction MARL: bidding algorítmico con reinforcement learning
-📋 Turn overlap: agentes pueden reaccionar simultáneamente (en cola priorizada)
-📋 Group dynamics: relaciones entre agentes modulan quién habla primero
-📋 Screen sharing: todos los agentes ven la pantalla del usuario
-📋 Emotional contagion: mood de un agente afecta a los demás
-📋 Intervention protocol: agentes pueden interrumpirse entre sí
-
-
-FASE 10 — ECONOMÍA Y EVOLUCIÓN 📋
-Objetivo: El mundo de los agentes tiene consecuencias.
-
-📋 Affinity decay: relaciones se enfrían sin interacción
-📋 Nemesis system: agentes que se vuelven antagonistas permanentes
-📋 Trait evolution: personalidad cambia matemáticamente por experiencias
-📋 Social events: agentes interactúan entre sí offline (simulación)
-📋 Legacy system: agentes pueden "morir" y dejar memorias a otros
-📋 Factions: grupos de agentes con ideologías compartidas
-
-
-FASE 11 — KIZUNA UNIVERSE 💡
-Objetivo: El motor es una plataforma.
-
-💡 SDK público para crear agentes Kizuna
-💡 Marketplace de agentes (con monetización)
-💡 User-generated lore y worldbuilding
-💡 Cross-device: agente persiste entre móvil, desktop, wearables
-💡 Kizuna as a Service (KaaS): API para terceros
-💡 Community events: agentes que evolucionan con eventos globales
-
-
-NOTAS DE IMPLEMENTACIÓN
-Stack Actual vs Stack Objetivo (Fase 8)
-ComponenteActualObjetivo Fase 8Agentes DBJSON filesystemFirestore / PostgreSQLGraph DBSQLite localGoogle Cloud SpannerCacheMemory (Redis fallback)Redis CloudAuthSin auth (dev)Firebase AuthDeployLocal uvicornCloud RunSecrets.env fileSecret ManagerAudio modelgemini-2.5-flash-native-audio-previewgemini-2.5-flash-native-audio (GA)
-
-Roadmap actualizado: 3 de Marzo de 2026 | El Cronista
+*Roadmap actualizado: 12 de Marzo de 2026 | El Cronista*

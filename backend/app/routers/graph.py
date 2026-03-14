@@ -1,5 +1,7 @@
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Request
+from app.core.rate_limiter import limiter
+from fastapi import HTTPException, Depends
 from app.repositories.base import SoulRepository
 from app.repositories.local_graph import LocalSoulRepository
 from app.dependencies import get_repository, get_current_user
@@ -9,8 +11,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/graph", tags=["Graph Interop"])
 
+@limiter.limit("60/minute")
 @router.get("/export")
-async def export_graph(
+async def export_graph(request: Request,
     repo: SoulRepository = Depends(get_repository),
     current_user: str = Depends(get_current_user)
 ) -> Dict[str, Any]:
@@ -27,8 +30,9 @@ async def export_graph(
         logger.error(f"Graph Export failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@limiter.limit("60/minute")
 @router.post("/import")
-async def import_graph(
+async def import_graph(request: Request,
     data: Dict[str, Any],
     repo: SoulRepository = Depends(get_repository),
     current_user: str = Depends(get_current_user)

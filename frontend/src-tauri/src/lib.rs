@@ -1,16 +1,133 @@
+use tauri::{Emitter,
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager, RunEvent, WindowEvent,
+};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use image::codecs::jpeg::JpegEncoder;
+use std::io::Cursor;
+use xcap::Monitor;
+
+mod audio;
+
+#[tauri::command]
+fn capture_screen() -> Result<String, String> {
+    let monitors = Monitor::all().map_err(|e| e.to_string())?;
+    let monitor = monitors.first().ok_or_else(|| "No monitor found".to_string())?;
+    let image = monitor.capture_image().map_err(|e| e.to_string())?;
+    let rgb = image::DynamicImage::ImageRgba8(image).to_rgb8();
+    let mut buf = Cursor::new(Vec::new());
+    let mut encoder = JpegEncoder::new_with_quality(&mut buf, 80);
+    encoder.encode_image(&rgb).map_err(|e| e.to_string())?;
+    Ok(STANDARD.encode(buf.into_inner()))
+}
+
+#[tauri::command]
+async fn start_audio_pipeline(
+    app: tauri::AppHandle,
+    agent_id: String,
+    lang: String,
+    token: String,
+) -> Result<(), String> {
+    log::info!("Starting audio pipeline logic...");
+    audio::start(agent_id, lang, token, app).await
+}
+
+#[tauri::command]
+async fn stop_audio_pipeline(app: tauri::AppHandle) -> Result<(), String> {
+    log::info!("Stopping audio pipeline logic...");
+    audio::stop().await?;
+    app.emit("audio_disconnected", ()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn send_ws_message(payload: String) -> Result<(), String> {
+    log::info!("Sending ws message");
+    audio::send_ws_message(payload).await
+}
+
+// Continuous Audio Mode
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
-    .setup(|app| {
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
-      Ok(())
-    })
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    tauri::Builder::default()
+        // Plugins preexistentes e invocación de comandos
+        .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![
+            capture_screen,
+            start_audio_pipeline,
+            stop_audio_pipeline,
+            send_ws_message
+        ])
+        // Plugin de logs y setup de tray / shortcuts
+        .setup(|app| {
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
+                    tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .build(),
+                )?;
+            }
+
+            // --- SYSTEM TRAY ---
+            let show = MenuItem::with_id(app, "show", "Abrir Kizuna", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Cerrar", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &quit])?;
+
+            let _ = app.remove_tray_by_id("kizuna-tray");
+
+            TrayIconBuilder::with_id("kizuna-tray")
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .tooltip("Kizuna Engine")
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    // Click izquierdo en el ícono = abrir ventana
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            Ok(())
+        })
+        // Plugin de notificaciones
+        .plugin(tauri_plugin_notification::init())
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        // --- SURVIVE CLOSE: ventana se oculta, proceso no muere ---
+        .run(|app_handle, event| {
+            if let RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::CloseRequested { api, .. },
+                ..
+            } = event
+            {
+                if let Some(window) = app_handle.get_webview_window(&label) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        });
 }

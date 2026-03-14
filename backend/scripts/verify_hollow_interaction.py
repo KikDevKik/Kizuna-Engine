@@ -24,7 +24,7 @@ async def main():
     if temp_graph_path.exists():
         temp_graph_path.unlink()
 
-    repo = LocalSoulRepository(data_path=temp_graph_path)
+    repo = LocalSoulRepository()
     await repo.initialize()
 
     # Mock Embedding Service to avoid API calls

@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
 import { createAudioBuffer } from '../utils/audioUtils';
+import { useAuth } from '../hooks/useAuth';
+import { WS_URL } from '../config';
 // import type { ServerMessage } from '../types/websocket';
 
 export const isSessionActive = (status: string) => status === 'connected' || status === 'ready';
@@ -18,6 +20,7 @@ export interface UseLiveAPI {
 const LiveAPIContext = createContext<UseLiveAPI | undefined>(undefined);
 
 export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { getToken } = useAuth();
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'ready' | 'error'>('disconnected');
   const statusRef = useRef(status);
 
@@ -90,8 +93,11 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     try {
       // Initialize WebSocket
-      // Assuming localhost:8000 based on standard dev setup if proxy isn't configured
-      const wsUrl = `ws://localhost:8000/ws/live?agent_id=${agentId}`;
+      let wsUrl = `${WS_URL}/ws/live?agent_id=${agentId}`;
+      const token = await getToken();
+      if (token) {
+        wsUrl += `&token=${token}`;
+      }
       const ws = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
@@ -202,7 +208,7 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
 
             // Normalización matemática directa
             for (let i = 0; i < int16Data.length; i++) {
-                float32Data[i] = int16Data[i] / 32768.0;
+              float32Data[i] = int16Data[i] / 32768.0;
             }
 
             // Inyección al AudioContext
@@ -225,11 +231,11 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
             const message = JSON.parse(event.data) as any;
 
             if (message.type === 'session_ready') {
-                setStatus('ready');
-                statusRef.current = 'ready'; // Update ref immediately
-                console.log('✅ Session ready - mic activated');
+              setStatus('ready');
+              statusRef.current = 'ready'; // Update ref immediately
+              console.log('✅ Session ready - mic activated');
             } else if (message.type === 'text') {
-                setLastAiMessage(message.data);
+              setLastAiMessage(message.data);
             } else if (message.type === 'turn_complete') {
               console.log("Turn complete signal received.");
               setIsAiSpeaking(false);
@@ -237,12 +243,12 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
               // Module 6: Audio Concurrency Backchannel
               console.log("Playing backchannel:", message.file);
               try {
-                  // Play from public/sfx/ or root
-                  const audio = new Audio(`/sfx/${message.file}`);
-                  audio.volume = 0.4;
-                  audio.play().catch(e => console.warn("Backchannel audio missing or blocked:", e));
+                // Play from public/sfx/ or root
+                const audio = new Audio(`/sfx/${message.file}`);
+                audio.volume = 0.4;
+                audio.play().catch(e => console.warn("Backchannel audio missing or blocked:", e));
               } catch (e) {
-                  console.error("Failed to play backchannel:", e);
+                console.error("Failed to play backchannel:", e);
               }
             }
           }
@@ -265,7 +271,7 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
       console.error('Connection failed:', err);
       setStatus('error');
     }
-  }, [disconnect]);
+  }, [disconnect, getToken]);
 
   const sendImage = useCallback((base64: string) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -282,7 +288,7 @@ export const LiveAPIProvider: React.FC<{ children: ReactNode }> = ({ children })
     return () => {
       disconnect();
     };
-  }, [disconnect]);
+  }, [disconnect, getToken]);
 
   const value = {
     connected,

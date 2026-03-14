@@ -14,8 +14,18 @@ export type TurnCompleteMessage = {
 
 export type ControlMessage = {
   type: 'control';
-  action: 'hangup';
+  action: 'hangup' | 'flush_audio';
   reason?: string;
 };
 
-export type ServerMessage = AudioMessage | TextMessage | TurnCompleteMessage | ControlMessage;
+export type SessionReadyMessage = {
+  type: 'session_ready';
+};
+
+export type ActionMessage = {
+  type: 'action';
+  action: 'open_url';
+  url: string;
+};
+
+export type ServerMessage = AudioMessage | TextMessage | TurnCompleteMessage | ControlMessage | SessionReadyMessage | ActionMessage;

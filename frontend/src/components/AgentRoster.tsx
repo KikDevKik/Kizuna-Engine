@@ -5,6 +5,8 @@ import { SoulForgeModal } from './SoulForgeModal';
 import { DeleteAgentModal } from './DeleteAgentModal';
 import { useRoster, type Agent } from '../contexts/RosterContext';
 import '../KizunaHUD.css';
+import { API_URL } from '../config';
+import { auth } from '../lib/firebase';
 
 interface AgentRosterProps {
   onSelect?: (agentId: string) => void;
@@ -73,7 +75,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   // Adjust activeIndex if out of bounds (e.g. after deletion)
   useEffect(() => {
     if (activeIndex >= agents.length) {
-        setActiveIndex(Math.max(0, agents.length - 1));
+      setActiveIndex(Math.max(0, agents.length - 1));
     }
   }, [agents.length, activeIndex]);
 
@@ -137,8 +139,10 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   const handleDeleteConfirm = async () => {
     if (!agentToDelete) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/agents/${agentToDelete.id}`, {
+      const token = await auth?.currentUser?.getIdToken();
+      const res = await fetch(`${API_URL}/api/agents/${agentToDelete.id}`, {
         method: 'DELETE',
+        headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
       });
       if (!res.ok) {
         throw new Error('Failed to delete agent');
@@ -196,7 +200,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
   };
 
   if (isLoading && agents.length <= 1) { // 1 because createCard is always there
-      return <div className="text-electric-blue font-technical text-center mt-20 animate-pulse">ESTABLISHING LINK...</div>;
+    return <div className="text-electric-blue font-technical text-center mt-20 animate-pulse">ESTABLISHING LINK...</div>;
   }
 
   const isFirst = activeIndex === 0;
@@ -241,9 +245,9 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
         </div>
 
         {displayError && (
-            <div className="absolute top-4 text-alert-red font-technical text-sm bg-abyssal-black/90 p-4 border border-alert-red z-[300] shadow-[0_0_20px_rgba(255,51,102,0.4)] backdrop-blur-md tracking-widest uppercase">
-                {'>'} CONNECTION_ERROR: {displayError}
-            </div>
+          <div className="absolute top-4 text-alert-red font-technical text-sm bg-abyssal-black/90 p-4 border border-alert-red z-[300] shadow-[0_0_20px_rgba(255,51,102,0.4)] backdrop-blur-md tracking-widest uppercase">
+            {'>'} CONNECTION_ERROR: {displayError}
+          </div>
         )}
 
         {/* 3D STAGE - Single Relative Container */}
@@ -251,7 +255,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
           className="w-full h-[450px] flex items-center justify-center relative"
           style={{ perspective: "1000px" }} // Perspective on container
         >
-            <AnimatePresence>
+          <AnimatePresence>
             {agents.map((agent, index) => {
               const isCreateCard = agent.id === 'create-new';
               const isFocused = activeIndex === index;
@@ -316,17 +320,17 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                       <>
                         {/* Avatar / Visual Placeholder */}
                         <div className="shape-shard-avatar flex-1 flex items-center justify-center mb-4 relative overflow-hidden bg-abyssal-black/20">
-                           {agent.avatar_path ? (
-                             <img src={agent.avatar_path} alt={agent.name} className="w-full h-full object-cover opacity-90" />
-                           ) : (
-                             // TYPOGRAPHIC FALLBACK
-                             <div className="relative w-full h-full flex items-center justify-center">
-                               <div className="absolute inset-0 border border-electric-blue/10" />
-                               <span className="font-monumental text-6xl text-electric-blue/80 drop-shadow-[0_0_15px_rgba(0,209,255,0.5)]">
-                                 {agent.name.charAt(0).toUpperCase()}
-                               </span>
-                             </div>
-                           )}
+                          {agent.avatar_path ? (
+                            <img src={agent.avatar_path} alt={agent.name} className="w-full h-full object-cover opacity-90" />
+                          ) : (
+                            // TYPOGRAPHIC FALLBACK
+                            <div className="relative w-full h-full flex items-center justify-center">
+                              <div className="absolute inset-0 border border-electric-blue/10" />
+                              <span className="font-monumental text-6xl text-electric-blue/80 drop-shadow-[0_0_15px_rgba(0,209,255,0.5)]">
+                                {agent.name.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex flex-col gap-1">
@@ -337,12 +341,12 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                         <div className="mt-4">
                           <div className="w-full h-[1px] bg-electric-blue/30 my-2" />
                           <div className="flex justify-between items-end">
-                             <span className="font-technical text-2xl text-electric-blue">
-                                {agent.systemStatus === 'ONLINE' ? '100%' : '---'}
-                             </span>
-                             <span className="font-technical text-xs text-white/50">
-                                {agent.systemStatus}
-                             </span>
+                            <span className="font-technical text-2xl text-electric-blue">
+                              {agent.systemStatus === 'ONLINE' ? '100%' : '---'}
+                            </span>
+                            <span className="font-technical text-xs text-white/50">
+                              {agent.systemStatus}
+                            </span>
                           </div>
                         </div>
                       </>
@@ -351,7 +355,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
                 </motion.div>
               );
             })}
-            </AnimatePresence>
+          </AnimatePresence>
         </div>
 
         {/* CONTROLS */}
@@ -363,7 +367,7 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
             aria-label="Previous Agent"
           >
             <div className="kizuna-shard-btn-inner">
-               &lt; PREV
+              &lt; PREV
             </div>
           </button>
 
@@ -372,9 +376,9 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
             className="kizuna-shard-btn-wrapper"
             aria-label={agents[activeIndex]?.id === 'create-new' ? 'Create new agent' : `Initiate link with ${agents[activeIndex]?.name}`}
           >
-             <span className="kizuna-shard-btn-inner">
-               {agents[activeIndex]?.id === 'create-new' ? 'INITIALIZE' : 'INITIATE LINK'}
-             </span>
+            <span className="kizuna-shard-btn-inner">
+              {agents[activeIndex]?.id === 'create-new' ? 'INITIALIZE' : 'INITIATE LINK'}
+            </span>
           </button>
 
           <button
@@ -398,8 +402,8 @@ export const AgentRoster: React.FC<AgentRosterProps> = ({ onSelect }) => {
       <SoulForgeModal
         isOpen={isModalOpen}
         onClose={() => {
-            setIsModalOpen(false);
-            refreshAgents();
+          setIsModalOpen(false);
+          refreshAgents();
         }}
         onCreated={handleAgentCreated}
       />

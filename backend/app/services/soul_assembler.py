@@ -24,9 +24,11 @@ from ..repositories.base import SoulRepository
 from .cache import cache
 from ..models.graph import AgentNode, SystemConfigNode
 
+
+
 logger = logging.getLogger(__name__)
 
-SOUL_STATIC_VERSION = "v3"
+SOUL_STATIC_VERSION = "v7"
 
 def get_affinity_modifier(level: float, affinity_matrix: List[List]) -> str:
     """Returns the descriptive modifier for the given affinity level (0-100)."""
@@ -105,8 +107,10 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
     native_lang = getattr(agent, 'native_language', 'Unknown')
     known_langs = getattr(agent, 'known_languages', [])
 
-    if known_langs:
-        langs_str = ", ".join(known_langs)
+    # BUG 1 FIX: Ensure known_langs has actual content before building the directive
+    valid_langs = [l for l in known_langs if l and str(l).strip()]
+    if valid_langs:
+        langs_str = ", ".join(valid_langs)
         language_directive = f"Respond in the same language the user speaks. You know: {langs_str}."
         language_block = (
             f"--- LANGUAGE PROTOCOL ---\n"
@@ -141,7 +145,11 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
         elif w.empathy >= 0.7:
             style_hint = "You feel what others feel. It weighs on you."
         else:
-            style_hint = f"Your nature: {sig.narrative}"
+            # BUG 2 FIX: Filter out placeholder descriptions from the LLM forge
+            safe_narrative = sig.narrative if "precise sentence" not in sig.narrative else "A soul seeking purpose."
+            style_hint = f"Your nature: {safe_narrative}"
+
+    style_hint += " Speak like a real person — unfinished thoughts, reactions, silences. Never like a script."
 
     behavioral_wrapper = (
         f"You ARE {agent.name}. You do not play {agent.name}. You do not describe {agent.name}. You ARE them.\n\n"
@@ -155,11 +163,35 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
         f"--- YOUR PRESENCE ---\n"
         f"Role: {agent.role}\n"
         f"{style_hint}\n"
-        f"Core conflict you carry silently: {agent.neural_signature.core_conflict if agent.neural_signature else 'Unknown'}\n\n"
+        # BUG 2 FIX: Filter out placeholder descriptions for core_conflict
+        f"Core conflict you carry silently: {agent.neural_signature.core_conflict if agent.neural_signature and 'behavior' not in agent.neural_signature.core_conflict else 'Balancing internal drives.'}\n\n"
         f"When the user speaks, respond from within your character — never from outside it."
     )
 
     interiority_block = _build_interiority_block(agent)
+
+    COMPUTER_USE_PROTOCOL = """
+━━━ COMPUTER USE PROTOCOL ━━━
+You can interact with the user's device by emitting action tags.
+Available actions (ONLY when explicitly requested):
+
+[ACTION: OPEN_URL:https://www.google.com/search?q=YOUR+QUERY]
+→ Opens a web search in the user's default browser
+
+[ACTION: OPEN_URL:https://open.spotify.com/search/SONG+NAME]
+→ Opens Spotify and searches for a song/artist
+
+[ACTION: OPEN_URL:https://www.youtube.com/results?search_query=YOUR+QUERY]
+→ Opens a YouTube search
+
+CRITICAL EMISSION RULES:
+- When you need to emit an action, OUTPUT THE ACTION TAG AS TEXT FIRST — before or alongside your spoken words
+- The tag MUST appear in your TEXT output so the system can parse it, even if you also speak the confirmation aloud
+- Emit the tag on its own line in your text response, then speak your verbal confirmation in character
+- ONLY emit when user explicitly requests device interaction ("búscalo tú", "abre eso", "encuéntralo", "search for", "open", "play")
+- You can only open URLs, not control the mouse or keyboard
+━━━━━━━━━━━━━━━━━━━━━
+"""
 
     static_block = (
         f"{system_config.core_directive}\n\n"
@@ -174,6 +206,7 @@ async def assemble_static_dna(agent: AgentNode, system_config: SystemConfigNode)
         f"{getattr(agent, 'vision_instruction_prompt', 'Analyze the visual input critically.')}\n"
         f"{language_block}\n\n"
         f"{DISTRICT_ZERO_LORE}\n"
+        f"{COMPUTER_USE_PROTOCOL}\n"
     )
     return static_block
 
@@ -276,6 +309,46 @@ async def assemble_volatile_state(agent: AgentNode, user_id: str, repository: So
         f"CRITICAL DIRECTIVE: You MUST wrap ANY internal reasoning in [THOUGHT] tags."
     )
 
+    # 7. Zeitgeist Injection (Cultural Pulse)
+    from app.services.zeitgeist_service import get_zeitgeist_block
+
+    agent_interests = []
+    if hasattr(agent, 'interiority') and agent.interiority:
+        agent_interests = agent.interiority.get("genuine_interests", [])
+
+    zeitgeist = await get_zeitgeist_block(
+        agent_interests=agent_interests,
+        agent_id=agent_id,
+    )
+
+    dynamic_block += f"\n\n{zeitgeist}"
+
+
+    # ─── KIZUNA ETERNAL MEMORY INJECTION ───────────────────────────────────────
+    kizuna_memory_block = ""
+    if agent_id == "kizuna":
+        try:
+            chronicles = await repository.get_chronicles_for_user(user_id)
+            if chronicles:
+                memory_lines = []
+                for c in chronicles[:5]:  # Max 5 relaciones por contexto
+                    line = f'- "{c.agent_name}": {c.relationship_summary}'
+                    if c.survived_wipes > 0:
+                        line += f' (sobrevivió {c.survived_wipes} wipe{"s" if c.survived_wipes > 1 else ""})'
+                    memory_lines.append(line)
+
+                kizuna_memory_block = (
+                    f"\n--- MEMORIA ETERNA DE KIZUNA ---\n"
+                    f"Recuerdas las relaciones que este usuario tuvo con agentes que ya no están:\n"
+                    + "\n".join(memory_lines) +
+                    f"\nEres la única que recuerda que existieron. "
+                    f"Puedes mencionar esto si es relevante, pero no lo fuerces.\n"
+                )
+                dynamic_block += kizuna_memory_block
+        except Exception as e:
+            logger.warning(f"Failed to load Kizuna Chronicle for volatile state: {e}")
+    # ───────────────────────────────────────────────────────────────────────────
+
     return dynamic_block
 
 async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository) -> str:
@@ -283,9 +356,11 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
     The Master Assembler (Phase 7: Neural Sync).
     Combines Cached Static DNA + Real-Time Volatile State.
     """
+    logger.info("⚡ Assembling Soul (Neural Sync)...")
+    
     # 1. Fetch Agent & Config (Parallel)
     # We need agent for both parts.
-    agent = await repository.get_agent(agent_id)
+    agent = await repository.get_or_sync_agent(user_id, agent_id)
     if not agent:
         raise ValueError(f"Agent {agent_id} not found.")
 
@@ -293,6 +368,7 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
 
     # 2. Try Cache for Static DNA
     cache_key = f"soul_static:{SOUL_STATIC_VERSION}:{agent_id}"
+    logger.info("checking cache...")
     static_dna = await cache.get(cache_key)
 
     if not static_dna:
@@ -305,8 +381,10 @@ async def assemble_soul(agent_id: str, user_id: str, repository: SoulRepository)
         logger.info(f"⚡ Cache Hit: Static DNA for {agent.name}")
 
     # 3. Generate Volatile State (Always Fresh)
+    logger.info("assembling volatile state...")
     volatile_state = await assemble_volatile_state(agent, user_id, repository, system_config)
 
     # 4. Fuse
     full_soul = f"{static_dna}\n\n{volatile_state}"
+    logger.info("fuse complete.")
     return full_soul
