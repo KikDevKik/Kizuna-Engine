@@ -46,6 +46,9 @@ async fn stop_audio_pipeline(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn send_ws_message(payload: String) -> Result<(), String> {
     log::info!("Sending ws message");
+    audio::send_ws_message(payload).await
+}
+
 // Continuous Audio Mode
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
