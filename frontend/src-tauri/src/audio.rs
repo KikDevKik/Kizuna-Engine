@@ -106,8 +106,8 @@ pub async fn start(agent_id: String, lang: String, token: String, app: tauri::Ap
 
         let tx_ws_clone = tx_ws.clone();
         
-        // Create RingBuffer for Playback (Capacity for ~1 second of out_sample_rate f32 audio)
-        let rb = ringbuf::HeapRb::<f32>::new((out_sample_rate as usize) * 2);
+        // Create RingBuffer for Playback (Capacity for ~60 seconds of out_sample_rate f32 audio)
+        let rb = ringbuf::HeapRb::<f32>::new((out_sample_rate as usize) * 60);
         let (mut prod, mut cons) = ringbuf::traits::Split::split(rb);
 
         // Spawn Input Stream
@@ -223,7 +223,13 @@ pub async fn start(agent_id: String, lang: String, token: String, app: tauri::Ap
                             let s1 = if src_idx + 1 < mono_24k.len() { mono_24k[src_idx + 1] } else { s0 };
                             let resampled = s0 + frac * (s1 - s0);
                             
-                            let _ = ringbuf::traits::Producer::try_push(&mut prod, resampled);
+                            // Backpressure: If buffer is full, wait for playback to drain it
+                            loop {
+                                if ringbuf::traits::Producer::try_push(&mut prod, resampled).is_ok() {
+                                    break;
+                                }
+                                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                            }
                         }
                     }
                     Ok(Message::Text(text)) => {
