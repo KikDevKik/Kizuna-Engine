@@ -205,7 +205,7 @@ function App() {
                   />
 
                   {/* Connection Toggle (Core View) */}
-                  <div className="mt-12 pointer-events-auto">
+                  <div className="mt-12 pointer-events-auto flex flex-col items-center gap-4">
                     <button
                       onClick={handleToggleConnection}
                       disabled={status === 'connecting'}

@@ -46,11 +46,7 @@ async fn stop_audio_pipeline(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn send_ws_message(payload: String) -> Result<(), String> {
     log::info!("Sending ws message");
-    audio::send_ws_message(payload).await
-}
-
-// Estado global del micrófono PTT — accesible desde Rust y frontend via evento
-pub static MIC_ACTIVE: AtomicBool = AtomicBool::new(false);
+// Continuous Audio Mode
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -112,38 +108,6 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
-
-            // --- PUSH-TO-TALK GLOBAL (Ctrl+Space) ---
-            let handle = app.handle().clone();
-            app.handle()
-                .plugin(
-                    tauri_plugin_global_shortcut::Builder::new()
-                        .with_handler(move |_app, shortcut, event| {
-                            let ptt = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
-                            if shortcut == &ptt {
-                                match event.state() {
-                                    ShortcutState::Pressed => {
-                                        MIC_ACTIVE.store(true, Ordering::SeqCst);
-                                        // Notificar al frontend via evento Tauri
-                                        if let Some(window) =
-                                            handle.get_webview_window("main")
-                                        {
-                                            let _ = window.emit("ptt-start", ());
-                                        }
-                                    }
-                                    ShortcutState::Released => {
-                                        MIC_ACTIVE.store(false, Ordering::SeqCst);
-                                        if let Some(window) =
-                                            handle.get_webview_window("main")
-                                        {
-                                            let _ = window.emit("ptt-stop", ());
-                                        }
-                                    }
-                                }
-                            }
-                        })
-                        .build(),
-                )?;
 
             Ok(())
         })

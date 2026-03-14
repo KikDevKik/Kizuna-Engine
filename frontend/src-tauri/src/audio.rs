@@ -4,8 +4,7 @@ use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use url::Url;
 
-// Import MIC_ACTIVE from lib.rs
-use crate::MIC_ACTIVE;
+// Continuous audio stream (VAD server-side)
 
 // Global state for WS sender
 static WS_SENDER: once_cell::sync::Lazy<Mutex<Option<mpsc::UnboundedSender<Message>>>> =
@@ -114,8 +113,8 @@ pub async fn start(agent_id: String, lang: String, token: String, app: tauri::Ap
         let input_stream = input_device.build_input_stream(
             &input_config,
             move |data: &[f32], _: &_| {
-                // Push-To-Talk / VAD simulation: only send if MIC_ACTIVE is true
-                if MIC_ACTIVE.load(Ordering::SeqCst) {
+                // Stream continuously (VAD is handled server-side)
+                {
                     // Convert multi-channel to mono
                     let mono_samples: Vec<f32> = data.chunks(in_channels).map(|chunk| {
                         chunk.iter().sum::<f32>() / in_channels as f32
