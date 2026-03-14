@@ -213,12 +213,17 @@ pub async fn start(agent_id: String, lang: String, token: String, app: tauri::Ap
                         }
 
                         // Resample 24kHz -> out_sample_rate
+                        // Resample 24kHz -> out_sample_rate (Linear Interpolation)
                         let out_len = (mono_24k.len() as f32 * out_sample_rate as f32 / 24000.0) as usize;
                         for i in 0..out_len {
-                            let src_idx = (i as f32 * 24000.0 / out_sample_rate as f32) as usize;
-                            if src_idx < mono_24k.len() {
-                                let _ = ringbuf::traits::Producer::try_push(&mut prod, mono_24k[src_idx]);
-                            }
+                            let src_pos = i as f32 * 24000.0 / out_sample_rate as f32;
+                            let src_idx = src_pos as usize;
+                            let frac = src_pos - src_idx as f32;
+                            let s0 = if src_idx < mono_24k.len() { mono_24k[src_idx] } else { 0.0 };
+                            let s1 = if src_idx + 1 < mono_24k.len() { mono_24k[src_idx + 1] } else { s0 };
+                            let resampled = s0 + frac * (s1 - s0);
+                            
+                            let _ = ringbuf::traits::Producer::try_push(&mut prod, resampled);
                         }
                     }
                     Ok(Message::Text(text)) => {
